@@ -15,8 +15,8 @@ Pilot for en lukket tjeneste der hytteeiere låner ut hytta til folk de kjenner.
 - Språk: all tekst brukeren ser, er på norsk bokmål. Kommentarer i koden er også på norsk.
 - Tjenestens navn er et arbeidsnavn. Skriv det aldri rett inn i koden. Bruk `APP_NAME` fra `src/lib/brand.ts`.
 - Kjernesetningen om hva tjenesten er, ligger i `WHAT_IT_IS` i samme fil. Forsiden, invitasjonssiden og invitasjonene på e-post bruker den. Skriv den ikke på nytt med andre ord.
-- Forsiden forklarer ideen før reglene, med «låne» og «låne bort». Å låne bort tilbake er frivillig: skriv «kan velge», aldri et løfte om å få låne.
-- Forsiden sier først og tydelig at tjenesten bare er for inviterte, og at ingen kan registrere seg selv. Den som ikke er invitert, får ett neste steg: be noen som er med, om en invitasjon. Lov aldri rask vekst eller mange hytter.
+- Forsiden forklarer ideen før reglene, med «låne» og «låne bort». Inne i tjenesten «viser» eieren hytta til noen, og de «ser» den og kan låne den. Ordet «dele» brukes ikke i tekst brukeren ser. Å låne bort tilbake er frivillig: skriv «kan velge», aldri et løfte om å få låne.
+- Forsiden sier først og tydelig at tjenesten bare er for inviterte, og at ingen kan registrere seg selv. Den som ikke er invitert, får ett neste steg: be noen som har hytte her, om en invitasjon. Bare eiere og administratorer kan invitere, så teksten skal ikke love mer. Lov aldri rask vekst eller mange hytter.
 - Regler og tilgangssjekker ligger i `src/lib/services/`. Sider og skjemaer kaller tjenestelaget og sjekker ikke tilgang selv.
 - En hytte er privat til eieren deler den. Innsyn i en annens hytte følger bare av en rad i `cabin_access`, som bare eieren kan lage. Legg aldri inn en regel som gir innsyn til «alle hytteeiere», administratorer eller venners venner.
 - En invitasjon gir tilgang til den som logger inn med adressen den ble sendt til. Nøkkelen i lenken gir ingenting alene. Sider som kan åpnes uten innlogging, viser ikke noe om hytta.

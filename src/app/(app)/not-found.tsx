@@ -11,7 +11,7 @@ export default function NotFound() {
     <>
       <PageTitle
         title="Fant ikke siden"
-        lead="Siden finnes ikke, eller den er ikke delt med deg."
+        lead="Siden finnes ikke, eller eieren har ikke valgt å vise deg den."
       />
       <ButtonLink href="/krets">Til din hyttekrets</ButtonLink>
     </>

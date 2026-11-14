@@ -37,7 +37,7 @@ function revokeQuestion(
   person: { name: string; pendingRequests: number; confirmedStays: number },
 ): string {
   const parts = [
-    `Slutte å dele ${cabinName} med ${person.name}?`,
+    `Skal ${person.name} slutte å se ${cabinName}?`,
     `${person.name} ser ikke lenger hytta og kan ikke sende nye forespørsler.`,
   ];
   if (person.confirmedStays > 0) {
@@ -83,7 +83,7 @@ export default async function ManageCabinPage({
 
       {ny && (
         <p role="status" className="mb-8 max-w-[60ch] rounded-md bg-window p-4 font-semibold">
-          Hytta er lagret. Den er privat til du deler den.
+          Hytta er lagret. Bare du ser den til du velger noen.
         </p>
       )}
 
@@ -93,9 +93,9 @@ export default async function ManageCabinPage({
       >
         <h2 id="status" className="text-2xl font-bold">
           {isShared && hasDates
-            ? "Hytta er delt og kan forespørres"
+            ? "Hytta kan lånes"
             : isShared
-              ? "Hytta er delt, men har ingen ledige datoer"
+              ? "Noen ser hytta, men den har ingen ledige datoer"
               : "Hytta er privat"}
         </h2>
         <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">
@@ -121,7 +121,7 @@ export default async function ManageCabinPage({
             Noen kan først be om å låne hytta når du har gjort begge deler:{" "}
             {!hasDates && <a href="#datoer" className="underline">åpnet noen datoer</a>}
             {!hasDates && !isShared && " og "}
-            {!isShared && <a href="#deling" className="underline">valgt hvem du vil dele med</a>}
+            {!isShared && <a href="#deling" className="underline">valgt hvem som får se hytta</a>}
             .
           </p>
         )}
@@ -173,23 +173,23 @@ export default async function ManageCabinPage({
           </ActionForm>
 
           <ButtonLink href={`/hytter/${cabin.id}`} variant="secondary" className="mt-6">
-            Se hytta slik de du deler med, ser den
+            Se hytta slik de du har valgt, ser den
           </ButtonLink>
         </Panel>
 
         <Panel>
           <h2 id="deling" className="scroll-mt-6 text-2xl font-bold">
-            Velg hvem du vil dele med
+            Velg hvem som får se hytta
           </h2>
           <p className="mt-1 max-w-[60ch] text-muted">
             Bare du og de du velger her, ser hytta. Det gjelder også andre hytteeiere og
-            administratorer. De du deler med, kan se hytta og sende deg forespørsler. De kan
-            ikke dele den videre.
+            administratorer. De du velger, kan se hytta og spørre om å låne den. De kan ikke
+            vise den til andre.
           </p>
 
           {endret === "deling" && (
             <p role="status" className="mt-4 max-w-[60ch] rounded-md bg-window p-4 font-semibold">
-              Delingen er fjernet. Personen ser ikke lenger hytta og kan ikke sende nye
+              Personen ser ikke lenger hytta og kan ikke sende nye
               forespørsler. Forespørsler og opphold er ikke endret.
             </p>
           )}
@@ -212,7 +212,7 @@ export default async function ManageCabinPage({
                       <span className="font-semibold">{person.name}</span>
                       <span className="block text-sm break-words text-muted">
                         {person.email ? `${person.email}. ` : ""}
-                        Delt siden {formatDate(todayInOslo(person.since))}.
+                        Ser hytta siden {formatDate(todayInOslo(person.since))}.
                       </span>
                     </span>
                     <ActionForm
@@ -224,9 +224,9 @@ export default async function ManageCabinPage({
                       <button
                         type="submit"
                         className="cursor-pointer text-barn underline"
-                        aria-label={`Slutt å dele med ${person.name}`}
+                        aria-label={`Ta bort ${person.name}`}
                       >
-                        Slutt å dele
+                        Ta bort
                       </button>
                     </ActionForm>
                   </li>
@@ -248,7 +248,7 @@ export default async function ManageCabinPage({
                       <span className="font-semibold break-words">{inv.email}</span>
                       <span className="block text-sm text-muted">
                         {inv.expired
-                          ? "Invitasjonen er utløpt. Send en ny hvis du fortsatt vil dele."
+                          ? "Invitasjonen er utløpt. Send en ny hvis personen fortsatt skal se hytta."
                           : `Invitasjonen gjelder til ${formatDate(todayInOslo(inv.expiresAt))}.`}
                       </span>
                     </span>
@@ -273,7 +273,7 @@ export default async function ManageCabinPage({
 
           <h3 className="mt-6 mb-3 font-bold">
             {isShared || invitations.length > 0
-              ? "Del med en til"
+              ? "Vis hytta til en til"
               : "Hvem ville du selv lånt bort hytta til?"}
           </h3>
           <ShareForm cabins={[{ id: cabin.id, name: cabin.name, area: cabin.area }]} />

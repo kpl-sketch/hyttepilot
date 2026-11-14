@@ -355,7 +355,7 @@ async function main() {
     const [mail] = perInvitation.mails;
     assert.equal(mail.to, "per@test.local");
     assert.match(mail.subject, /^Kari Eier inviterer deg til /);
-    assert.match(mail.text, /dele hytta Karis hytte \(Hafjell\) med deg/);
+    assert.match(mail.text, /vise deg hytta Karis hytte \(Hafjell\)/);
     assert.match(mail.text, /låner folk som kjenner hverandre, bort hyttene sine til hverandre/);
     assert.match(mail.text, /«Velkommen på hytta, Per!»/);
     assert.match(mail.text, /Invitasjonen gjelder bare denne hytta/);
@@ -436,7 +436,7 @@ async function main() {
     assert.equal(preview.result.recipient, "Kari Eier");
     assert.equal(preview.result.cabinName, "Pers hytte");
     assert.deepEqual(preview.result.sharedWith, []);
-    assert.match(preview.result.mail.subject, /Per Eier har delt Pers hytte med deg/);
+    assert.match(preview.result.mail.subject, /Per Eier viser deg Pers hytte/);
     assert.equal(preview.mails.length, 0, "forhåndsvisning sender ingenting");
     assert.equal(await getVisibleCabin(kari, persHytte), null, "forhåndsvisning deler ingenting");
   });
@@ -455,7 +455,7 @@ async function main() {
     );
     assert.equal(shareBack.mails.length, 1);
     assert.equal(shareBack.mails[0].to, "kari@test.local");
-    assert.match(shareBack.mails[0].subject, /Per Eier har delt Pers hytte med deg/);
+    assert.match(shareBack.mails[0].subject, /Per Eier viser deg Pers hytte/);
     assert.match(shareBack.mails[0].text, /«Takk for sist»/);
     const kretsen = await getCircle(kari);
     assert.deepEqual(kretsen.people[0].sharesWithMe, [{ id: persHytte, name: "Pers hytte" }]);
@@ -537,7 +537,7 @@ async function main() {
     assert.equal(shared.result.status, "shared");
     assert.equal(shared.result.recipient, "Lise Venn");
     assert.equal(shared.mails.length, 1);
-    assert.match(shared.mails[0].subject, /Anne Admin har delt Annes hytte med deg/);
+    assert.match(shared.mails[0].subject, /Anne Admin viser deg Annes hytte/);
     assert.equal((await listSharedCabins(lise)).length, 2);
     await refused(() => inviteToCabin(admin, annesHytte, "lise@test.local"), /ser allerede/);
   });
@@ -1030,9 +1030,9 @@ async function main() {
     assert.deepEqual([olas?.pendingRequests, olas?.confirmedStays], [0, 1]);
   });
   await check("bare eieren kan trekke tilbake en deling", async () => {
-    await refused(() => revokeAccess(lise, persHytte, ola.id), /Fant ikke delingen/);
-    await refused(() => revokeAccess(admin, persHytte, ola.id), /Fant ikke delingen/);
-    await refused(() => revokeAccess(per, persHytte, admin.id), /Fant ikke delingen/);
+    await refused(() => revokeAccess(lise, persHytte, ola.id), /Fant ikke personen/);
+    await refused(() => revokeAccess(admin, persHytte, ola.id), /Fant ikke personen/);
+    await refused(() => revokeAccess(per, persHytte, admin.id), /Fant ikke personen/);
   });
   const revocation = await sentDuring(() => revokeAccess(per, persHytte, ola.id));
   await check("etter tilbaketrekking ser ikke personen hytta og kan ikke sende nye forespørsler", async () => {

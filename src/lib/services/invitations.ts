@@ -178,7 +178,7 @@ export type SharePreview = {
 
 async function ownCabinOrRefuse(actor: Actor, cabinId: string): Promise<Cabin> {
   const target = await getOwnCabin(actor, cabinId);
-  if (!target) throw new UserError("Du kan bare dele dine egne hytter.");
+  if (!target) throw new UserError("Du kan bare velge hvem som ser dine egne hytter.");
   return target;
 }
 
@@ -418,14 +418,14 @@ export async function shareWithPerson(
  */
 export async function revokeAccess(actor: Actor, cabinId: string, userId: unknown) {
   const target = await getOwnCabin(actor, cabinId);
-  if (!target || typeof userId !== "string") throw new UserError("Fant ikke delingen.");
+  if (!target || typeof userId !== "string") throw new UserError("Fant ikke personen.");
   const [person] = await db
     .select({ id: user.id, name: user.name, email: user.email })
     .from(cabinAccess)
     .innerJoin(user, eq(user.id, cabinAccess.userId))
     .where(and(eq(cabinAccess.cabinId, target.id), eq(cabinAccess.userId, userId)))
     .limit(1);
-  if (!person) throw new UserError("Fant ikke delingen.");
+  if (!person) throw new UserError("Fant ikke personen.");
 
   await db.transaction(async (tx) => {
     await tx
@@ -462,7 +462,7 @@ export async function revokeInvitation(actor: Actor, invitationId: unknown) {
     .limit(1);
   if (!row || row.ownerId !== actor.id) throw new UserError("Fant ikke invitasjonen.");
   if (row.acceptedAt) {
-    throw new UserError("Invitasjonen er tatt i bruk. Fjern delingen i stedet.");
+    throw new UserError("Invitasjonen er tatt i bruk. Ta bort personen i stedet.");
   }
   await db
     .update(invitation)
@@ -756,7 +756,7 @@ export async function inviteAccount(
   rawEmail: unknown,
   rawMessage: unknown = "",
 ): Promise<{ emailAccepted: boolean }> {
-  if (!actor.isAdmin) throw new UserError("Bare administratorer kan invitere uten å dele en hytte.");
+  if (!actor.isAdmin) throw new UserError("Bare administratorer kan invitere uten å vise en hytte.");
   const email = parseEmail(rawEmail);
   const message = parseMessage(rawMessage);
   if (await findRegisteredUser(email)) throw new UserError("Denne adressen er allerede med.");

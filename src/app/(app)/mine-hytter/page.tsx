@@ -20,10 +20,10 @@ export default async function MyCabinsPage() {
       />
       {cabins.length === 0 && (
         <Panel className="mb-8">
-          <h2 className="text-xl font-bold">Har du en hytte du vil dele med noen du kjenner?</h2>
+          <h2 className="text-xl font-bold">Har du en hytte du vil låne bort til noen du kjenner?</h2>
           <p className="mt-2 max-w-[60ch]">
-            Legg inn hytta, åpne noen datoer og velg hvem du vil dele med. Hytta er privat til
-            du deler den, og ingen andre ser den i mellomtiden.
+            Legg inn hytta, åpne noen datoer og velg hvem som får se den. Ingen andre enn deg
+            ser hytta før du har valgt noen.
           </p>
           <p className="mt-2 max-w-[60ch] text-muted">
             Det er frivillig. Du kan låne uten å eie en hytte.
@@ -47,7 +47,7 @@ export default async function MyCabinsPage() {
                   <span className="font-semibold">
                     {cabin.sharedWith === 0
                       ? "Privat. Bare du ser den."
-                      : `Delt med ${cabin.sharedWith === 1 ? "én person" : `${cabin.sharedWith} personer`}.`}
+                      : `${cabin.sharedWith === 1 ? "Én person" : `${cabin.sharedWith} personer`} ser hytta.`}
                   </span>{" "}
                   {cabin.free.length > 0
                     ? `Ledig: ${formatRange(cabin.free[0].startDate, cabin.free[0].endDate)}${cabin.free.length > 1 ? " med flere" : ""}.`

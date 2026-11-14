@@ -34,7 +34,7 @@ export default function LandingPage() {
         <p className="mt-2 max-w-[48ch] text-lg">
           Du kan ikke registrere deg selv.{" "}
           <strong className="font-semibold">
-            Kjenner du noen som er med? Be dem invitere deg.
+            Kjenner du noen som har hytte her? Be dem invitere deg.
           </strong>
         </p>
         <p className="mt-4 max-w-[48ch] text-muted">

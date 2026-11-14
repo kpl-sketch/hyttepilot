@@ -44,7 +44,7 @@ async function WelcomeForm({
       {invitation?.status === "valid" && (
         <p className="max-w-xl rounded-md border border-line bg-surface p-4">
           <strong>{invitation.inviterName}</strong> har invitert deg. Når du har gitt løftet,
-          ser du hva {invitation.kind === "cabin" ? "som er delt med deg" : "du kan gjøre"}.
+          ser du hva {invitation.kind === "cabin" ? "du kan låne" : "du kan gjøre"}.
         </p>
       )}
       <div className="grid max-w-xl gap-4 sm:grid-cols-2">

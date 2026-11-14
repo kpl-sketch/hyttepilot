@@ -48,8 +48,8 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
         title="Din hyttekrets"
         lead={
           <>
-            Hyttene som er delt med deg, og hyttene du selv deler. Du ser bare det noen har valgt
-            å dele med deg.
+            Hyttene du kan låne, og hyttene du låner bort. Du ser bare hytter eieren selv har
+            valgt å vise deg.
             {circle.invitedBy && ` Du ble invitert av ${circle.invitedBy}.`}
           </>
         }
@@ -63,7 +63,7 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
           {welcome.cabin ? (
             <>
               <h2 id="velkommen" className="text-2xl font-bold">
-                {welcome.inviterName} har delt {welcome.cabin.name} med deg
+                {welcome.inviterName} viser deg {welcome.cabin.name}
               </h2>
               {welcome.message && (
                 <blockquote className="mt-3 max-w-[60ch] border-l-4 border-window pl-4 whitespace-pre-line">
@@ -94,8 +94,8 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
               )}
               <p className="mt-3 max-w-[60ch]">
                 Invitasjonen gir deg adgang, men ingen hytter ennå. Du kan legge inn din egen
-                hytte og velge hvem du vil dele den med. Andres hytter ser du når eieren deler
-                dem med deg.
+                hytte og velge hvem som får se den. Andres hytter ser du når eieren velger å vise
+                deg dem.
               </p>
             </>
           )}
@@ -104,13 +104,13 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
 
       <section aria-labelledby="delt-med-deg" className="mb-12">
         <h2 id="delt-med-deg" className="text-2xl font-bold">
-          Hytter delt med deg
+          Hytter du kan låne
         </h2>
         {shared.length === 0 ? (
           <Panel className="mt-4">
-            <p className="text-lg">Ingen har delt en hytte med deg ennå.</p>
+            <p className="text-lg">Ingen har vist deg en hytte ennå.</p>
             <p className="mt-2 max-w-[60ch] text-muted">
-              En hytte dukker opp her når eieren velger å dele den med deg. Kjenner du en
+              En hytte dukker opp her når eieren velger å vise deg den. Kjenner du en
               hytteeier som er med, kan du be om en invitasjon til {viewer.email}.
             </p>
           </Panel>
@@ -128,7 +128,7 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
                       {cabin.name}
                     </span>
                     <span className="block text-muted">
-                      {cabin.area}. Delt med deg av {ownerName}.
+                      {cabin.area}. Hytta til {ownerName}.
                     </span>
                     {free.length > 0 ? (
                       <span className="mt-1 block">
@@ -147,23 +147,23 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
           </ul>
         )}
         <p className="mt-3 max-w-[60ch] text-sm text-muted">
-          Delt med deg betyr at du kan se hytta og spørre. Ledig betyr at eieren har åpnet
+          Her står hytter du kan se og spørre om å låne. Ledig betyr at eieren har åpnet
           datoene. Ingenting er avtalt før eieren har sagt ja.
         </p>
       </section>
 
       <section aria-labelledby="du-deler" className="mb-12">
         <h2 id="du-deler" className="text-2xl font-bold">
-          Hytter du deler
+          Hytter du låner bort
         </h2>
         {own.length === 0 ? (
           <Panel className="mt-4">
             <h3 className="text-xl font-bold">
-              Har du en hytte du vil dele med noen du kjenner?
+              Har du en hytte du vil låne bort til noen du kjenner?
             </h3>
             <p className="mt-2 max-w-[60ch]">
               Du velger hvem som får se hytta, når den er ledig, og hvilke opphold du sier ja
-              til. Hytta er privat til du deler den.
+              til. Bare du ser hytta til du velger noen.
             </p>
             <p className="mt-2 max-w-[60ch] text-muted">
               Det er frivillig. Du kan låne uten å eie en hytte, og du kan gjøre dette når som
@@ -213,7 +213,7 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
             Folk i kretsen din
           </h2>
           <p className="mt-1 max-w-[60ch] text-muted">
-            De du har en deling med, den ene eller den andre veien. Ingen ser en liste over
+            De som viser deg en hytte, og de du viser din. Ingen ser en liste over
             alle som er med.
           </p>
           <ul className="mt-4 space-y-4">
@@ -228,21 +228,21 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
                   <h3 className="text-xl font-bold">{person.name}</h3>
                   {person.sharesWithMe.length > 0 && (
                     <p className="mt-1">
-                      {first} deler {list(person.sharesWithMe.map((c) => c.name))} med deg.
+                      {first} viser deg {list(person.sharesWithMe.map((c) => c.name))}.
                     </p>
                   )}
                   {person.iShareWith.length > 0 ? (
                     <p className="mt-1">
-                      Du deler {list(person.iShareWith.map((c) => c.name))} med {first}.
+                      Du viser {first} {list(person.iShareWith.map((c) => c.name))}.
                     </p>
                   ) : (
-                    <p className="mt-1 text-muted">Du deler ingen hytte med {first}.</p>
+                    <p className="mt-1 text-muted">Du viser ikke {first} noen hytte.</p>
                   )}
                   {canShareBack && (
                     <ShareForm
                       cabins={person.iShareWith.length === 0 ? ownChoices : []}
                       person={{ id: person.id, name: person.name }}
-                      disclosure={`Vil du dele hytta di med ${first}?`}
+                      disclosure={`Vil du vise ${first} hytta di?`}
                     />
                   )}
                 </li>
@@ -257,7 +257,7 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
                     ? "Invitasjonen er utløpt."
                     : `Invitasjonen gjelder til ${formatDate(todayInOslo(inv.expiresAt))}.`}{" "}
                   <Link href={`/mine-hytter/${inv.cabinId}`} className="underline">
-                    Styr delingen
+                    Se hvem som ser hytta
                   </Link>
                 </p>
               </li>
@@ -299,7 +299,7 @@ function SharingStatus({
       ? pending > 0
         ? `Ingen ser hytta ennå. ${pending === 1 ? "Én invitasjon" : `${pending} invitasjoner`} venter.`
         : "Privat. Bare du ser den."
-      : `Delt med ${sharedWith === 1 ? "én person" : `${sharedWith} personer`}.`;
+      : `${sharedWith === 1 ? "Én person" : `${sharedWith} personer`} ser hytta.`;
   const dates =
     free.length > 0 ? `Ledig for forespørsel: ${nextFree(free)}.` : "Ingen ledige datoer.";
   return (

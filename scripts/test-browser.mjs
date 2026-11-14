@@ -211,7 +211,7 @@ async function addCabin(page, { name, area, cost, cleaning }) {
   await field("address").fill("Fjellvegen 12, 2636 Øyer");
   await field("arrivalInfo").fill("Nøkkelboks ved døra, kode 1234.");
   await page.getByRole("button", { name: "Legg inn hytta" }).click();
-  await page.getByText("Hytta er lagret. Den er privat til du deler den.").waitFor();
+  await page.getByText("Hytta er lagret. Bare du ser den til du velger noen.").waitFor();
   return page.url().match(/mine-hytter\/([0-9a-f-]+)/)[1];
 }
 
@@ -261,7 +261,7 @@ async function main() {
       .waitFor();
     await anne.getByText("Du kan ikke registrere deg selv.").waitFor();
     // Den som ikke er invitert, får vite hva som er neste steg.
-    await anne.getByText("Kjenner du noen som er med? Be dem invitere deg.").waitFor();
+    await anne.getByText("Kjenner du noen som har hytte her? Be dem invitere deg.").waitFor();
     await anne.getByRole("heading", { name: "Slik virker det" }).waitFor();
     assert.equal(await anne.getByRole("main").getByRole("listitem").count(), 3);
     await anne.getByRole("heading", { name: "Har du ikke hytte?" }).waitFor();
@@ -277,8 +277,8 @@ async function main() {
   await onboard(anne, "Anne Admin");
   await check("tom hyttekrets forklarer hva som mangler og hva man kan gjøre", async () => {
     await anne.getByRole("heading", { name: "Din hyttekrets" }).waitFor();
-    await anne.getByText("Ingen har delt en hytte med deg ennå.").waitFor();
-    await anne.getByRole("heading", { name: "Har du en hytte du vil dele med noen du kjenner?" }).waitFor();
+    await anne.getByText("Ingen har vist deg en hytte ennå.").waitFor();
+    await anne.getByRole("heading", { name: "Har du en hytte du vil låne bort til noen du kjenner?" }).waitFor();
     await shot(anne, "02-tom-hyttekrets");
   });
   await anne.goto(`${BASE}/admin`);
@@ -312,7 +312,7 @@ async function main() {
   await openDates(kari, d(10), d(40));
   await openDates(kari, d(380), d(430));
 
-  await kari.getByLabel("E-postadressen til den du vil dele med").fill("per@test.local");
+  await kari.getByLabel("E-postadressen til den som skal få se hytta").fill("per@test.local");
   await kari.getByLabel("Personlig hilsen").fill("Velkommen på hytta, Per!");
   await kari.getByRole("button", { name: "Se over før du sender" }).click();
   await check("eieren ser mottaker, hytte, tilgang og e-posten før noe sendes", async () => {
@@ -320,7 +320,7 @@ async function main() {
     await heading.waitFor();
     await kari.getByText("per@test.local (ny)").waitFor();
     await kari.getByText("Fjellro, Hafjell").first().waitFor();
-    await kari.getByText("dele hytta di videre med noen").waitFor();
+    await kari.getByText("vise hytta di til andre").waitFor();
     await kari.getByText("«Velkommen på hytta, Per!»").waitFor();
     assert.equal(
       (await newMails()).filter((mail) => mail.to === "per@test.local").length,
@@ -373,7 +373,7 @@ async function main() {
     await per.keyboard.press("Enter");
   });
   await check("første side viser hvem som inviterte, hilsenen og akkurat den hytta", async () => {
-    await per.getByRole("heading", { name: "Kari Eier har delt Fjellro med deg" }).waitFor();
+    await per.getByRole("heading", { name: "Kari Eier viser deg Fjellro" }).waitFor();
     await per.getByText("Velkommen på hytta, Per!").waitFor();
     await per.getByText("Du ble invitert av Kari Eier.").waitFor();
     assert.equal(await per.getByRole("link", { name: /Fjellro/ }).count(), 2);
@@ -385,7 +385,7 @@ async function main() {
     const before = (await newMails()).length;
     for (let i = 0; i < 3; i++) {
       await per.goto(perLink);
-      await per.getByRole("heading", { name: "Kari Eier har delt Fjellro med deg" }).waitFor();
+      await per.getByRole("heading", { name: "Kari Eier viser deg Fjellro" }).waitFor();
     }
     assert.equal((await newMails()).length, before);
     const access = await pool.query(
@@ -471,33 +471,33 @@ async function main() {
   await openDates(per, d(20), d(60));
   await per.goto(`${BASE}/krets`);
   await check("B får forslaget om å dele tilbake, men ingenting er delt ennå", async () => {
-    await per.getByText("Du deler ingen hytte med Kari.").waitFor();
+    await per.getByText("Du viser ikke Kari noen hytte.").waitFor();
     await kari.goto(`${BASE}/krets`);
-    await kari.getByText("Ingen har delt en hytte med deg ennå.").waitFor();
+    await kari.getByText("Ingen har vist deg en hytte ennå.").waitFor();
   });
-  await per.getByText("Vil du dele hytta di med Kari?").click();
-  await per.getByRole("button", { name: "Se over før du deler" }).click();
-  await per.getByRole("heading", { name: "Se over før du deler" }).waitFor();
+  await per.getByText("Vil du vise Kari hytta di?").click();
+  await per.getByRole("button", { name: "Se over før du bekrefter" }).click();
+  await per.getByRole("heading", { name: "Se over før du bekrefter" }).waitFor();
   await check("deling tilbake krever at B ser over og bekrefter", async () => {
     await per.getByText("Kari Eier (ny)").waitFor();
     await kari.reload();
-    await kari.getByText("Ingen har delt en hytte med deg ennå.").waitFor();
-    await shot(per, "10-dele-tilbake", per.locator("li", { hasText: "Vil du dele hytta di med Kari?" }));
+    await kari.getByText("Ingen har vist deg en hytte ennå.").waitFor();
+    await shot(per, "10-dele-tilbake", per.locator("li", { hasText: "Vil du vise Kari hytta di?" }));
   });
-  await per.getByRole("button", { name: "Del hytta med Kari Eier" }).click();
+  await per.getByRole("button", { name: "Vis Kari Eier hytta" }).click();
   await per.getByText("Kari Eier ser nå hytta og har fått beskjed på e-post.").waitFor();
   await check("etter Bs valg ser A hytta til B", async () => {
     await kari.reload();
     await kari.getByRole("link", { name: /Sjøbua/ }).waitFor();
-    await kari.getByText("Delt med deg av Per Eier.").waitFor();
-    await kari.getByText("Du deler Fjellro med Per.").waitFor();
+    await kari.getByText("Hytta til Per Eier.").waitFor();
+    await kari.getByText("Du viser Per Fjellro.").waitFor();
     await shot(kari, "11-din-hyttekrets");
   });
 
   await check("B inviterer C til sin hytte, bare med tastatur", async () => {
     await per.reload();
     await per.getByRole("heading", { name: "Hvem ville du selv lånt bort hytta til?" }).waitFor();
-    await tabTo(per, /E-postadressen til den du vil dele med/);
+    await tabTo(per, /E-postadressen til den som skal få se hytta/);
     await per.keyboard.type("ola@test.local");
     await tabTo(per, /Personlig hilsen/);
     await per.keyboard.type("Bli med til Kragerø!");
@@ -515,7 +515,7 @@ async function main() {
   await ola.getByRole("link", { name: "Logg inn og se hytta" }).click();
   await logIn(ola, "ola@test.local");
   await onboard(ola, "Ola Venn");
-  await ola.getByRole("heading", { name: "Per Eier har delt Sjøbua med deg" }).waitFor();
+  await ola.getByRole("heading", { name: "Per Eier viser deg Sjøbua" }).waitFor();
   await check("C ser bare hytta til B, ikke hytta til A", async () => {
     const text = await ola.getByRole("main").innerText();
     assert.equal(text.includes("Fjellro"), false);
@@ -567,21 +567,21 @@ async function main() {
     question = dialog.message();
     await dialog.accept();
   });
-  const stop = kari.getByRole("button", { name: "Slutt å dele med Per Eier" });
+  const stop = kari.getByRole("button", { name: "Ta bort Per Eier" });
   await stop.waitFor();
-  await shot(kari, "14-styre-deling", kari.locator("section", { hasText: "Velg hvem du vil dele med" }));
+  await shot(kari, "14-styre-deling", kari.locator("section", { hasText: "Velg hvem som får se hytta" }));
   await stop.click();
-  await kari.getByText("Delingen er fjernet.").waitFor();
+  await kari.getByText("Personen ser ikke lenger hytta").waitFor();
   await kari.getByText("Forespørsler og opphold er ikke endret.").waitFor();
   await check("eieren får vite hva som blir stående før delingen fjernes", () => {
-    assert.match(question, /Slutte å dele Fjellro med Per Eier\?/);
+    assert.match(question, /Skal Per Eier slutte å se Fjellro\?/);
     assert.match(question, /kan ikke sende nye forespørsler/);
     assert.match(question, /ett opphold du har sagt ja til\. Det står som før/);
   });
   await check("etter tilbaketrekking ser ikke B hytta, men oppholdet står", async () => {
     await nothingAt(per, `${BASE}/hytter/${fjellro}`, /Fjellro|Hafjell|Tømmerhytte/);
     await per.goto(`${BASE}/krets`);
-    await per.getByText("Ingen har delt en hytte med deg ennå.").waitFor();
+    await per.getByText("Ingen har vist deg en hytte ennå.").waitFor();
     await per.goto(`${BASE}/foresporsler`);
     await per.getByText("Betalt og reservert").waitFor();
     await per.getByText("Fjellvegen 12, 2636 Øyer").waitFor();
@@ -592,7 +592,7 @@ async function main() {
   console.log("Utløpt, tilbaketrukket og ukjent invitasjon");
   await kari.goto(`${BASE}/mine-hytter/${fjellro}`);
   for (const email of ["angrer@test.local", "sen@test.local"]) {
-    await kari.getByLabel("E-postadressen til den du vil dele med").fill(email);
+    await kari.getByLabel("E-postadressen til den som skal få se hytta").fill(email);
     await kari.getByRole("button", { name: "Se over før du sender" }).click();
     await kari.getByRole("button", { name: "Send invitasjonen" }).click();
     await kari.getByText(`Invitasjonen er sendt til ${email}.`).waitFor();

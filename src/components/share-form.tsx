@@ -86,7 +86,7 @@ export function ShareForm({
         </summary>
         <div className="mt-4">
           <p className="mb-4 max-w-[60ch] text-muted">
-            Det er ditt valg. Ingenting deles før du har sett over og bekreftet.
+            Det er ditt valg. Ingenting skjer før du har sett over og bekreftet.
           </p>
           {form}
         </div>
@@ -110,7 +110,7 @@ export function ShareForm({
         <input type="hidden" name="step" value="send" />
 
         <h3 ref={heading} className="text-xl font-bold" tabIndex={-1}>
-          Se over før du {person ? "deler" : "sender"}
+          Se over før du {person ? "bekrefter" : "sender"}
         </h3>
         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2">
           <dt className="text-muted">Til</dt>
@@ -135,7 +135,7 @@ export function ShareForm({
             <ul className="mt-1 list-disc space-y-1 pl-5">
               <li>adressen og nøkkelopplysningene før et opphold er betalt</li>
               <li>se andre hytter, heller ikke dine andre</li>
-              <li>dele hytta di videre med noen</li>
+              <li>vise hytta di til andre</li>
             </ul>
           </div>
         </div>
@@ -153,15 +153,15 @@ export function ShareForm({
           </div>
           {!person && (
             <p className="mt-2 text-sm text-muted">
-              Er mottakeren med fra før, får vedkommende tilgang med en gang og en kortere
-              e-post om at hytta er delt.
+              Er mottakeren med fra før, ser vedkommende hytta med en gang og får en kortere
+              e-post om det.
             </p>
           )}
         </div>
 
         <div className="flex flex-wrap gap-3">
           <button type="submit" disabled={pending} className={buttonClass("primary")}>
-            {person ? `Del hytta med ${person.name}` : "Send invitasjonen"}
+            {person ? `Vis ${person.name} hytta` : "Send invitasjonen"}
           </button>
           <button
             type="button"
@@ -182,7 +182,7 @@ export function ShareForm({
       {cabins.length === 1 ? (
         <input type="hidden" name="cabinId" value={cabins[0].id} />
       ) : (
-        <Field label="Hvilken hytte vil du dele?" className="max-w-md">
+        <Field label="Hvilken hytte gjelder det?" className="max-w-md">
           <select name="cabinId" defaultValue={current.values.cabinId} className={inputClass}>
             {cabins.map((cabin) => (
               <option key={cabin.id} value={cabin.id}>
@@ -194,7 +194,7 @@ export function ShareForm({
       )}
       {!person && (
         <Field
-          label="E-postadressen til den du vil dele med"
+          label="E-postadressen til den som skal få se hytta"
           hint="Én person om gangen."
           className="max-w-md"
         >
@@ -220,7 +220,7 @@ export function ShareForm({
         </p>
       )}
       <button type="submit" disabled={pending} className={buttonClass("secondary")}>
-        Se over før du {person ? "deler" : "sender"}
+        Se over før du {person ? "bekrefter" : "sender"}
       </button>
     </form>,
   );

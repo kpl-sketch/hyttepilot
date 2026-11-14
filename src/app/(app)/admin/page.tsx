@@ -28,19 +28,19 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
     <>
       <PageTitle
         title="Administrasjon"
-        lead={`Her inviterer du folk inn i ${APP_NAME} uten å dele en hytte med dem. De kan da legge inn sin egen hytte.`}
+        lead={`Her inviterer du folk inn i ${APP_NAME} uten å vise dem en hytte. De kan da legge inn sin egen hytte.`}
       />
 
       <p className="mb-8 max-w-[60ch] rounded-md border border-line bg-surface p-4">
-        Som administrator ser du ikke andres hytter, delinger eller forespørsler. Du ser
-        hytter som alle andre: dine egne, og de noen har delt med deg.
+        Som administrator ser du ikke andres hytter eller forespørsler. Du ser hytter som
+        alle andre: dine egne, og de eieren har valgt å vise deg.
       </p>
 
       <Panel>
         <h2 className="text-2xl font-bold">Inviter en person</h2>
         <p className="mt-1 mb-5 max-w-[60ch] text-muted">
-          Invitasjonen gir adgang til tjenesten, men ikke til noen hytter. Vil du dele din
-          egen hytte med noen, gjør du det på siden for hytta.
+          Invitasjonen gir adgang til tjenesten, men ikke til noen hytter. Vil du vise noen
+          din egen hytte, gjør du det på siden for hytta.
         </p>
         <ActionForm action={inviteAccountAction} resetOnOk className="space-y-4">
           <Field label="E-postadresse" className="max-w-md">

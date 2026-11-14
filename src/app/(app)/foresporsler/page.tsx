@@ -131,7 +131,7 @@ export default async function RequestsPage({ searchParams }: PageProps<"/forespo
           <Panel>
             <p className="text-lg">Du har ikke bedt om å låne noen hytte ennå.</p>
             <ButtonLink href="/krets" className="mt-4">
-              Se hyttene som er delt med deg
+              Se hyttene du kan låne
             </ButtonLink>
           </Panel>
         )}

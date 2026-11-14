@@ -28,7 +28,7 @@ export default async function CabinPage({ params }: PageProps<"/hytter/[id]">) {
     <>
       <PageTitle
         title={cabin.name}
-        lead={`${cabin.area}. ${isOwn ? "Dette er din hytte." : `Delt med deg av ${ownerName}.`}`}
+        lead={`${cabin.area}. ${isOwn ? "Dette er din hytte." : `Hytta til ${ownerName}.`}`}
       />
 
       <PhotoGallery photos={photos} cabinName={cabin.name} />
@@ -66,11 +66,11 @@ export default async function CabinPage({ params }: PageProps<"/hytter/[id]">) {
 
       <Panel className="mt-10">
         <h2 className="text-2xl font-bold">
-          {isOwn ? "Slik ser kalenderen ut for dem du deler med" : "Når vil du låne hytta?"}
+          {isOwn ? "Slik ser kalenderen ut for dem du har valgt" : "Når vil du låne hytta?"}
         </h2>
         <p className="mt-1 mb-5 max-w-[60ch] text-muted">
           {isOwn
-            ? "Bare du og de du har delt hytta med, ser denne siden."
+            ? "Bare du og de du har valgt, ser denne siden."
             : `${owner} har åpnet datoene under for forespørsler. Du spør, og ${owner} svarer ja eller nei.`}
         </p>
         {isOwn ? (
@@ -100,7 +100,7 @@ export default async function CabinPage({ params }: PageProps<"/hytter/[id]">) {
             />
             {calendar.available.length === 0 && (
               <p className="mt-3 max-w-[60ch]">
-                Hytta er delt med deg, men du kan ikke sende en forespørsel før {owner} har
+                Du ser hytta, men du kan ikke sende en forespørsel før {owner} har
                 åpnet noen datoer. Si gjerne fra til {owner} at du er interessert.
               </p>
             )}

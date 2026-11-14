@@ -95,13 +95,13 @@ async function Invitation({ params }: { params: PageProps<"/invitasjon/[token]">
         </p>
         {found.kind === "cabin" ? (
           <p>
-            {inviter} vil dele hytta si med deg. Når du har logget inn, ser du hytta og når
+            {inviter} vil vise deg hytta si. Når du har logget inn, ser du hytta og når
             den er ledig, og du kan sende {inviter} en forespørsel om å låne den.
           </p>
         ) : (
           <p>
-            Når du har logget inn, kan du legge inn din egen hytte og velge hvem du vil dele
-            den med.
+            Når du har logget inn, kan du legge inn din egen hytte og velge hvem som får se
+            den.
           </p>
         )}
         <Panel>
@@ -162,7 +162,7 @@ async function Invitation({ params }: { params: PageProps<"/invitasjon/[token]">
     <Message title={`${mine.inviterName} inviterer deg`}>
       <p>
         {mine.cabin
-          ? `${inviter} vil dele ${mine.cabin.name} (${mine.cabin.area}) med deg.`
+          ? `${inviter} vil vise deg ${mine.cabin.name} (${mine.cabin.area}).`
           : `${inviter} har invitert deg til ${APP_NAME}.`}
       </p>
       <ActionForm action={acceptInvitationAction}>
