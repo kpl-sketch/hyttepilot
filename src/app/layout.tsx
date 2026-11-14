@@ -5,7 +5,7 @@ import { APP_NAME } from "@/lib/brand";
 
 export const metadata: Metadata = {
   title: { default: APP_NAME, template: `%s | ${APP_NAME}` },
-  description: "Del hytta med folk du kjenner.",
+  description: "Lån bort hytta til folk du kjenner. Lån deres.",
   // Piloten er lukket og skal ikke dukke opp i søk.
   robots: { index: false, follow: false },
 };

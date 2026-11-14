@@ -4,7 +4,7 @@ import { type ReactNode, Suspense } from "react";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { PublicShell } from "@/components/public-shell";
 import { ButtonLink, Loading, Panel } from "@/components/ui";
-import { APP_NAME } from "@/lib/brand";
+import { APP_NAME, WHAT_IT_IS } from "@/lib/brand";
 import { firstName } from "@/lib/emails";
 import {
   getInvitationForViewer,
@@ -90,6 +90,9 @@ async function Invitation({ params }: { params: PageProps<"/invitasjon/[token]">
   if (!sessionUser) {
     return (
       <Message title={`${found.inviterName} inviterer deg til ${APP_NAME}`}>
+        <p>
+          I {APP_NAME} {WHAT_IT_IS}.
+        </p>
         {found.kind === "cabin" ? (
           <p>
             {inviter} vil dele hytta si med deg. Når du har logget inn, ser du hytta og når
@@ -97,8 +100,8 @@ async function Invitation({ params }: { params: PageProps<"/invitasjon/[token]">
           </p>
         ) : (
           <p>
-            Her deler hytteeiere hytta si med folk de kjenner. Når du har logget inn, kan du
-            legge inn din egen hytte og velge hvem du vil dele den med.
+            Når du har logget inn, kan du legge inn din egen hytte og velge hvem du vil dele
+            den med.
           </p>
         )}
         <Panel>

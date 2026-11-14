@@ -4,6 +4,12 @@
  */
 export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "Hyttepilot";
 
+/**
+ * Kjernesetningen: hva tjenesten er. Den skal stå likt på forsiden, på
+ * invitasjonssiden og i e-post. Sett «Her» eller «I <navn>» foran.
+ */
+export const WHAT_IT_IS = "låner folk som kjenner hverandre, bort hyttene sine til hverandre";
+
 export const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL || "";
 
 /** Adressen tjenesten ligger på, uten skråstrek til slutt. */
