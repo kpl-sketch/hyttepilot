@@ -155,6 +155,7 @@ src/proxy.ts              Sender uinnloggede til innlogging
 scripts/test-flow.ts      Testen av reglene, mot databasen
 scripts/test-browser.mjs  Testen i nettleser, på mobilstørrelse og med tastatur
 scripts/overgang-rapport.mjs  Leserapport før overgangen til eksplisitt deling
+scripts/pilotmaaling.sql  Tallene for piloten: invitert, delt, invitert videre, opphold
 ```
 
 Regelen for ny funksjonalitet: tilgangssjekken skal ligge i tjenestelaget
