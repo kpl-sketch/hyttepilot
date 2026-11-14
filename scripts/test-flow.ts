@@ -7,8 +7,9 @@
  * lokal database.
  */
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
+import sharp from "sharp";
 import { addDays, todayInOslo } from "../src/lib/dates";
 import { db } from "../src/lib/db";
 import { profile, user } from "../src/lib/db/schema";
@@ -27,6 +28,7 @@ import {
   createCabin,
   getCalendar,
   getVisibleCabin,
+  listOwnCabins,
   listVisibleCabins,
 } from "../src/lib/services/cabins";
 import {
@@ -38,6 +40,13 @@ import {
   removeFriendInvitation,
 } from "../src/lib/services/invitations";
 import { isThrottled } from "../src/lib/services/login";
+import {
+  addCabinPhotos,
+  getPhotoForViewer,
+  listCabinPhotos,
+  makeCoverPhoto,
+  removeCabinPhoto,
+} from "../src/lib/services/photos";
 
 const url = process.env.DATABASE_URL ?? "";
 if (!/@(127\.0\.0\.1|localhost)[:/]/.test(url)) {
@@ -97,9 +106,20 @@ const cabinData = (name: string) => ({
   arrivalInfo: "Nøkkelboks kode 1234",
 });
 
+/** Et ensfarget bilde slik et kamera lagrer det: liggende, med GPS-posisjon. */
+async function photo(name: string, background: string): Promise<File> {
+  const bytes = await sharp({
+    create: { width: 2400, height: 1800, channels: 3, background },
+  })
+    .withExif({ IFD3: { GPSLatitudeRef: "N", GPSLatitude: "61/1 14/1 0/1" } })
+    .jpeg()
+    .toBuffer();
+  return new File([new Uint8Array(bytes)], name, { type: "image/jpeg" });
+}
+
 async function main() {
   await db.execute(
-    sql`truncate "booking", "availability", "cabin_access", "invitation", "cabin", "profile", "login_throttle", "verification", "session", "account", "user" cascade`,
+    sql`truncate "booking", "availability", "cabin_photo", "cabin_access", "invitation", "cabin", "profile", "login_throttle", "verification", "session", "account", "user" cascade`,
   );
 
   const today = todayInOslo();
@@ -178,6 +198,110 @@ async function main() {
   await check("venn registrert fra før får tilgang med en gang", async () => {
     await inviteFriend(admin, annesHytte, "lise@test.local");
     assert.equal((await listVisibleCabins(lise)).length, 2);
+  });
+
+  console.log("Bilder");
+  await check("hytte uten bilder har ikke forsidebilde", async () => {
+    const [own] = await listOwnCabins(kari);
+    assert.equal(own.coverPhotoId, null);
+    assert.deepEqual(await listCabinPhotos(karisHytte), []);
+  });
+
+  const medBilder = await createCabin(kari, cabinData("Bildehytta"), [
+    await photo("stue.jpg", "#a3271c"),
+    await photo("utsikt.jpg", "#163027"),
+  ]);
+  const bilder = await listCabinPhotos(medBilder);
+  await check("hytte kan legges inn med bilder, og det første blir forsidebilde", async () => {
+    assert.equal(bilder.length, 2);
+    const own = (await listOwnCabins(kari)).find((c) => c.id === medBilder);
+    assert.equal(own?.coverPhotoId, bilder[0].id);
+    const seen = (await listVisibleCabins(admin)).find((c) => c.cabin.id === medBilder);
+    assert.equal(seen?.cabin.coverPhotoId, bilder[0].id);
+    assert.equal((await getVisibleCabin(admin, medBilder))?.cabin.coverPhotoId, bilder[0].id);
+  });
+  await check("bildene lagres forminsket, som WebP og uten GPS-posisjon", async () => {
+    assert.deepEqual([bilder[0].width, bilder[0].height], [1600, 1200]);
+    const full = await getPhotoForViewer(kari, bilder[0].id, "full");
+    const thumb = await getPhotoForViewer(kari, bilder[0].id, "thumb");
+    assert.ok(full && thumb);
+    const stored = await sharp(full).metadata();
+    assert.equal(stored.format, "webp");
+    assert.equal(stored.width, 1600);
+    assert.equal(stored.exif, undefined);
+    assert.equal((await sharp(thumb).metadata()).width, 640);
+    const original = await sharp(
+      Buffer.from(await (await photo("x.jpg", "#000")).arrayBuffer()),
+    ).metadata();
+    assert.ok(original.exif, "testbildet skal ha GPS-data før behandling");
+  });
+  await check("fil som ikke er et bilde, stopper innleggingen av hytta", async () => {
+    const notat = new File(["ikke et bilde"], "notat.jpg", { type: "image/jpeg" });
+    await refused(
+      () => createCabin(kari, cabinData("Skal ikke lagres"), [notat]),
+      /klarte ikke å lese «notat.jpg»/,
+    );
+    const names = (await listOwnCabins(kari)).map((c) => c.name);
+    assert.equal(names.includes("Skal ikke lagres"), false);
+  });
+  await check("for stort bilde avvises", async () => {
+    const noise = await sharp(randomBytes(1200 * 1200 * 3), {
+      raw: { width: 1200, height: 1200, channels: 3 },
+    })
+      .jpeg({ quality: 95 })
+      .toBuffer();
+    const stor = new File([new Uint8Array(noise)], "stor.jpg", { type: "image/jpeg" });
+    await refused(() => addCabinPhotos(kari, medBilder, [stor]), /for stort/);
+  });
+  await check("bare eieren kan legge til, fjerne og flytte bilder", async () => {
+    const bilde = await photo("ny.jpg", "#f4c04e");
+    await refused(() => addCabinPhotos(ola, karisHytte, [bilde]), /Fant ikke hytta/);
+    await refused(() => addCabinPhotos(admin, karisHytte, [bilde]), /Fant ikke hytta/);
+    await refused(() => removeCabinPhoto(admin, bilder[0].id), /Fant ikke bildet/);
+    await refused(() => makeCoverPhoto(ola, bilder[1].id), /Fant ikke bildet/);
+    await refused(() => addCabinPhotos(kari, karisHytte, []), /minst ett bilde/);
+    assert.equal(await addCabinPhotos(kari, karisHytte, [bilde]), 1);
+    assert.equal(await addCabinPhotos(admin, annesHytte, [bilde]), 1);
+  });
+  await check("bare de som får se hytta, får se bildene", async () => {
+    const [karis] = await listCabinPhotos(karisHytte);
+    const [annes] = await listCabinPhotos(annesHytte);
+    assert.ok(await getPhotoForViewer(ola, karis.id, "thumb"), "invitert venn");
+    assert.equal(await getPhotoForViewer(ola, annes.id, "thumb"), null);
+    assert.equal(await getPhotoForViewer(ola, annes.id, "full"), null);
+    assert.ok(await getPhotoForViewer(lise, annes.id, "full"), "venn invitert til begge");
+    assert.ok(await getPhotoForViewer(kari, annes.id, "full"), "annen hytteeier");
+    assert.equal(await getPhotoForViewer(kari, "ikke-en-id", "full"), null);
+    assert.equal(await getPhotoForViewer(kari, randomUUID(), "full"), null);
+  });
+  await check("en hytte kan ha høyst åtte bilder", async () => {
+    const bilde = await photo("flere.jpg", "#cbd6d0");
+    await addCabinPhotos(kari, medBilder, [bilde, bilde, bilde, bilde]);
+    await refused(() => addCabinPhotos(kari, medBilder, [bilde, bilde, bilde]), /opptil 8/);
+    assert.equal((await listCabinPhotos(medBilder)).length, 6);
+    await addCabinPhotos(kari, medBilder, [bilde, bilde]);
+    await refused(() => addCabinPhotos(kari, medBilder, [bilde]), /opptil 8/);
+    assert.equal((await listCabinPhotos(medBilder)).length, 8);
+    const ni = Array.from({ length: 9 }, () => bilde);
+    await refused(() => createCabin(kari, cabinData("Ni bilder"), ni), /opptil 8/);
+  });
+  await check("eieren kan velge forsidebilde og fjerne bilder", async () => {
+    const before = await listCabinPhotos(medBilder);
+    const last = before[before.length - 1];
+    await makeCoverPhoto(kari, last.id);
+    const after = await listCabinPhotos(medBilder);
+    assert.equal(after[0].id, last.id);
+    assert.deepEqual(
+      after.slice(1).map((p) => p.id),
+      before.slice(0, -1).map((p) => p.id),
+    );
+    const own = (await listOwnCabins(kari)).find((c) => c.id === medBilder);
+    assert.equal(own?.coverPhotoId, last.id);
+
+    await removeCabinPhoto(kari, last.id);
+    assert.equal((await listCabinPhotos(medBilder)).length, 7);
+    assert.equal(await getPhotoForViewer(kari, last.id, "full"), null);
+    assert.equal((await listCabinPhotos(medBilder))[0].id, before[0].id);
   });
 
   console.log("Forespørsler");

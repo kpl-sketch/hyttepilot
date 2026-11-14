@@ -1,5 +1,6 @@
 import {
   boolean,
+  customType,
   date,
   index,
   integer,
@@ -10,6 +11,11 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+
+/** Binærdata. Brukes til bildene, som ligger i databasen i piloten. */
+const bytea = customType<{ data: Buffer }>({
+  dataType: () => "bytea",
+});
 
 const createdAt = () =>
   timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
@@ -148,6 +154,31 @@ export const cabin = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [index("cabin_owner_idx").on(t.ownerId)],
+);
+
+/**
+ * Bilder av en hytte. Bildene ligger i databasen, slik at de følger samme
+ * tilgangskontroll som resten av hytta. Kolonnene `full` og `thumb` er store:
+ * hent dem bare når selve bildet skal vises, aldri i lister.
+ */
+export const cabinPhoto = pgTable(
+  "cabin_photo",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    cabinId: uuid("cabin_id")
+      .notNull()
+      .references(() => cabin.id, { onDelete: "cascade" }),
+    /** Rekkefølgen. Bildet med lavest tall er forsidebildet. */
+    position: integer("position").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    /** Bildet i full størrelse: WebP, lengste side høyst 1600 punkter. */
+    full: bytea("full").notNull(),
+    /** Lite bilde til lister: WebP, lengste side høyst 640 punkter. */
+    thumb: bytea("thumb").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("cabin_photo_cabin_idx").on(t.cabinId, t.position)],
 );
 
 /** Venner uten egen hytte som eieren har gitt tilgang til én bestemt hytte. */

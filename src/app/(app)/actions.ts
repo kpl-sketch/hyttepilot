@@ -20,6 +20,7 @@ import {
   inviteOwner,
   removeFriendInvitation,
 } from "@/lib/services/invitations";
+import { addCabinPhotos, makeCoverPhoto, removeCabinPhoto } from "@/lib/services/photos";
 import { requireViewer } from "@/lib/session";
 
 /*
@@ -28,6 +29,9 @@ import { requireViewer } from "@/lib/session";
  */
 
 const text = (formData: FormData, key: string) => String(formData.get(key) ?? "");
+
+const files = (formData: FormData, key: string) =>
+  formData.getAll(key).filter((value): value is File => value instanceof File);
 
 function cabinFields(formData: FormData) {
   return {
@@ -52,7 +56,7 @@ export async function createCabinAction(
   const viewer = await requireViewer();
   let cabinId: string;
   try {
-    cabinId = await createCabin(viewer, cabinFields(formData));
+    cabinId = await createCabin(viewer, cabinFields(formData), files(formData, "photos"));
   } catch (error) {
     return toFormState(error);
   }
@@ -71,6 +75,49 @@ export async function updateCabinAction(
   }
   refresh();
   return { ok: "Lagret." };
+}
+
+export async function addCabinPhotosAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const viewer = await requireViewer();
+  let added: number;
+  try {
+    added = await addCabinPhotos(viewer, text(formData, "cabinId"), files(formData, "photos"));
+  } catch (error) {
+    return toFormState(error);
+  }
+  refresh();
+  return { ok: added === 1 ? "Bildet er lagt til." : `${added} bilder er lagt til.` };
+}
+
+export async function removeCabinPhotoAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const viewer = await requireViewer();
+  try {
+    await removeCabinPhoto(viewer, text(formData, "photoId"));
+  } catch (error) {
+    return toFormState(error);
+  }
+  refresh();
+  return undefined;
+}
+
+export async function makeCoverPhotoAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const viewer = await requireViewer();
+  try {
+    await makeCoverPhoto(viewer, text(formData, "photoId"));
+  } catch (error) {
+    return toFormState(error);
+  }
+  refresh();
+  return undefined;
 }
 
 export async function addAvailabilityAction(

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CabinThumb } from "@/components/cabin-photo";
 import { ButtonLink, PageTitle, Panel } from "@/components/ui";
 import { listOwnCabins } from "@/lib/services/cabins";
 import { requireViewer } from "@/lib/session";
@@ -36,11 +37,17 @@ export default async function MyCabinsPage() {
       <ul className="mb-8 divide-y divide-line border-y border-line empty:hidden">
         {cabins.map((cabin) => (
           <li key={cabin.id}>
-            <Link href={`/mine-hytter/${cabin.id}`} className="group block py-5">
-              <span className="block text-2xl font-bold group-hover:underline">
-                {cabin.name}
+            <Link
+              href={`/mine-hytter/${cabin.id}`}
+              className="group flex items-center gap-4 py-4 sm:gap-6"
+            >
+              <CabinThumb photoId={cabin.coverPhotoId} />
+              <span className="min-w-0">
+                <span className="block text-2xl font-bold group-hover:underline">
+                  {cabin.name}
+                </span>
+                <span className="block text-muted">{cabin.area}</span>
               </span>
-              <span className="block text-muted">{cabin.area}</span>
             </Link>
           </li>
         ))}

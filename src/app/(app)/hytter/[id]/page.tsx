@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { DateRangePicker } from "@/components/date-range-picker";
+import { PhotoGallery } from "@/components/photo-gallery";
 import { ButtonLink, Field, Input, PageTitle, Panel, Textarea } from "@/components/ui";
 import { formatKroner } from "@/lib/pricing";
 import { getCalendar, getVisibleCabin } from "@/lib/services/cabins";
+import { listCabinPhotos } from "@/lib/services/photos";
 import { requireViewer } from "@/lib/session";
 import { createBookingAction } from "../../actions";
 
@@ -14,7 +16,10 @@ export default async function CabinPage({ params }: PageProps<"/hytter/[id]">) {
   if (!found) notFound();
   const { cabin, ownerName } = found;
   const isOwn = cabin.ownerId === viewer.id;
-  const calendar = await getCalendar(cabin.id);
+  const [calendar, photos] = await Promise.all([
+    getCalendar(cabin.id),
+    listCabinPhotos(cabin.id),
+  ]);
   const perNight = Math.round(cabin.costPerNight * (1 + cabin.markupPercent / 100));
 
   return (
@@ -23,6 +28,8 @@ export default async function CabinPage({ params }: PageProps<"/hytter/[id]">) {
         title={cabin.name}
         lead={`${cabin.area}. ${isOwn ? "Dette er din hytte." : `Eier: ${ownerName}.`}`}
       />
+
+      <PhotoGallery photos={photos} cabinName={cabin.name} />
 
       <div className="grid gap-10 md:grid-cols-[2fr_1fr]">
         <div className="space-y-6">

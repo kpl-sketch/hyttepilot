@@ -1,9 +1,14 @@
 import type { Cabin } from "@/lib/db/schema";
 import type { FormState } from "@/lib/errors";
+import { MAX_PHOTOS } from "@/lib/photo-limits";
 import { ActionForm, SubmitButton } from "./action-form";
+import { PhotoPicker } from "./photo-picker";
 import { Field, Input, Textarea } from "./ui";
 
-/** Skjema for å legge inn eller endre en hytte. */
+/**
+ * Skjema for å legge inn eller endre en hytte. Bilder velges her når hytta
+ * legges inn. Etterpå styres de i egen del på siden for hytta.
+ */
 export function CabinForm({
   action,
   cabin,
@@ -40,6 +45,17 @@ export function CabinForm({
           />
         </Field>
       </fieldset>
+
+      {!cabin && (
+        <fieldset>
+          <legend className="mb-1 text-xl font-bold">Bilder</legend>
+          <p className="mb-4 max-w-[60ch] text-muted">
+            Opptil {MAX_PHOTOS} bilder. Det første blir forsidebildet. Du kan legge til og
+            bytte bilder senere.
+          </p>
+          <PhotoPicker />
+        </fieldset>
+      )}
 
       <fieldset className="grid gap-4 sm:grid-cols-3">
         <legend className="mb-1 text-xl font-bold">Pris</legend>

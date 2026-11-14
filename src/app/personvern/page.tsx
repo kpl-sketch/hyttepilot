@@ -43,7 +43,7 @@ export default function PrivacyPage() {
           <ul className="mt-2 list-disc space-y-1 pl-6">
             <li>Navn, e-postadresse og mobilnummer.</li>
             <li>Tidspunktet du ga Hytteløftet.</li>
-            <li>Hytter du legger inn: navn, sted, beskrivelse, pris, regler, Vipps-nummer og praktiske opplysninger.</li>
+            <li>Hytter du legger inn: navn, sted, beskrivelse, bilder, pris, regler, Vipps-nummer og praktiske opplysninger. Opptaksdata i bildene, som GPS-posisjon, fjernes før bildene lagres.</li>
             <li>Forespørsler du sender eller får, med datoer, antall personer, pris og meldinger.</li>
             <li>Hvem som har invitert hvem.</li>
             <li>Innlogginger: tidspunkt, IP-adresse og nettlesertype.</li>
@@ -56,6 +56,7 @@ export default function PrivacyPage() {
           <ul className="mt-2 list-disc space-y-1 pl-6">
             <li>Hytteeiere i kretsen ser alle hyttene og navnet på eieren.</li>
             <li>Venner uten egen hytte ser bare hyttene de er invitert til.</li>
+            <li>Bildene av en hytte vises bare til dem som får se hytta.</li>
             <li>Eieren ser navn, e-postadresse og mobilnummer til den som sender en forespørsel.</li>
             <li>Vipps-nummeret vises til låneren når eieren har sagt ja. Adresse og praktiske opplysninger vises når lånet er betalt.</li>
           </ul>

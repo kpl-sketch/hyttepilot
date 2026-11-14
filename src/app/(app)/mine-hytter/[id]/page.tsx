@@ -1,15 +1,22 @@
 import { notFound } from "next/navigation";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { CabinForm } from "@/components/cabin-form";
+import { photoSrc } from "@/components/cabin-photo";
+import { PhotoPicker } from "@/components/photo-picker";
 import { ButtonLink, Field, Input, PageTitle, Panel } from "@/components/ui";
 import { formatRange } from "@/lib/dates";
+import { MAX_PHOTOS } from "@/lib/photo-limits";
 import { getCalendar, getOwnCabin } from "@/lib/services/cabins";
 import { listFriendInvitations } from "@/lib/services/invitations";
+import { listCabinPhotos } from "@/lib/services/photos";
 import { requireViewer } from "@/lib/session";
 import {
   addAvailabilityAction,
+  addCabinPhotosAction,
   inviteFriendAction,
+  makeCoverPhotoAction,
   removeAvailabilityAction,
+  removeCabinPhotoAction,
   removeFriendAction,
   updateCabinAction,
 } from "../../actions";
@@ -20,9 +27,10 @@ export default async function ManageCabinPage({ params }: PageProps<"/mine-hytte
   const cabin = await getOwnCabin(viewer, id);
   if (!cabin) notFound();
 
-  const [calendar, friends] = await Promise.all([
+  const [calendar, friends, photos] = await Promise.all([
     getCalendar(cabin.id),
     listFriendInvitations(viewer, cabin.id),
+    listCabinPhotos(cabin.id),
   ]);
 
   return (
@@ -119,6 +127,66 @@ export default async function ManageCabinPage({ params }: PageProps<"/mine-hytte
               <SubmitButton variant="secondary">Inviter</SubmitButton>
             </div>
           </ActionForm>
+        </Panel>
+
+        <Panel>
+          <h2 className="text-2xl font-bold">Bilder</h2>
+          <p className="mt-1 max-w-[60ch] text-muted">
+            Alle som får se hytta, ser bildene. Forsidebildet vises også i listen over hytter.
+          </p>
+
+          {photos.length > 0 && (
+            <ul className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+              {photos.map((photo, index) => (
+                <li key={photo.id}>
+                  {/* Bildene ligger bak innlogging og er allerede forminsket. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={photoSrc(photo.id, true)}
+                    alt={`Bilde ${index + 1} av ${photos.length}`}
+                    loading="lazy"
+                    className="aspect-[4/3] w-full rounded-md border border-line object-cover"
+                  />
+                  <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
+                    {index === 0 ? (
+                      <span className="font-semibold">Forsidebilde</span>
+                    ) : (
+                      <ActionForm action={makeCoverPhotoAction}>
+                        <input type="hidden" name="photoId" value={photo.id} />
+                        <button type="submit" className="cursor-pointer text-pine underline">
+                          Bruk som forsidebilde
+                        </button>
+                      </ActionForm>
+                    )}
+                    <ActionForm action={removeCabinPhotoAction} confirm="Fjerne bildet?">
+                      <input type="hidden" name="photoId" value={photo.id} />
+                      <button
+                        type="submit"
+                        className="cursor-pointer text-barn underline"
+                        aria-label={`Fjern bilde ${index + 1}`}
+                      >
+                        Fjern
+                      </button>
+                    </ActionForm>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {photos.length < MAX_PHOTOS ? (
+            <ActionForm action={addCabinPhotosAction} resetOnOk className="mt-5">
+              <input type="hidden" name="cabinId" value={cabin.id} />
+              <PhotoPicker room={MAX_PHOTOS - photos.length}>
+                <SubmitButton>Last opp bildene</SubmitButton>
+              </PhotoPicker>
+            </ActionForm>
+          ) : (
+            <p className="mt-4 max-w-[60ch] text-muted">
+              Hytta har {MAX_PHOTOS} bilder, og det er ikke plass til flere. Fjern ett for å
+              legge til et nytt.
+            </p>
+          )}
         </Panel>
 
         <Panel>

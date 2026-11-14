@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CabinThumb } from "@/components/cabin-photo";
 import { ButtonLink, PageTitle, Panel } from "@/components/ui";
 import { formatKroner } from "@/lib/pricing";
 import { listVisibleCabins } from "@/lib/services/cabins";
@@ -49,21 +50,24 @@ export default async function CabinsPage() {
             <li key={cabin.id}>
               <Link
                 href={`/hytter/${cabin.id}`}
-                className="group flex flex-wrap items-baseline justify-between gap-x-8 gap-y-1 py-5"
+                className="group flex items-center gap-4 py-4 sm:gap-6"
               >
-                <span>
-                  <span className="block text-2xl font-bold group-hover:underline">
-                    {cabin.name}
+                <CabinThumb photoId={cabin.coverPhotoId} />
+                <span className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-8 gap-y-1">
+                  <span>
+                    <span className="block text-2xl font-bold group-hover:underline">
+                      {cabin.name}
+                    </span>
+                    <span className="block text-muted">
+                      {cabin.area}, hos {cabin.ownerId === viewer.id ? "deg" : ownerName}
+                    </span>
                   </span>
-                  <span className="block text-muted">
-                    {cabin.area}, hos {cabin.ownerId === viewer.id ? "deg" : ownerName}
+                  <span className="text-muted sm:text-right">
+                    <span className="block font-semibold text-ink tabular-nums">
+                      {formatKroner(perNight)} per døgn
+                    </span>
+                    <span className="block">{cabin.beds} sengeplasser</span>
                   </span>
-                </span>
-                <span className="text-right text-muted">
-                  <span className="block font-semibold text-ink tabular-nums">
-                    {formatKroner(perNight)} per døgn
-                  </span>
-                  <span className="block">{cabin.beds} sengeplasser</span>
                 </span>
               </Link>
             </li>

@@ -1,10 +1,11 @@
 import "server-only";
-import { and, asc, eq, gt, inArray } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, gt, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { isIsoDate, todayInOslo } from "../dates";
 import { db } from "../db";
-import { availability, booking, cabin, cabinAccess, user } from "../db/schema";
+import { availability, booking, cabin, cabinAccess, cabinPhoto, user } from "../db/schema";
 import { type Actor, UserError } from "../errors";
+import { photoRows, processPhotos } from "../photo-processing";
 
 const whole = (label: string, min: number, max: number) =>
   z.coerce
@@ -46,6 +47,18 @@ function parse<T>(schema: z.ZodType<T>, data: unknown): T {
 }
 
 /**
+ * Forsidebildet til hytta: bildet som står først. Null hvis hytta ikke har bilder.
+ * Tabellnavnene er skrevet rett ut, fordi Drizzle ellers fjerner dem i
+ * spørringer mot én tabell, og da peker `id` på feil tabell.
+ */
+const coverPhotoId = sql<string | null>`(
+  select p.id from cabin_photo p
+  where p.cabin_id = "cabin"."id"
+  order by p.position, p.created_at
+  limit 1
+)`;
+
+/**
  * Feltene andre enn eieren får se. Vipps-nummer, adresse og praktiske
  * opplysninger er holdt utenfor og hentes bare der de skal vises.
  */
@@ -61,6 +74,7 @@ const publicCabin = {
   cleaningFee: cabin.cleaningFee,
   rules: cabin.rules,
   minAge: cabin.minAge,
+  coverPhotoId,
 };
 
 /** Hyttene brukeren får se. Hytteeiere ser alle. Venner ser bare det de er invitert til. */
@@ -109,7 +123,7 @@ export async function getVisibleCabin(actor: Actor, cabinId: string) {
 
 export async function listOwnCabins(actor: Actor) {
   return db
-    .select()
+    .select({ ...getTableColumns(cabin), coverPhotoId })
     .from(cabin)
     .where(eq(cabin.ownerId, actor.id))
     .orderBy(asc(cabin.name));
@@ -125,16 +139,26 @@ export async function getOwnCabin(actor: Actor, cabinId: string) {
   return row ?? null;
 }
 
-export async function createCabin(actor: Actor, data: unknown) {
+/**
+ * Legger inn en hytte, med bilder hvis eieren valgte noen. Bildene behandles
+ * før noe lagres, så et bilde som ikke kan leses, stopper hele innleggingen.
+ */
+export async function createCabin(actor: Actor, data: unknown, photoFiles: File[] = []) {
   if (!actor.isOwner) {
     throw new UserError("Bare inviterte hytteeiere kan legge inn hytter.");
   }
   const input = parse(cabinInput, data);
-  const [created] = await db
-    .insert(cabin)
-    .values({ ...input, ownerId: actor.id })
-    .returning({ id: cabin.id });
-  return created.id;
+  const photos = await processPhotos(photoFiles);
+  return db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(cabin)
+      .values({ ...input, ownerId: actor.id })
+      .returning({ id: cabin.id });
+    if (photos.length > 0) {
+      await tx.insert(cabinPhoto).values(photoRows(created.id, photos));
+    }
+    return created.id;
+  });
 }
 
 export async function updateCabin(actor: Actor, cabinId: string, data: unknown) {

@@ -8,6 +8,8 @@ litt over selvkost. Navnet er et arbeidsnavn og byttes ett sted: `NEXT_PUBLIC_AP
 - **Lukket innlogging.** Engangskode på e-post. Bare inviterte adresser får kode.
 - **Hytteløftet.** Alle må gi løftet på velkomstsiden før de slipper inn.
 - **Hytter.** Eieren legger inn hytte, pris, regler og ledige perioder.
+- **Bilder.** Opptil åtte bilder per hytte, valgt når hytta legges inn eller senere.
+  Det første er forsidebildet. Bildene vises bare til dem som får se hytta.
 - **Synlighet.** Hytteeiere ser alle hyttene. Venner uten hytte ser bare hyttene de
   er invitert til.
 - **Forespørsler.** Låneren velger datoer i kalenderen. Eieren svarer ja eller nei.
@@ -15,7 +17,7 @@ litt over selvkost. Navnet er et arbeidsnavn og byttes ett sted: `NEXT_PUBLIC_AP
   og da er oppholdet reservert og adressen vises til låneren.
 - **Varsler på e-post** til eier og låner i hvert steg.
 
-Ikke med ennå: integrert Vipps, bilder, kart, vurderinger, venners venner, grupper,
+Ikke med ennå: integrert Vipps, kart, vurderinger, venners venner, grupper,
 vask som tjeneste, engelsk versjon og sletting av hytter.
 
 ## Roller
@@ -76,6 +78,10 @@ src/lib/services/         Alle regler og tilgangssjekker. Start her.
   invitations.ts            hvem slipper inn, hvem inviterer hvem
   cabins.ts                 hytter, synlighet, ledige perioder
   bookings.ts               forespørsel, ja/nei, betalt, avlysning
+  photos.ts                 bilder: hvem får legge til, fjerne og se dem
+src/lib/photo-processing.ts  Forminsker bildene og fjerner opptaksdata (sharp)
+src/lib/photo-limits.ts   Grensene for antall og størrelse på bilder
+src/app/bilder/[id]/      Adressen som viser et bilde, bak innlogging
 src/lib/auth.ts           Innlogging med Better Auth (engangskode på e-post)
 src/lib/session.ts        requireViewer(): hvem er innlogget
 src/lib/emails.ts         Teksten i alle e-poster
@@ -96,6 +102,11 @@ Regelen for ny funksjonalitet: tilgangssjekken skal ligge i tjenestelaget
 - **Next.js 16 med Cache Components.** Alt som leser innloggingen, må ligge bak
   `<Suspense>`. Se `src/app/(app)/layout.tsx`. Dokumentasjonen for denne versjonen
   ligger i `node_modules/next/dist/docs/`.
+- **Bildene ligger i databasen** (tabellen `cabin_photo`), ikke i en egen
+  fillagring. Det holder for piloten og gir samme tilgangskontroll som resten av
+  hytta. Nettleseren forminsker hvert bilde før opplasting, og serveren lagrer det
+  som WebP uten GPS-posisjon og andre opptaksdata. Blir det mange hytter, bør
+  bildene flyttes til en fillagring, for eksempel Vercel Blob.
 - **Forhåndsvisninger deler database med produksjon** hvis de får samme
   `DATABASE_URL`. Bruk en egen database for forhåndsvisninger når piloten er i bruk.
 - **Personvernsiden er et utkast.** Den beskriver hva som lagres, men er ikke
