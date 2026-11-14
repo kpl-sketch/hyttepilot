@@ -1,0 +1,41 @@
+import { APP_NAME } from "./brand";
+
+/** Endres teksten, økes versjonen, slik at vi vet hvilket løfte hver bruker ga. */
+export const PLEDGE_VERSION = "2026-11-14";
+
+export const PLEDGE_INTRO = `Når jeg låner en hytte gjennom ${APP_NAME}, låner jeg noe som er privat og kjært for noen jeg kjenner. Derfor lover jeg:`;
+
+export const PLEDGE_POINTS: { title: string; body: string }[] = [
+  {
+    title: "Jeg behandler hytta som min egen.",
+    body: "Jeg er like forsiktig med huset, møblene og utstyret som jeg ville vært hjemme hos meg selv.",
+  },
+  {
+    title: "Jeg sier fra med en gang hvis noe går galt.",
+    body: "Går noe i stykker, melder jeg fra til eieren samme dag og gjør opp for det.",
+  },
+  {
+    title: "Jeg forlater hytta slik jeg fant den.",
+    body: "Ryddet, vasket, søppel tatt med, vann og strøm slik eieren har bedt om.",
+  },
+  {
+    title: "Jeg følger eierens regler.",
+    body: "Antall gjester, dyr, røyking, fest og aldersgrense er eierens valg, ikke mitt.",
+  },
+  {
+    title: "Jeg tar bare med folk jeg selv går god for.",
+    body: "Inviterer jeg noen, er det jeg som har ansvaret for dem.",
+  },
+  {
+    title: "Jeg respekterer naboene.",
+    body: "Ro om kvelden og hilsen om dagen.",
+  },
+  {
+    title: "Jeg betaler det vi ble enige om, når vi ble enige om det.",
+    body: "",
+  },
+];
+
+export const PLEDGE_OUTRO = `Dette er ikke et juridisk dokument. Det er et løfte mellom folk som stoler på hverandre, og tilliten er det som gjør ${APP_NAME} mulig.`;
+
+export const PLEDGE_CONFIRM = "Jeg har lest og lover å holde Hytteløftet.";

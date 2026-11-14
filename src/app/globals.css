@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+/*
+ * Farger og skrift er de samme som i prototypen av nettsiden.
+ * Vindusgult betyr «ledig»: et opplyst hyttevindu.
+ */
+@theme {
+  --font-sans: "Schibsted Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --color-paper: #eef2f0;
+  --color-surface: #ffffff;
+  --color-ink: #13241d;
+  --color-pine: #163027;
+  --color-barn: #a3271c;
+  --color-window: #f4c04e;
+  --color-line: #cbd6d0;
+  --color-muted: #4b5f55;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-barn);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

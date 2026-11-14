@@ -1,0 +1,257 @@
+import {
+  boolean,
+  date,
+  index,
+  integer,
+  pgEnum,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
+
+const createdAt = () =>
+  timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
+const updatedAt = () =>
+  timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date());
+
+/* -------------------------------------------------------------------------- */
+/* Innlogging. Disse fire tabellene eies av Better Auth. Ikke endre feltnavn.  */
+/* -------------------------------------------------------------------------- */
+
+export const user = pgTable("user", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  image: text("image"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const session = pgTable(
+  "session",
+  {
+    id: text("id").primaryKey(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    token: text("token").notNull().unique(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (t) => [index("session_user_idx").on(t.userId)],
+);
+
+export const account = pgTable(
+  "account",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id").notNull(),
+    providerId: text("provider_id").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    accessToken: text("access_token"),
+    refreshToken: text("refresh_token"),
+    idToken: text("id_token"),
+    accessTokenExpiresAt: timestamp("access_token_expires_at", {
+      withTimezone: true,
+    }),
+    refreshTokenExpiresAt: timestamp("refresh_token_expires_at", {
+      withTimezone: true,
+    }),
+    scope: text("scope"),
+    password: text("password"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("account_user_idx").on(t.userId)],
+);
+
+export const verification = pgTable(
+  "verification",
+  {
+    id: text("id").primaryKey(),
+    identifier: text("identifier").notNull(),
+    value: text("value").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("verification_identifier_idx").on(t.identifier)],
+);
+
+/** Teller forsøk på å be om innloggingskode, for å bremse misbruk. */
+export const loginThrottle = pgTable(
+  "login_throttle",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** E-postadresse eller IP-adresse, med prefiks «e:» eller «ip:». */
+    key: text("key").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("login_throttle_key_idx").on(t.key, t.createdAt)],
+);
+
+/* -------------------------------------------------------------------------- */
+/* Tjenesten                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/** Opplysninger brukeren gir på velkomstsiden. Finnes raden, er brukeren klar. */
+export const profile = pgTable("profile", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  phone: text("phone").notNull(),
+  /** Hytteeier i nettverket: kan legge inn hytter og ser alle hyttene. */
+  isOwner: boolean("is_owner").notNull().default(false),
+  pledgeAcceptedAt: timestamp("pledge_accepted_at", {
+    withTimezone: true,
+  }).notNull(),
+  pledgeVersion: text("pledge_version").notNull(),
+  createdAt: createdAt(),
+});
+
+export const cabin = pgTable(
+  "cabin",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** Sted, for eksempel «Hafjell». Vises til alle som ser hytta. */
+    area: text("area").notNull(),
+    description: text("description").notNull().default(""),
+    beds: integer("beds").notNull(),
+    /** Selvkost per døgn i hele kroner (strøm og faste avgifter). */
+    costPerNight: integer("cost_per_night").notNull(),
+    /** Eierens påslag i prosent, for eksempel 10. */
+    markupPercent: integer("markup_percent").notNull().default(0),
+    /** Fast beløp for vask i hele kroner. 0 betyr at låneren vasker selv. */
+    cleaningFee: integer("cleaning_fee").notNull().default(0),
+    rules: text("rules").notNull().default(""),
+    minAge: integer("min_age"),
+    /** Mobilnummeret låneren skal vippse til. */
+    vippsNumber: text("vipps_number").notNull(),
+    /** Adresse, nøkkel og veibeskrivelse. Vises til låneren når lånet er betalt. */
+    arrivalInfo: text("arrival_info").notNull().default(""),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("cabin_owner_idx").on(t.ownerId)],
+);
+
+/** Venner uten egen hytte som eieren har gitt tilgang til én bestemt hytte. */
+export const cabinAccess = pgTable(
+  "cabin_access",
+  {
+    cabinId: uuid("cabin_id")
+      .notNull()
+      .references(() => cabin.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.cabinId, t.userId] }),
+    index("cabin_access_user_idx").on(t.userId),
+  ],
+);
+
+/**
+ * Ledig periode. Nettene fra og med startDate til, men ikke med, endDate er
+ * ledige. endDate er altså seneste avreisedag.
+ */
+export const availability = pgTable(
+  "availability",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    cabinId: uuid("cabin_id")
+      .notNull()
+      .references(() => cabin.id, { onDelete: "cascade" }),
+    startDate: date("start_date", { mode: "string" }).notNull(),
+    endDate: date("end_date", { mode: "string" }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("availability_cabin_idx").on(t.cabinId)],
+);
+
+export const invitationKind = pgEnum("invitation_kind", ["owner", "friend"]);
+
+/**
+ * Invitasjon til en e-postadresse.
+ * owner: hytteeier i nettverket, invitert av en administrator.
+ * friend: venn som får se én hytte, invitert av hyttas eier.
+ */
+export const invitation = pgTable(
+  "invitation",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    kind: invitationKind("kind").notNull(),
+    cabinId: uuid("cabin_id").references(() => cabin.id, {
+      onDelete: "cascade",
+    }),
+    invitedBy: text("invited_by")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  },
+  (t) => [index("invitation_email_idx").on(t.email)],
+);
+
+export const bookingStatus = pgEnum("booking_status", [
+  "pending", // forespørsel sendt, venter på eieren
+  "approved", // eieren har sagt ja, venter på betaling
+  "paid", // eieren har markert betalt, oppholdet er reservert
+  "declined", // eieren har sagt nei
+  "cancelled", // trukket av låneren eller avlyst av eieren
+]);
+
+export const booking = pgTable(
+  "booking",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    cabinId: uuid("cabin_id")
+      .notNull()
+      .references(() => cabin.id, { onDelete: "cascade" }),
+    borrowerId: text("borrower_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** Ankomstdag. */
+    startDate: date("start_date", { mode: "string" }).notNull(),
+    /** Avreisedag. */
+    endDate: date("end_date", { mode: "string" }).notNull(),
+    guests: integer("guests").notNull(),
+    message: text("message").notNull().default(""),
+    status: bookingStatus("status").notNull().default("pending"),
+    /** Prisen slik den var da forespørselen ble sendt, i hele kroner. */
+    totalPrice: integer("total_price").notNull(),
+    ownerReply: text("owner_reply").notNull().default(""),
+    createdAt: createdAt(),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("booking_cabin_idx").on(t.cabinId),
+    index("booking_borrower_idx").on(t.borrowerId),
+  ],
+);
+
+export type Cabin = typeof cabin.$inferSelect;
+export type Booking = typeof booking.$inferSelect;
+export type BookingStatus = (typeof bookingStatus.enumValues)[number];
+export type Availability = typeof availability.$inferSelect;
+export type Invitation = typeof invitation.$inferSelect;
+export type Profile = typeof profile.$inferSelect;
