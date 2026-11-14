@@ -168,7 +168,7 @@ export function DateRangePicker({
                 <button
                   type="button"
                   onClick={() => setFirst(indexOfMonth(period.startDate))}
-                  className="cursor-pointer rounded-md border border-line bg-surface px-3 py-1.5 text-left underline-offset-2 hover:underline"
+                  className="cursor-pointer rounded-xl border border-line bg-surface px-3 py-1.5 text-left underline-offset-2 hover:underline"
                 >
                   {formatRange(period.startDate, period.endDate)}
                   <span className="sr-only">. Vis i kalenderen.</span>
@@ -192,7 +192,7 @@ export function DateRangePicker({
             type="button"
             onClick={() => setFirst(Math.max(0, first - SHOWN))}
             disabled={first === 0}
-            className="cursor-pointer rounded-md border border-pine px-3 py-2 font-semibold text-pine disabled:cursor-not-allowed disabled:border-line disabled:text-muted"
+            className="cursor-pointer rounded-xl border border-pine px-3 py-2 font-semibold text-pine disabled:cursor-not-allowed disabled:border-line disabled:text-muted"
           >
             <span aria-hidden>← </span>Tidligere
           </button>
@@ -200,7 +200,7 @@ export function DateRangePicker({
             type="button"
             onClick={() => setFirst(Math.min(lastStart, first + SHOWN))}
             disabled={first >= lastStart}
-            className="cursor-pointer rounded-md border border-pine px-3 py-2 font-semibold text-pine disabled:cursor-not-allowed disabled:border-line disabled:text-muted"
+            className="cursor-pointer rounded-xl border border-pine px-3 py-2 font-semibold text-pine disabled:cursor-not-allowed disabled:border-line disabled:text-muted"
           >
             Senere<span aria-hidden> →</span>
           </button>

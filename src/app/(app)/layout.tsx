@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { type ReactNode, Suspense } from "react";
 import { NavLink } from "@/components/nav-link";
+import { Logo } from "@/components/logo";
 import { Loading } from "@/components/ui";
-import { APP_NAME } from "@/lib/brand";
 import { getViewer } from "@/lib/session";
 import { signOut } from "../logg-inn/actions";
 
@@ -13,11 +13,9 @@ import { signOut } from "../logg-inn/actions";
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <>
-      <header className="border-b border-line bg-surface">
+      <header className="sticky top-0 z-10 border-b border-line bg-surface/95 backdrop-blur">
         <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-x-8 gap-y-2 px-5 py-4">
-          <Link href="/krets" className="text-xl font-bold text-pine">
-            {APP_NAME}
-          </Link>
+          <Logo href="/krets" />
           <Suspense fallback={null}>
             <Nav />
           </Suspense>
@@ -59,7 +57,16 @@ async function Nav() {
         {viewer.isAdmin && <NavLink href="/admin">Administrasjon</NavLink>}
       </nav>
       <form action={signOut} className="ml-auto flex items-center gap-3 text-sm text-muted">
-        <span>{viewer.name}</span>
+        {/* Initialen i en rund brikke, slik mange tjenester viser hvem som er logget inn. */}
+        <span className="flex items-center gap-2">
+          <span
+            aria-hidden="true"
+            className="grid size-8 place-items-center rounded-full bg-pine text-sm font-bold text-white"
+          >
+            {viewer.name.trim().charAt(0).toUpperCase()}
+          </span>
+          {viewer.name}
+        </span>
         <button type="submit" className="cursor-pointer underline">
           Logg ut
         </button>

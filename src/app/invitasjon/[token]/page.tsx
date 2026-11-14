@@ -142,7 +142,7 @@ async function Invitation({ params }: { params: PageProps<"/invitasjon/[token]">
           <form action={signOut}>
             <button
               type="submit"
-              className="cursor-pointer rounded-md bg-pine px-4 py-2.5 text-base font-semibold text-white hover:bg-ink"
+              className="cursor-pointer rounded-xl bg-pine px-4 py-2.5 text-base font-semibold text-white hover:bg-ink"
             >
               Logg ut
             </button>

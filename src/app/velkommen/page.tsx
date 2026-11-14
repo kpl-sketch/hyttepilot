@@ -42,7 +42,7 @@ async function WelcomeForm({
     <ActionForm action={completeOnboarding} className="space-y-8">
       {token && <input type="hidden" name="invitasjon" value={token} />}
       {invitation?.status === "valid" && (
-        <p className="max-w-xl rounded-md border border-line bg-surface p-4">
+        <p className="max-w-xl rounded-xl border border-line bg-surface p-4">
           <strong>{invitation.inviterName}</strong> har invitert deg. Når du har gitt løftet,
           ser du hva {invitation.kind === "cabin" ? "du kan låne" : "du kan gjøre"}.
         </p>
@@ -59,7 +59,7 @@ async function WelcomeForm({
       <Panel>
         <h2 className="mb-3 text-2xl font-bold">Hytteløftet</h2>
         <Pledge />
-        <label className="mt-6 flex cursor-pointer items-start gap-3 rounded-md bg-paper p-4 font-semibold">
+        <label className="mt-6 flex cursor-pointer items-start gap-3 rounded-xl bg-paper p-4 font-semibold">
           <input type="checkbox" name="pledge" required className="mt-1 size-5 accent-pine" />
           <span>{PLEDGE_CONFIRM}</span>
         </label>

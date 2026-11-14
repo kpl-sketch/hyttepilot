@@ -30,16 +30,16 @@ export default async function MyCabinsPage() {
           </p>
         </Panel>
       )}
-      <ul className="mb-8 divide-y divide-line border-y border-line empty:hidden">
+      <ul className="mb-10 grid gap-x-6 gap-y-8 empty:hidden sm:grid-cols-2">
         {cabins.map((cabin) => (
           <li key={cabin.id}>
             <Link
               href={`/mine-hytter/${cabin.id}`}
-              className="group flex items-start gap-4 py-4 sm:gap-6"
+              className="group block rounded-2xl"
             >
-              <CabinThumb photoId={cabin.coverPhotoId} />
-              <span className="min-w-0">
-                <span className="block text-2xl font-bold group-hover:underline">
+              <CabinThumb photoId={cabin.coverPhotoId} card />
+              <span className="mt-3 block">
+                <span className="block text-xl font-bold group-hover:underline">
                   {cabin.name}
                 </span>
                 <span className="block text-muted">{cabin.area}</span>

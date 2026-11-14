@@ -59,7 +59,7 @@ export function ShareForm({
   if (current.step === "sent") {
     return (
       <div className={disclosure ? "mt-3" : undefined}>
-        <p role="status" className="rounded-md bg-window p-4 font-semibold">
+        <p role="status" className="rounded-xl bg-window p-4 font-semibold">
           {current.ok}
         </p>
         {!person && (
@@ -147,7 +147,7 @@ export function ShareForm({
 
         <div>
           <h4 className="font-bold">E-posten som sendes</h4>
-          <div className="mt-2 rounded-md border border-line bg-paper p-4">
+          <div className="mt-2 rounded-xl border border-line bg-paper p-4">
             <p className="font-semibold">{preview.mail.subject}</p>
             <p className="mt-2 text-sm whitespace-pre-line">{preview.mail.text}</p>
           </div>

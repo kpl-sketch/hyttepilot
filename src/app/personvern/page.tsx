@@ -22,7 +22,7 @@ export default function PrivacyPage() {
       />
 
       {!controller && (
-        <p className="mb-8 rounded-md border border-barn p-4 font-medium text-barn">
+        <p className="mb-8 rounded-xl border border-barn p-4 font-medium text-barn">
           Utkast: Hvem som er ansvarlig for opplysningene, er ikke fylt inn ennå.
         </p>
       )}

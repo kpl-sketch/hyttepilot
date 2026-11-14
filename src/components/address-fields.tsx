@@ -188,7 +188,7 @@ export function AddressFields({
           role="listbox"
           aria-label="Forslag til adresse"
           hidden={!open}
-          className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border border-line bg-surface shadow-lg"
+          className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-line bg-surface shadow-lg"
         >
           {suggestions.map((suggestion, index) => (
             <li

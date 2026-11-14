@@ -82,14 +82,14 @@ export default async function ManageCabinPage({
       <PageTitle title={cabin.name} lead={cabin.area} />
 
       {ny && (
-        <p role="status" className="mb-8 max-w-[60ch] rounded-md bg-window p-4 font-semibold">
+        <p role="status" className="mb-8 max-w-[60ch] rounded-xl bg-window p-4 font-semibold">
           Hytta er lagret. Bare du ser den til du velger noen.
         </p>
       )}
 
       <section
         aria-labelledby="status"
-        className="mb-8 rounded-lg border-2 border-pine bg-surface p-5 sm:p-6"
+        className="mb-8 rounded-2xl bg-fjord-soft p-5 sm:p-7"
       >
         <h2 id="status" className="text-2xl font-bold">
           {isShared && hasDates
@@ -188,13 +188,13 @@ export default async function ManageCabinPage({
           </p>
 
           {endret === "deling" && (
-            <p role="status" className="mt-4 max-w-[60ch] rounded-md bg-window p-4 font-semibold">
+            <p role="status" className="mt-4 max-w-[60ch] rounded-xl bg-window p-4 font-semibold">
               Personen ser ikke lenger hytta og kan ikke sende nye
               forespørsler. Forespørsler og opphold er ikke endret.
             </p>
           )}
           {endret === "invitasjon" && (
-            <p role="status" className="mt-4 max-w-[60ch] rounded-md bg-window p-4 font-semibold">
+            <p role="status" className="mt-4 max-w-[60ch] rounded-xl bg-window p-4 font-semibold">
               Invitasjonen er trukket tilbake. Lenken i e-posten virker ikke lenger.
             </p>
           )}
@@ -295,7 +295,7 @@ export default async function ManageCabinPage({
                     src={photoSrc(photo.id, true)}
                     alt={`Bilde ${index + 1} av ${photos.length}`}
                     loading="lazy"
-                    className="aspect-[4/3] w-full rounded-md border border-line object-cover"
+                    className="aspect-[4/3] w-full rounded-xl border border-line object-cover"
                   />
                   <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
                     {index === 0 ? (

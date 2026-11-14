@@ -19,8 +19,8 @@ export function NavLink({
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
-      className={`border-b-2 py-1 font-semibold ${
-        active ? "border-barn text-ink" : "border-transparent text-muted hover:text-ink"
+      className={`border-b-2 py-1.5 font-semibold ${
+        active ? "border-ink text-ink" : "border-transparent text-muted hover:text-ink"
       }`}
     >
       {children}

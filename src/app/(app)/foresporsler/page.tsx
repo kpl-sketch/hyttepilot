@@ -40,7 +40,7 @@ export default async function RequestsPage({ searchParams }: PageProps<"/forespo
       <PageTitle title="Forespørsler" />
 
       {sendt && (
-        <p role="status" className="mb-8 rounded-md bg-window p-4 font-semibold">
+        <p role="status" className="mb-8 rounded-xl bg-window p-4 font-semibold">
           Forespørselen er sendt. Du får e-post når eieren har svart.
         </p>
       )}
@@ -158,7 +158,7 @@ export default async function RequestsPage({ searchParams }: PageProps<"/forespo
                 <p className="mt-3 text-muted">{ownerName} har ikke svart ennå.</p>
               )}
               {booking.status === "approved" && vippsNumber && (
-                <p className="mt-3 max-w-[60ch] rounded-md bg-window p-4 font-semibold">
+                <p className="mt-3 max-w-[60ch] rounded-xl bg-window p-4 font-semibold">
                   Vipps {formatKroner(booking.totalPrice)} til {vippsNumber}. {ownerName}{" "}
                   markerer betalingen når den er mottatt, og da er oppholdet reservert.
                 </p>

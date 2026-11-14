@@ -84,7 +84,7 @@ export function LoginForm({
       className="max-w-sm space-y-4"
     >
       {invitation && (
-        <p className="rounded-md border border-line bg-surface p-4">
+        <p className="rounded-xl border border-line bg-surface p-4">
           Du logger inn for å ta imot invitasjonen fra{" "}
           <strong>{invitation.inviterName}</strong>. Den gjelder for {invitation.maskedEmail}.
         </p>

@@ -1,24 +1,29 @@
 @import "tailwindcss";
 
 /*
- * Farger og skrift er de samme som i prototypen av nettsiden.
- * Vindusgult betyr «ledig»: et opplyst hyttevindu.
+ * Lyst og luftig, med runde kort og myke skygger. Det norske ligger i
+ * fargene: låverødt for handlinger, fjordblått for navn og valgt tilstand,
+ * og vindusgult for «ledig», et opplyst hyttevindu.
  */
 @theme {
   --font-sans: "Schibsted Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
 
-  --color-paper: #eef2f0;
+  --color-paper: #f6f7f7;
   --color-surface: #ffffff;
-  --color-ink: #13241d;
-  --color-pine: #163027;
-  --color-barn: #a3271c;
+  --color-ink: #1d2327;
+  --color-pine: #173f57;
+  --color-barn: #b8312a;
+  --color-barn-dark: #962620;
   --color-window: #f4c04e;
-  --color-line: #cbd6d0;
-  --color-muted: #4b5f55;
+  --color-line: #e2e5e6;
+  --color-muted: #5f686d;
+  --color-fjord-soft: #e8f0f4;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.06), 0 6px 20px rgb(0 0 0 / 0.08);
 }
 
 body {
-  background: var(--color-paper);
+  background: var(--color-surface);
   color: var(--color-ink);
 }
 

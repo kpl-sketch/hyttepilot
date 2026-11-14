@@ -28,7 +28,7 @@ export function PhotoGallery({ photos, cabinName }: { photos: Photo[]; cabinName
         width={shown.width}
         height={shown.height}
         decoding="async"
-        className={`aspect-[3/2] w-full rounded-lg border border-line bg-surface ${
+        className={`aspect-[3/2] w-full rounded-2xl border border-line bg-surface ${
           upright ? "object-contain" : "object-cover"
         }`}
       />
@@ -41,7 +41,7 @@ export function PhotoGallery({ photos, cabinName }: { photos: Photo[]; cabinName
                 onClick={() => setSelected(i)}
                 aria-label={`Vis bilde ${i + 1} av ${photos.length}`}
                 aria-pressed={i === index}
-                className={`block cursor-pointer overflow-hidden rounded-md border-2 ${
+                className={`block cursor-pointer overflow-hidden rounded-xl border-2 ${
                   i === index ? "border-pine" : "border-transparent hover:border-line"
                 }`}
               >

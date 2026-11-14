@@ -58,7 +58,7 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
       {welcome && (
         <section
           aria-labelledby="velkommen"
-          className="mb-10 rounded-lg border-2 border-pine bg-surface p-5 sm:p-6"
+          className="mb-10 rounded-2xl bg-fjord-soft p-5 sm:p-7"
         >
           {welcome.cabin ? (
             <>
@@ -115,16 +115,16 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
             </p>
           </Panel>
         ) : (
-          <ul className="mt-4 divide-y divide-line border-y border-line">
+          <ul className="mt-5 grid gap-x-6 gap-y-8 sm:grid-cols-2">
             {shared.map(({ cabin, ownerName, free }) => (
               <li key={cabin.id}>
                 <Link
                   href={`/hytter/${cabin.id}`}
-                  className="group flex items-start gap-4 py-4 sm:gap-6"
+                  className="group block rounded-2xl"
                 >
-                  <CabinThumb photoId={cabin.coverPhotoId} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-2xl font-bold group-hover:underline">
+                  <CabinThumb photoId={cabin.coverPhotoId} card />
+                  <span className="mt-3 block">
+                    <span className="block text-xl font-bold group-hover:underline">
                       {cabin.name}
                     </span>
                     <span className="block text-muted">
@@ -175,16 +175,16 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
           </Panel>
         ) : (
           <>
-            <ul className="mt-4 divide-y divide-line border-y border-line">
+            <ul className="mt-5 grid gap-x-6 gap-y-8 sm:grid-cols-2">
               {own.map((cabin) => (
                 <li key={cabin.id}>
                   <Link
                     href={`/mine-hytter/${cabin.id}`}
-                    className="group flex items-start gap-4 py-4 sm:gap-6"
+                    className="group block rounded-2xl"
                   >
-                    <CabinThumb photoId={cabin.coverPhotoId} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-2xl font-bold group-hover:underline">
+                    <CabinThumb photoId={cabin.coverPhotoId} card />
+                    <span className="mt-3 block">
+                      <span className="block text-xl font-bold group-hover:underline">
                         {cabin.name}
                       </span>
                       <span className="block text-muted">{cabin.area}</span>
@@ -224,7 +224,7 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
               // tom liste, slik at bekreftelsen ikke forsvinner.
               const canShareBack = person.sharesWithMe.length > 0 && own.length > 0;
               return (
-                <li key={person.id} className="rounded-lg border border-line bg-surface p-5">
+                <li key={person.id} className="rounded-2xl border border-line bg-surface p-5 shadow-card">
                   <h3 className="text-xl font-bold">{person.name}</h3>
                   {person.sharesWithMe.length > 0 && (
                     <p className="mt-1">
@@ -249,7 +249,7 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
               );
             })}
             {circle.waiting.map((inv) => (
-              <li key={inv.id} className="rounded-lg border border-dashed border-line p-5">
+              <li key={inv.id} className="rounded-2xl border border-dashed border-line p-5">
                 <h3 className="font-bold break-words">{inv.email}</h3>
                 <p className="mt-1 text-muted">
                   Invitert til {inv.cabinName}, har ikke logget inn ennå.{" "}

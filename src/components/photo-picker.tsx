@@ -139,7 +139,7 @@ export function PhotoPicker({
               <img
                 src={item.url}
                 alt={`Valgt bilde ${index + 1} av ${items.length}`}
-                className="aspect-[4/3] w-full rounded-md border border-line object-cover"
+                className="aspect-[4/3] w-full rounded-xl border border-line object-cover"
               />
               <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
                 {index === 0 ? (

@@ -31,7 +31,7 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
         lead={`Her inviterer du folk inn i ${APP_NAME} uten å vise dem en hytte. De kan da legge inn sin egen hytte.`}
       />
 
-      <p className="mb-8 max-w-[60ch] rounded-md border border-line bg-surface p-4">
+      <p className="mb-8 max-w-[60ch] rounded-xl border border-line bg-surface p-4">
         Som administrator ser du ikke andres hytter eller forespørsler. Du ser hytter som
         alle andre: dine egne, og de eieren har valgt å vise deg.
       </p>
@@ -57,7 +57,7 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
         Invitasjoner du og andre administratorer har sendt
       </h2>
       {endret === "invitasjon" && (
-        <p role="status" className="mb-4 max-w-[60ch] rounded-md bg-window p-4 font-semibold">
+        <p role="status" className="mb-4 max-w-[60ch] rounded-xl bg-window p-4 font-semibold">
           Invitasjonen er trukket tilbake. Lenken i e-posten virker ikke lenger.
         </p>
       )}
