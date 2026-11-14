@@ -1,6 +1,7 @@
 import "server-only";
 import { appendFile } from "node:fs/promises";
 import { Resend } from "resend";
+import { APP_NAME } from "@/lib/brand";
 
 export type Mail = { to: string; subject: string; text: string };
 
@@ -41,14 +42,28 @@ export async function sendEmail(mail: Mail): Promise<void> {
 
   try {
     const resend = new Resend(key);
-    const { error } = await resend.emails.send({
-      from,
-      to: mail.to,
-      subject: mail.subject,
-      text: mail.text,
-    });
+    const message = { to: mail.to, subject: mail.subject, text: mail.text };
+    let { error } = await resend.emails.send({ from, ...message });
+
+    if (error && isUnverifiedDomain(error)) {
+      // Domenet i EMAIL_FROM er ikke bekreftet hos Resend ennå. Da sender vi
+      // fra Resends testadresse, som bare når adressen Resend-kontoen er
+      // registrert på. Når domenet er bekreftet, brukes EMAIL_FROM igjen.
+      console.warn(
+        "Avsenderdomenet er ikke bekreftet hos Resend ennå. Prøver Resends testadresse, som bare når kontoeieren.",
+      );
+      ({ error } = await resend.emails.send({ from: TEST_SENDER, ...message }));
+    }
+
     if (error) console.error("E-post ble ikke sendt:", error);
   } catch (error) {
     console.error("E-post ble ikke sendt:", error);
   }
+}
+
+/** Resends egen testadresse. Den leverer bare til eieren av Resend-kontoen. */
+const TEST_SENDER = `${APP_NAME} <onboarding@resend.dev>`;
+
+function isUnverifiedDomain(error: { name: string; message: string }): boolean {
+  return error.name === "validation_error" && /not verified/i.test(error.message);
 }

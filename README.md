@@ -46,7 +46,8 @@ skrives i stedet til filen `.dev-outbox.jsonl` og til terminalen.
 2. Legg til en Postgres-database under Storage i prosjektet (for eksempel Neon).
    Vercel setter da `DATABASE_URL` selv.
 3. Opprett en konto hos Resend, bekreft et domene du eier, og lag en API-nøkkel.
-   Uten bekreftet domene kan Resend bare sende til din egen adresse.
+   Inntil domenet er bekreftet, sender tjenesten fra Resends testadresse, og
+   da kommer e-posten bare fram til adressen Resend-kontoen er registrert på.
 4. Sett miljøvariablene fra `.env.example` i Vercel: `ADMIN_EMAILS`,
    `RESEND_API_KEY`, `EMAIL_FROM`, `NEXT_PUBLIC_APP_NAME`,
    `NEXT_PUBLIC_CONTROLLER_NAME` og `NEXT_PUBLIC_CONTACT_EMAIL`. Sett
