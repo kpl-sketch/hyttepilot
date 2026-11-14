@@ -16,9 +16,18 @@ import {
   updateCabin,
 } from "@/lib/services/cabins";
 import {
-  inviteFriend,
-  inviteOwner,
-  removeFriendInvitation,
+  claimInvitations,
+  INVITATION_DAYS,
+  inviteAccount,
+  inviteToCabin,
+  isInvitationToken,
+  previewShare,
+  revokeAccess,
+  revokeAccountInvitation,
+  revokeInvitation,
+  type ShareOutcome,
+  type SharePreview,
+  shareWithPerson,
 } from "@/lib/services/invitations";
 import { addCabinPhotos, makeCoverPhoto, removeCabinPhoto } from "@/lib/services/photos";
 import { requireViewer } from "@/lib/session";
@@ -62,7 +71,7 @@ export async function createCabinAction(
   } catch (error) {
     return toFormState(error);
   }
-  redirect(`/mine-hytter/${cabinId}`);
+  redirect(`/mine-hytter/${cabinId}?ny=1`);
 }
 
 export async function updateCabinAction(
@@ -155,46 +164,146 @@ export async function removeAvailabilityAction(
   return undefined;
 }
 
-export async function inviteFriendAction(
-  _prev: FormState,
-  formData: FormData,
-): Promise<FormState> {
-  const viewer = await requireViewer();
-  try {
-    await inviteFriend(viewer, text(formData, "cabinId"), text(formData, "email"));
-  } catch (error) {
-    return toFormState(error);
+/* --------------------------------- Deling ---------------------------------- */
+
+/**
+ * Skjemaet for å dele en hytte går i to steg. Først viser serveren nøyaktig
+ * hva som sendes og hvem som får se hytta («preview»). Først når eieren
+ * bekrefter, lagres delingen og e-posten sendes («send»).
+ */
+export type ShareState = {
+  step: "edit" | "preview" | "sent";
+  values: { cabinId: string; email: string; personId: string; message: string };
+  preview?: SharePreview;
+  error?: string;
+  ok?: string;
+};
+
+function shareMessage(outcome: ShareOutcome): string {
+  if (outcome.status === "shared") {
+    return outcome.emailAccepted
+      ? `${outcome.recipient} ser nå hytta og har fått beskjed på e-post.`
+      : `${outcome.recipient} ser nå hytta, men e-posten med beskjed ble ikke sendt. Si gjerne fra selv.`;
   }
-  refresh();
-  return { ok: "Invitasjonen er sendt." };
+  return outcome.emailAccepted
+    ? `Invitasjonen er sendt til ${outcome.recipient}. Den gjelder i ${INVITATION_DAYS} dager.`
+    : `Invitasjonen til ${outcome.recipient} er lagret, men e-posten ble ikke sendt. Mottakeren kan logge inn med adressen sin likevel. Si gjerne fra selv.`;
 }
 
-export async function removeFriendAction(
-  _prev: FormState,
-  formData: FormData,
-): Promise<FormState> {
+export async function shareAction(prev: ShareState, formData: FormData): Promise<ShareState> {
   const viewer = await requireViewer();
+  const values = {
+    cabinId: text(formData, "cabinId"),
+    email: text(formData, "email").trim(),
+    personId: text(formData, "personId"),
+    message: text(formData, "message"),
+  };
   try {
-    await removeFriendInvitation(viewer, text(formData, "invitationId"));
+    if (text(formData, "step") === "send") {
+      const outcome = values.personId
+        ? await shareWithPerson(viewer, values.cabinId, values.personId, values.message)
+        : await inviteToCabin(viewer, values.cabinId, values.email, values.message);
+      refresh();
+      return {
+        step: "sent",
+        values: { ...values, email: "", message: "" },
+        ok: shareMessage(outcome),
+      };
+    }
+    const to = values.personId ? { personId: values.personId } : { email: values.email };
+    const preview = await previewShare(viewer, values.cabinId, to, values.message);
+    return { step: "preview", values, preview };
   } catch (error) {
-    return toFormState(error);
+    return { step: "edit", values, error: toFormState(error)?.error };
   }
-  refresh();
-  return undefined;
 }
 
-export async function inviteOwnerAction(
+/*
+ * Når en deling eller invitasjon fjernes, forsvinner raden med knappen fra
+ * siden. Bekreftelsen vises derfor øverst i delingspanelet etter en
+ * videresending, ikke ved knappen.
+ */
+export async function revokeAccessAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const viewer = await requireViewer();
+  let cabinId: string;
+  try {
+    ({ cabinId } = await revokeAccess(
+      viewer,
+      text(formData, "cabinId"),
+      text(formData, "userId"),
+    ));
+  } catch (error) {
+    return toFormState(error);
+  }
+  redirect(`/mine-hytter/${cabinId}?endret=deling#deling`);
+}
+
+export async function revokeInvitationAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const viewer = await requireViewer();
+  let cabinId: string;
+  try {
+    ({ cabinId } = await revokeInvitation(viewer, text(formData, "invitationId")));
+  } catch (error) {
+    return toFormState(error);
+  }
+  redirect(`/mine-hytter/${cabinId}?endret=invitasjon#deling`);
+}
+
+/** Mottakeren tar imot invitasjoner som venter, og går til hyttekretsen sin. */
+export async function acceptInvitationAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const viewer = await requireViewer();
+  const token = text(formData, "invitasjon");
+  try {
+    await claimInvitations(viewer.id, viewer.email);
+  } catch (error) {
+    return toFormState(error);
+  }
+  redirect(isInvitationToken(token) ? `/krets?invitasjon=${token}` : "/krets");
+}
+
+/* ------------------------------ Administrasjon ------------------------------ */
+
+export async function inviteAccountAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const viewer = await requireViewer();
+  let emailAccepted: boolean;
+  try {
+    ({ emailAccepted } = await inviteAccount(
+      viewer,
+      text(formData, "email"),
+      text(formData, "message"),
+    ));
+  } catch (error) {
+    return toFormState(error);
+  }
+  refresh();
+  return emailAccepted
+    ? { ok: `Invitasjonen er sendt. Den gjelder i ${INVITATION_DAYS} dager.` }
+    : { error: "Invitasjonen er lagret, men e-posten ble ikke sendt. Si gjerne fra selv." };
+}
+
+export async function revokeAccountInvitationAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
   const viewer = await requireViewer();
   try {
-    await inviteOwner(viewer, text(formData, "email"));
+    await revokeAccountInvitation(viewer, text(formData, "invitationId"));
   } catch (error) {
     return toFormState(error);
   }
-  refresh();
-  return { ok: "Invitasjonen er sendt." };
+  redirect("/admin?endret=invitasjon");
 }
 
 export async function createBookingAction(

@@ -4,45 +4,138 @@ import { CabinForm } from "@/components/cabin-form";
 import { photoSrc } from "@/components/cabin-photo";
 import { PhotoPicker } from "@/components/photo-picker";
 import { ButtonLink, Field, Input, PageTitle, Panel } from "@/components/ui";
-import { formatRange } from "@/lib/dates";
+import { ShareForm } from "@/components/share-form";
+import { formatDate, formatRange, freePeriods, todayInOslo } from "@/lib/dates";
 import { MAX_PHOTOS } from "@/lib/photo-limits";
 import { getCalendar, getOwnCabin } from "@/lib/services/cabins";
-import { listFriendInvitations } from "@/lib/services/invitations";
+import { listCabinSharing } from "@/lib/services/invitations";
 import { listCabinPhotos } from "@/lib/services/photos";
 import { requireViewer } from "@/lib/session";
 import {
   addAvailabilityAction,
   addCabinPhotosAction,
-  inviteFriendAction,
   makeCoverPhotoAction,
   removeAvailabilityAction,
   removeCabinPhotoAction,
-  removeFriendAction,
+  revokeAccessAction,
+  revokeInvitationAction,
   updateCabinAction,
 } from "../../actions";
 
-export default async function ManageCabinPage({ params }: PageProps<"/mine-hytter/[id]">) {
+/** «Kari, Ola og Lise» */
+function list(names: string[]): string {
+  if (names.length <= 1) return names.join("");
+  return `${names.slice(0, -1).join(", ")} og ${names[names.length - 1]}`;
+}
+
+/**
+ * Det eieren må vite før en deling fjernes: personen mister innsynet, men
+ * forespørsler og opphold blir stående til eieren selv gjør noe med dem.
+ */
+function revokeQuestion(
+  cabinName: string,
+  person: { name: string; pendingRequests: number; confirmedStays: number },
+): string {
+  const parts = [
+    `Slutte å dele ${cabinName} med ${person.name}?`,
+    `${person.name} ser ikke lenger hytta og kan ikke sende nye forespørsler.`,
+  ];
+  if (person.confirmedStays > 0) {
+    parts.push(
+      person.confirmedStays === 1
+        ? `${person.name} har ett opphold du har sagt ja til. Det står som før. Vil du avlyse det, gjør du det under Forespørsler.`
+        : `${person.name} har ${person.confirmedStays} opphold du har sagt ja til. De står som før. Vil du avlyse dem, gjør du det under Forespørsler.`,
+    );
+  }
+  if (person.pendingRequests > 0) {
+    parts.push(
+      person.pendingRequests === 1
+        ? "Én forespørsel venter fortsatt på svar fra deg."
+        : `${person.pendingRequests} forespørsler venter fortsatt på svar fra deg.`,
+    );
+  }
+  return parts.join(" ");
+}
+
+export default async function ManageCabinPage({
+  params,
+  searchParams,
+}: PageProps<"/mine-hytter/[id]">) {
   const viewer = await requireViewer();
-  const { id } = await params;
+  const [{ id }, { ny, endret }] = await Promise.all([params, searchParams]);
   const cabin = await getOwnCabin(viewer, id);
   if (!cabin) notFound();
 
-  const [calendar, friends, photos] = await Promise.all([
+  const [calendar, sharing, photos] = await Promise.all([
     getCalendar(cabin.id),
-    listFriendInvitations(viewer, cabin.id),
+    listCabinSharing(viewer, cabin.id),
     listCabinPhotos(cabin.id),
   ]);
+  const people = sharing?.people ?? [];
+  const invitations = sharing?.invitations ?? [];
+  const free = freePeriods(calendar.available, calendar.taken, calendar.today);
+  const isShared = people.length > 0;
+  const hasDates = free.length > 0;
 
   return (
     <>
       <PageTitle title={cabin.name} lead={cabin.area} />
 
+      {ny && (
+        <p role="status" className="mb-8 max-w-[60ch] rounded-md bg-window p-4 font-semibold">
+          Hytta er lagret. Den er privat til du deler den.
+        </p>
+      )}
+
+      <section
+        aria-labelledby="status"
+        className="mb-8 rounded-lg border-2 border-pine bg-surface p-5 sm:p-6"
+      >
+        <h2 id="status" className="text-2xl font-bold">
+          {isShared && hasDates
+            ? "Hytta er delt og kan forespørres"
+            : isShared
+              ? "Hytta er delt, men har ingen ledige datoer"
+              : "Hytta er privat"}
+        </h2>
+        <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">
+          <dt className="font-semibold">Hvem ser hytta</dt>
+          <dd>
+            {isShared
+              ? `Du, ${list(people.map((p) => p.name))}.`
+              : "Bare du."}
+            {invitations.length > 0 &&
+              ` ${invitations.length === 1 ? "Én invitasjon" : `${invitations.length} invitasjoner`} venter.`}
+          </dd>
+          <dt className="font-semibold">Ledig for forespørsel</dt>
+          <dd>
+            {hasDates
+              ? list(free.slice(0, 3).map((p) => formatRange(p.startDate, p.endDate))) +
+                (free.length > 3 ? ` og ${free.length - 3} til` : "") +
+                "."
+              : "Ingen datoer er åpne."}
+          </dd>
+        </dl>
+        {!(isShared && hasDates) && (
+          <p className="mt-3 max-w-[60ch] text-muted">
+            Noen kan først be om å låne hytta når du har gjort begge deler:{" "}
+            {!hasDates && <a href="#datoer" className="underline">åpnet noen datoer</a>}
+            {!hasDates && !isShared && " og "}
+            {!isShared && <a href="#deling" className="underline">valgt hvem du vil dele med</a>}
+            .
+          </p>
+        )}
+      </section>
+
       <div className="space-y-8">
         <Panel>
-          <h2 className="text-2xl font-bold">Ledige perioder</h2>
+          <h2 id="datoer" className="scroll-mt-6 text-2xl font-bold">
+            Ledige perioder
+          </h2>
           <p className="mt-1 max-w-[60ch] text-muted">
             Legg inn når hytta kan lånes. Skal du bruke den selv, fjerner du perioden eller
-            legger inn kortere perioder rundt dine egne turer.
+            legger inn kortere perioder rundt dine egne turer. Du svarer fortsatt ja eller nei
+            på hver forespørsel.
           </p>
 
           {calendar.available.length > 0 && (
@@ -80,53 +173,110 @@ export default async function ManageCabinPage({ params }: PageProps<"/mine-hytte
           </ActionForm>
 
           <ButtonLink href={`/hytter/${cabin.id}`} variant="secondary" className="mt-6">
-            Se hytta slik vennene ser den
+            Se hytta slik de du deler med, ser den
           </ButtonLink>
         </Panel>
 
         <Panel>
-          <h2 className="text-2xl font-bold">Venner med tilgang</h2>
+          <h2 id="deling" className="scroll-mt-6 text-2xl font-bold">
+            Velg hvem du vil dele med
+          </h2>
           <p className="mt-1 max-w-[60ch] text-muted">
-            Andre hytteeiere i kretsen ser hytta uansett. Venner uten egen hytte ser den bare
-            hvis du inviterer dem her.
+            Bare du og de du velger her, ser hytta. Det gjelder også andre hytteeiere og
+            administratorer. De du deler med, kan se hytta og sende deg forespørsler. De kan
+            ikke dele den videre.
           </p>
 
-          {friends.length > 0 && (
-            <ul className="mt-4 divide-y divide-line border-y border-line">
-              {friends.map((friend) => (
-                <li
-                  key={friend.id}
-                  className="flex flex-wrap items-center justify-between gap-3 py-3"
-                >
-                  <span>
-                    <span className="font-semibold">{friend.name || friend.email}</span>
-                    <span className="block text-sm text-muted">
-                      {friend.acceptedAt ? friend.email : "Invitert, har ikke logget inn ennå"}
-                    </span>
-                  </span>
-                  <ActionForm
-                    action={removeFriendAction}
-                    confirm={`Fjerne tilgangen til ${friend.name || friend.email}?`}
-                  >
-                    <input type="hidden" name="invitationId" value={friend.id} />
-                    <button type="submit" className="cursor-pointer text-barn underline">
-                      Fjern tilgang
-                    </button>
-                  </ActionForm>
-                </li>
-              ))}
-            </ul>
+          {endret === "deling" && (
+            <p role="status" className="mt-4 max-w-[60ch] rounded-md bg-window p-4 font-semibold">
+              Delingen er fjernet. Personen ser ikke lenger hytta og kan ikke sende nye
+              forespørsler. Forespørsler og opphold er ikke endret.
+            </p>
+          )}
+          {endret === "invitasjon" && (
+            <p role="status" className="mt-4 max-w-[60ch] rounded-md bg-window p-4 font-semibold">
+              Invitasjonen er trukket tilbake. Lenken i e-posten virker ikke lenger.
+            </p>
           )}
 
-          <ActionForm action={inviteFriendAction} resetOnOk className="mt-5">
-            <input type="hidden" name="cabinId" value={cabin.id} />
-            <div className="flex flex-wrap items-end gap-4">
-              <Field label="Vennens e-postadresse" className="min-w-[16rem] flex-1">
-                <Input name="email" type="email" required />
-              </Field>
-              <SubmitButton variant="secondary">Inviter</SubmitButton>
-            </div>
-          </ActionForm>
+          {people.length > 0 && (
+            <>
+              <h3 className="mt-5 font-bold">Disse ser hytta</h3>
+              <ul className="mt-2 divide-y divide-line border-y border-line">
+                {people.map((person) => (
+                  <li
+                    key={person.userId}
+                    className="flex flex-wrap items-center justify-between gap-3 py-3"
+                  >
+                    <span className="min-w-0">
+                      <span className="font-semibold">{person.name}</span>
+                      <span className="block text-sm break-words text-muted">
+                        {person.email ? `${person.email}. ` : ""}
+                        Delt siden {formatDate(todayInOslo(person.since))}.
+                      </span>
+                    </span>
+                    <ActionForm
+                      action={revokeAccessAction}
+                      confirm={revokeQuestion(cabin.name, person)}
+                    >
+                      <input type="hidden" name="cabinId" value={cabin.id} />
+                      <input type="hidden" name="userId" value={person.userId} />
+                      <button
+                        type="submit"
+                        className="cursor-pointer text-barn underline"
+                        aria-label={`Slutt å dele med ${person.name}`}
+                      >
+                        Slutt å dele
+                      </button>
+                    </ActionForm>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          {invitations.length > 0 && (
+            <>
+              <h3 className="mt-5 font-bold">Invitert, har ikke logget inn ennå</h3>
+              <ul className="mt-2 divide-y divide-line border-y border-line">
+                {invitations.map((inv) => (
+                  <li
+                    key={inv.id}
+                    className="flex flex-wrap items-center justify-between gap-3 py-3"
+                  >
+                    <span className="min-w-0">
+                      <span className="font-semibold break-words">{inv.email}</span>
+                      <span className="block text-sm text-muted">
+                        {inv.expired
+                          ? "Invitasjonen er utløpt. Send en ny hvis du fortsatt vil dele."
+                          : `Invitasjonen gjelder til ${formatDate(todayInOslo(inv.expiresAt))}.`}
+                      </span>
+                    </span>
+                    <ActionForm
+                      action={revokeInvitationAction}
+                      confirm={`Trekke tilbake invitasjonen til ${inv.email}? Lenken i e-posten slutter å virke.`}
+                    >
+                      <input type="hidden" name="invitationId" value={inv.id} />
+                      <button
+                        type="submit"
+                        className="cursor-pointer text-barn underline"
+                        aria-label={`Trekk tilbake invitasjonen til ${inv.email}`}
+                      >
+                        Trekk tilbake
+                      </button>
+                    </ActionForm>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          <h3 className="mt-6 mb-3 font-bold">
+            {isShared || invitations.length > 0
+              ? "Del med en til"
+              : "Hvem ville du selv lånt bort hytta til?"}
+          </h3>
+          <ShareForm cabins={[{ id: cabin.id, name: cabin.name, area: cabin.area }]} />
         </Panel>
 
         <Panel>

@@ -1,6 +1,6 @@
-# Hyttepiloten (arbeidsnavn)
+# Hyttepilot (arbeidsnavn)
 
-Pilot for en lukket tjeneste der hytteeiere låner ut hytta til folk de kjenner, til
+Pilot for en lukket tjeneste der hytteeiere deler hytta med folk de kjenner, til
 litt over selvkost. Navnet er et arbeidsnavn og byttes ett sted: `NEXT_PUBLIC_APP_NAME`.
 
 ## Hva piloten gjør
@@ -13,23 +13,73 @@ litt over selvkost. Navnet er et arbeidsnavn og byttes ett sted: `NEXT_PUBLIC_AP
 - **Adresse og vei.** Eieren legger inn adressen, med forslag fra Kartverkets
   adresseregister, og en nøyaktig kartposisjon. Låneren får adressen og lenker som
   viser veien i kartet når lånet er betalt.
-- **Synlighet.** Hytteeiere ser alle hyttene. Venner uten hytte ser bare hyttene de
-  er invitert til.
+- **Privat som utgangspunkt.** En ny hytte ser bare eieren. Eieren velger selv
+  hvem som får se hver hytte. Det å eie en hytte eller være administrator gir
+  ikke innsyn i andres.
+- **Personlige invitasjoner.** Eieren deler én hytte med én person og ser
+  mottaker, hytte, tilgang og e-posten før noe sendes. Invitasjonen gjelder i 30
+  dager og kan trekkes tilbake.
+- **Din hyttekrets.** Første side etter innlogging viser hyttene som er delt med
+  deg, hyttene du selv deler, og menneskene du har en deling med.
 - **Forespørsler.** Låneren velger datoer i kalenderen. Eieren svarer ja eller nei.
 - **Betaling.** Skjer med vanlig Vipps utenfor tjenesten. Eieren markerer «betalt»,
   og da er oppholdet reservert og adressen vises til låneren.
 - **Varsler på e-post** til eier og låner i hvert steg.
 
 Ikke med ennå: integrert Vipps, kart, vurderinger, venners venner, grupper,
-vask som tjeneste, engelsk versjon og sletting av hytter.
+husbytte, vask som tjeneste, engelsk versjon og sletting av hytter.
 
-## Roller
+## Hvem kan hva
 
-| Rolle | Hvem | Kan |
-|---|---|---|
-| Administrator | Adressene i `ADMIN_EMAILS` | Invitere hytteeiere. Er selv hytteeier. |
-| Hytteeier | Invitert av en administrator | Legge inn hytter, se alle hytter, invitere venner til egne hytter. |
-| Venn | Invitert av en hytteeier | Se hyttene de er invitert til og be om å låne. |
+Det finnes ikke lenger egne roller for «hytteeier» og «venn». Alle som er med,
+kan låne, eie og dele. Forskjellen ligger i hva som er delt med hvem.
+
+| Hvem | Kan |
+|---|---|
+| Alle som er med | Se hyttene som er delt med dem, og be om å låne. Legge inn egen hytte. |
+| Eieren av en hytte | Velge hvem som ser hytta, åpne datoer, svare ja eller nei, markere betalt, avlyse, slutte å dele. |
+| Den en hytte er delt med | Se hytta, bildene, prisen og ledige datoer, og sende forespørsler. Kan ikke dele hytta videre. |
+| Administrator (`ADMIN_EMAILS`) | Slippe en person inn i tjenesten uten å dele en hytte. Ser ellers akkurat det samme som alle andre. |
+
+## Deling og invitasjoner
+
+- Innsyn i en hytte følger av én ting: en rad i tabellen `cabin_access`. Den
+  lages bare når eieren aktivt deler. Sjekken ligger i `getVisibleCabin` i
+  `src/lib/services/cabins.ts`, og sider, bilder og forespørsler går gjennom den.
+- En invitasjon (`invitation`) er personlig. Tilgangen gis til den som logger inn
+  med adressen invitasjonen ble sendt til. Lenken i e-posten
+  (`/invitasjon/<nøkkel>`) viser bare riktig velkomst og gir ingen tilgang alene.
+  Uten innlogging viser siden bare hvem som inviterer og en maskert adresse.
+- Gjensidig deling er to valg. Deler Kari med Per, får Per et forslag om å dele
+  tilbake. Ingenting deles før Per har sett over og bekreftet.
+- Den som har fått en hytte delt med seg, kan ikke dele den videre. Venners
+  venner får ingenting.
+- Slutter eieren å dele, ser ikke personen hytta lenger og kan ikke sende nye
+  forespørsler. Forespørsler og opphold røres ikke. De avlyses bare med en egen
+  handling under Forespørsler.
+- Administrasjon gir ikke innsyn i andres hytter, delinger eller forespørsler.
+  Det finnes ingen støttevisning. Trengs innsyn for å hjelpe noen, må den som er
+  ansvarlig for opplysningene, slå opp direkte i databasen og føre det i
+  prosjektets beslutningslogg.
+
+## Overgang fra «alle hytteeiere ser alle hytter»
+
+Fram til migreringen `0003_hyttekrets` så alle hytteeiere og administratorer alle
+hytter. Den regelen er fjernet i koden. Migreringen selv rører ingen hytter,
+delinger eller reservasjoner:
+
+- Delinger som finnes fra før (`cabin_access`), beholdes.
+- Invitasjoner som venter, får lenkenøkkel og 30 dagers frist.
+- Innsyn som bare fulgte av den gamle regelen, faller bort. Eieren må dele på nytt
+  med dem som fortsatt skal se hytta.
+- Forespørsler og opphold står som før. Låneren ser dem under Forespørsler, men
+  kan ikke åpne hyttesiden før eieren deler hytta.
+
+`npm run overgang:rapport` viser hvor mange tilganger som faller bort, per hytte,
+og hvilke forespørsler som gjelder en låner uten eksplisitt deling. Rapporten
+leser bare, og bruker interne ID-er i stedet for navn. Den skrives også i
+byggeloggen rett før migreringen legges på. Kolonnen `profile.is_owner` brukes
+ikke lenger og kan fjernes i en senere opprydding.
 
 ## Kjøre lokalt
 
@@ -69,7 +119,9 @@ skrives i stedet til filen `.dev-outbox.jsonl` og til terminalen.
 | `npm run build` | Oppdaterer databasen og bygger for produksjon |
 | `npm run typecheck` | Sjekker typene |
 | `npm run lint` | Sjekker kodestil |
-| `npm test` | Går gjennom hele låneflyten mot en **lokal** database. Tømmer databasen. |
+| `npm test` | Går gjennom deling, invitasjoner og låneflyten mot en **lokal** database. Tømmer databasen. |
+| `npm run test:nettleser` | Samme flyt i en nettleser på mobilstørrelse, delvis bare med tastatur. Se toppen av `scripts/test-browser.mjs`. Tømmer databasen. |
+| `npm run overgang:rapport` | Viser hvilke tilganger som faller bort ved overgangen til eksplisitt deling. Leser bare. |
 | `npm run db:generate` | Lager en ny migrering etter endring i `src/lib/db/schema.ts` |
 | `npm run db:migrate` | Oppdaterer databasen |
 
@@ -78,8 +130,8 @@ skrives i stedet til filen `.dev-outbox.jsonl` og til terminalen.
 ```
 src/lib/db/schema.ts      Datamodellen. Én fil, alle tabeller.
 src/lib/services/         Alle regler og tilgangssjekker. Start her.
-  invitations.ts            hvem slipper inn, hvem inviterer hvem
-  cabins.ts                 hytter, synlighet, ledige perioder
+  invitations.ts            hvem slipper inn, deling, invitasjoner, hyttekretsen
+  cabins.ts                 hytter, hvem som ser hva, ledige perioder
   bookings.ts               forespørsel, ja/nei, betalt, avlysning
   photos.ts                 bilder: hvem får legge til, fjerne og se dem
   addresses.ts              adressesøk mot Kartverket, bare for hytteeiere
@@ -94,9 +146,15 @@ src/lib/emails.ts         Teksten i alle e-poster
 src/lib/pledge.ts         Teksten i Hytteløftet
 src/lib/pricing.ts        Prisregning
 src/app/(app)/            Sidene som krever innlogging
+src/app/(app)/krets/      Din hyttekrets: første side etter innlogging
+src/app/invitasjon/       Siden invitasjonslenken peker til
+src/components/share-form.tsx  Dele en hytte: skjema, forhåndsvisning, bekreftelse
+src/components/date-range-picker.tsx  Kalenderen, med status som tekst for hver dato
 src/app/(app)/actions.ts  Skjemaene: henter brukeren og kaller tjenestelaget
 src/proxy.ts              Sender uinnloggede til innlogging
-scripts/test-flow.ts      Testen av hele flyten
+scripts/test-flow.ts      Testen av reglene, mot databasen
+scripts/test-browser.mjs  Testen i nettleser, på mobilstørrelse og med tastatur
+scripts/overgang-rapport.mjs  Leserapport før overgangen til eksplisitt deling
 ```
 
 Regelen for ny funksjonalitet: tilgangssjekken skal ligge i tjenestelaget
@@ -120,6 +178,11 @@ Regelen for ny funksjonalitet: tilgangssjekken skal ligge i tjenestelaget
   koordinater eller en kartlenke.
 - **Forhåndsvisninger deler database med produksjon** hvis de får samme
   `DATABASE_URL`. Bruk en egen database for forhåndsvisninger når piloten er i bruk.
+  Bygging av en forhåndsvisning hos Vercel oppdaterer aldri databasen, med mindre
+  `MIGRATE_ON_PREVIEW=1` er satt for forhåndsvisninger (se `scripts/migrate.mjs`).
+- **E-post som er «sendt», er tatt imot av Resend.** Tjenesten vet ikke om den kom
+  fram til innboksen. Eieren får beskjed hvis Resend ikke tok imot e-posten.
+  Levering, avvisning og søppelpost ses i Resends logg.
 - **Personvernsiden er et utkast.** Den beskriver hva som lagres, men er ikke
   juridisk kvalitetssikret, og ansvarlig virksomhet må fylles inn.
 - **Skatt og forsikring er ikke avklart.** Se prosjektets beslutningslogg.

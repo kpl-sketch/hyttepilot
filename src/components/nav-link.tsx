@@ -3,8 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-export function NavLink({ href, children }: { href: string; children: string }) {
-  const active = usePathname().startsWith(href);
+export function NavLink({
+  href,
+  also,
+  children,
+}: {
+  href: string;
+  /** En adresse til som hører til samme menypunkt. */
+  also?: string;
+  children: string;
+}) {
+  const path = usePathname();
+  const active = path.startsWith(href) || (also !== undefined && path.startsWith(also));
   return (
     <Link
       href={href}

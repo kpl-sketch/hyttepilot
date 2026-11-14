@@ -10,7 +10,7 @@ import { db } from "@/lib/db";
 import { canSendEmail } from "@/lib/email";
 import { profile } from "@/lib/db/schema";
 import { normalizeEmail } from "@/lib/errors";
-import { claimInvitations } from "@/lib/services/invitations";
+import { claimInvitations, isInvitationToken } from "@/lib/services/invitations";
 import { isThrottled, pruneThrottle } from "@/lib/services/login";
 
 export type LoginState = {
@@ -103,7 +103,12 @@ export async function verifyCode(
   if (registered) await claimInvitations(userId, email);
   after(pruneThrottle);
 
-  redirect(registered ? "/hytter" : "/velkommen");
+  // Kom brukeren fra en invitasjonslenke, går veien videre dit. Nøkkelen er
+  // sjekket for form, og siden den peker til, sjekker selv hvem som ser hva.
+  const invitasjon = formData.get("invitasjon");
+  const token = isInvitationToken(invitasjon) ? invitasjon : "";
+  if (registered) redirect(token ? `/invitasjon/${token}` : "/krets");
+  redirect(token ? `/velkommen?invitasjon=${token}` : "/velkommen");
 }
 
 export async function signOut() {

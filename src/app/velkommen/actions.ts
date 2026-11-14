@@ -8,7 +8,7 @@ import { profile, user } from "@/lib/db/schema";
 import type { FormState } from "@/lib/errors";
 import { PLEDGE_VERSION } from "@/lib/pledge";
 import { phoneSchema } from "@/lib/services/cabins";
-import { claimInvitations } from "@/lib/services/invitations";
+import { claimInvitations, isInvitationToken } from "@/lib/services/invitations";
 import { getSessionUser } from "@/lib/session";
 
 const input = z.object({
@@ -44,5 +44,7 @@ export async function completeOnboarding(
     .onConflictDoNothing();
   await claimInvitations(sessionUser.id, sessionUser.email);
 
-  redirect("/hytter");
+  // Kom brukeren fra en invitasjonslenke, vises invitasjonen først.
+  const invitasjon = formData.get("invitasjon");
+  redirect(isInvitationToken(invitasjon) ? `/invitasjon/${invitasjon}` : "/krets");
 }

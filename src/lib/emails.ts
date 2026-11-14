@@ -1,5 +1,5 @@
 import { APP_NAME, appUrl } from "./brand";
-import { formatRange } from "./dates";
+import { formatDate, formatRange, todayInOslo } from "./dates";
 import type { Mail } from "./email";
 import { formatKroner } from "./pricing";
 
@@ -13,23 +13,66 @@ export function loginCodeMail(to: string, code: string): Mail {
   };
 }
 
-export function ownerInvitationMail(to: string, inviterName: string): Mail {
+/** Fornavnet, til hilsener: «Thomas» av «Thomas Lund». */
+export function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0] || name;
+}
+
+function greeting(inviterName: string, message: string): string {
+  return message ? `\n\nHilsen fra ${firstName(inviterName)}:\n«${message}»` : "";
+}
+
+/** Datoen invitasjonen gjelder til, slik den står i e-posten. */
+function lastDay(expiresAt: Date): string {
+  return formatDate(todayInOslo(expiresAt));
+}
+
+type ShareInfo = { cabinName: string; cabinArea: string; message: string };
+
+/**
+ * Personlig invitasjon til en som ikke er med ennå. Sier hvem som inviterer,
+ * hvilken hytte som deles, og hva mottakeren får tilgang til.
+ */
+export function cabinInvitationMail(
+  to: string,
+  inviterName: string,
+  info: ShareInfo & { token: string; expiresAt: Date },
+): Mail {
+  const first = firstName(inviterName);
   return {
     to,
     subject: `${inviterName} inviterer deg til ${APP_NAME}`,
-    text: `${inviterName} har invitert deg til ${APP_NAME}, en lukket krets der hytteeiere låner ut hytta til folk de kjenner, til omtrent selvkost.\n\nSom hytteeier kan du legge inn hytta di, bestemme hvem som får se den, og svare ja eller nei på hver forespørsel.\n\nLogg inn med denne e-postadressen:\n${appUrl()}/logg-inn?e=${encodeURIComponent(to)}${sign}`,
+    text: `${inviterName} inviterer deg til ${APP_NAME} og vil dele hytta ${info.cabinName} (${info.cabinArea}) med deg.${greeting(inviterName, info.message)}\n\nDette får du tilgang til:\n- Du ser hytta, bildene, prisen og når den er ledig.\n- Du kan sende ${first} en forespørsel om å låne den.\n\n${first} bestemmer når hytta er ledig, og svarer ja eller nei på hver forespørsel. Invitasjonen gjelder bare denne hytta.\n\nSe invitasjonen:\n${appUrl()}/invitasjon/${info.token}\n\nInvitasjonen er personlig. Den gjelder for ${to} til ${lastDay(info.expiresAt)}. Lenken gir ingen tilgang til andre enn deg.${sign}`,
   };
 }
 
-export function friendInvitationMail(
+/** Varsel til en som allerede er med: eieren har delt en hytte med deg. */
+export function cabinSharedMail(
   to: string,
   inviterName: string,
-  cabinName: string,
+  info: ShareInfo & { link: string },
+): Mail {
+  const first = firstName(inviterName);
+  return {
+    to,
+    subject: `${inviterName} har delt ${info.cabinName} med deg`,
+    text: `${inviterName} har delt hytta ${info.cabinName} (${info.cabinArea}) med deg i ${APP_NAME}.${greeting(inviterName, info.message)}\n\nDu ser nå hytta, bildene, prisen og når den er ledig, og du kan sende ${first} en forespørsel om å låne den. ${first} svarer ja eller nei på hver forespørsel.\n\nSe hytta:\n${info.link}${sign}`,
+  };
+}
+
+/**
+ * Invitasjon fra en administrator: slipper mottakeren inn i tjenesten, uten
+ * tilgang til noen hytter.
+ */
+export function accountInvitationMail(
+  to: string,
+  inviterName: string,
+  info: { message: string; token: string; expiresAt: Date },
 ): Mail {
   return {
     to,
-    subject: `${inviterName} vil låne deg hytta`,
-    text: `${inviterName} har gitt deg tilgang til ${cabinName} i ${APP_NAME}. Du kan se når hytta er ledig og sende en forespørsel om å låne den.\n\nLogg inn med denne e-postadressen:\n${appUrl()}/logg-inn?e=${encodeURIComponent(to)}${sign}`,
+    subject: `${inviterName} inviterer deg til ${APP_NAME}`,
+    text: `${inviterName} inviterer deg til ${APP_NAME}. Her deler hytteeiere hytta si med folk de kjenner, til omtrent selvkost.${greeting(inviterName, info.message)}\n\nDu kan legge inn hytta di og velge hvem du vil dele den med. Du bestemmer når den er ledig, og svarer ja eller nei på hver forespørsel.\n\nInvitasjonen gir ikke tilgang til andres hytter. Det får du når en eier velger å dele hytta si med deg.\n\nSe invitasjonen:\n${appUrl()}/invitasjon/${info.token}\n\nInvitasjonen er personlig. Den gjelder for ${to} til ${lastDay(info.expiresAt)}.${sign}`,
   };
 }
 
@@ -75,7 +118,7 @@ export function declinedMail(
   return {
     to,
     subject: `${b.cabinName} passer ikke denne gangen`,
-    text: `${ownerName} kan dessverre ikke låne ut ${b.cabinName} ${formatRange(b.startDate, b.endDate)}.${reply}\n\nDu kan se andre ledige perioder her:\n${appUrl()}/hytter${sign}`,
+    text: `${ownerName} kan dessverre ikke låne ut ${b.cabinName} ${formatRange(b.startDate, b.endDate)}.${reply}\n\nDu kan se andre ledige perioder her:\n${appUrl()}/krets${sign}`,
   };
 }
 

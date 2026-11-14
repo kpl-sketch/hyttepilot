@@ -15,7 +15,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     <>
       <header className="border-b border-line bg-surface">
         <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-x-8 gap-y-2 px-5 py-4">
-          <Link href="/hytter" className="text-xl font-bold text-pine">
+          <Link href="/krets" className="text-xl font-bold text-pine">
             {APP_NAME}
           </Link>
           <Suspense fallback={null}>
@@ -45,13 +45,20 @@ async function Nav() {
   if (!viewer) return null;
   return (
     <>
-      <nav className="flex flex-1 flex-wrap gap-x-6 gap-y-1" aria-label="Hovedmeny">
-        <NavLink href="/hytter">Hytter</NavLink>
+      {/* På mobil står menyen på egen linje under navnet, så alle punktene får plass. */}
+      <nav
+        className="order-last flex basis-full flex-wrap gap-x-6 gap-y-1 sm:order-none sm:flex-1 sm:basis-auto"
+        aria-label="Hovedmeny"
+      >
+        <NavLink href="/krets" also="/hytter">
+          Hyttekrets
+        </NavLink>
         <NavLink href="/foresporsler">Forespørsler</NavLink>
-        {viewer.isOwner && <NavLink href="/mine-hytter">Mine hytter</NavLink>}
-        {viewer.isAdmin && <NavLink href="/admin">Inviter hytteeiere</NavLink>}
+        <NavLink href="/mine-hytter">Dine hytter</NavLink>
+        {/* Administrasjon gir ikke innsyn i andres hytter. Se /admin. */}
+        {viewer.isAdmin && <NavLink href="/admin">Administrasjon</NavLink>}
       </nav>
-      <form action={signOut} className="flex items-center gap-3 text-sm text-muted">
+      <form action={signOut} className="ml-auto flex items-center gap-3 text-sm text-muted">
         <span>{viewer.name}</span>
         <button type="submit" className="cursor-pointer underline">
           Logg ut

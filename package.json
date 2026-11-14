@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.mjs",
-    "test": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env.local scripts/test-flow.ts"
+    "overgang:rapport": "node --env-file-if-exists=.env.local scripts/overgang-rapport.mjs",
+    "test": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env.local scripts/test-flow.ts",
+    "test:nettleser": "node --env-file=.env.local scripts/test-browser.mjs"
   },
   "dependencies": {
     "@fontsource-variable/schibsted-grotesk": "^5.3.0",
@@ -34,6 +36,7 @@
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
+    "playwright-core": "^1.65.1",
     "tailwindcss": "4.3.3",
     "tsx": "^4.23.15",
     "typescript": "^5"

@@ -98,14 +98,15 @@ async function lookUp(search: string): Promise<Found[]> {
 }
 
 /**
- * Forslag til adresser mens eieren skriver. Bare hytteeiere får søke. Svarer
- * adressesøket ikke, får eieren ingen forslag og skriver adressen selv.
+ * Forslag til adresser mens eieren skriver. Bare innloggede medlemmer får
+ * søke: den som kaller, har hentet `actor` med requireViewer eller getViewer.
+ * Svarer adressesøket ikke, får eieren ingen forslag og skriver adressen selv.
  */
 export async function searchAddresses(
-  actor: Actor,
+  actor: Actor | null,
   query: unknown,
 ): Promise<AddressSuggestion[]> {
-  if (!actor.isOwner) throw new UserError("Bare hytteeiere kan søke etter adresser.");
+  if (!actor) throw new UserError("Logg inn for å søke etter adresser.");
   if (typeof query !== "string") return [];
   // Stjerne og spørsmålstegn er jokertegn i søket. Komma skiller bare deler av adressen.
   const text = query.replace(/[*?]/g, "").replace(/[,\s]+/g, " ").trim().slice(0, 100);

@@ -10,6 +10,10 @@ export type Mail = { to: string; subject: string; text: string };
  * Uten dem skrives e-posten til filen .dev-outbox.jsonl i utvikling, slik at
  * innloggingskoder og varsler kan leses lokalt. En e-post som feiler, logges,
  * men stopper ikke handlingen som utløste den.
+ *
+ * Svaret er sant når Resend har TATT IMOT e-posten (eller den er skrevet til
+ * den lokale utboksen). Det betyr ikke at den er kommet fram: avvisning hos
+ * mottakeren og søppelpostfilter ser vi ikke her. Det vises i Resends logg.
  */
 /**
  * Sant når tjenesten kan levere e-post: enten er Resend satt opp, eller så
@@ -20,7 +24,7 @@ export function canSendEmail(): boolean {
   return process.env.NODE_ENV !== "production" || process.env.EMAIL_DEV_OUTBOX === "1";
 }
 
-export async function sendEmail(mail: Mail): Promise<void> {
+export async function sendEmail(mail: Mail): Promise<boolean> {
   const key = process.env.RESEND_API_KEY?.trim();
   const from = process.env.EMAIL_FROM;
 
@@ -32,18 +36,20 @@ export async function sendEmail(mail: Mail): Promise<void> {
       console.error(
         "E-post er ikke satt opp (mangler RESEND_API_KEY eller EMAIL_FROM). En e-post ble ikke sendt.",
       );
-      return;
+      return false;
     }
     const line = JSON.stringify({ ...mail, at: new Date().toISOString() });
     await appendFile(".dev-outbox.jsonl", line + "\n");
-    console.log(`[e-post til ${mail.to}] ${mail.subject}\n${mail.text}\n`);
-    return;
+    if (process.env.EMAIL_QUIET !== "1") {
+      console.log(`[e-post til ${mail.to}] ${mail.subject}\n${mail.text}\n`);
+    }
+    return true;
   }
 
   try {
     const resend = new Resend(key);
     const message = { to: mail.to, subject: mail.subject, text: mail.text };
-    let { error } = await resend.emails.send({ from, ...message });
+    let { data, error } = await resend.emails.send({ from, ...message });
 
     if (error && isUnverifiedDomain(error)) {
       // Domenet i EMAIL_FROM er ikke bekreftet hos Resend ennå. Da sender vi
@@ -52,7 +58,7 @@ export async function sendEmail(mail: Mail): Promise<void> {
       console.warn(
         "Avsenderdomenet er ikke bekreftet hos Resend ennå. Prøver Resends testadresse, som bare når kontoeieren.",
       );
-      ({ error } = await resend.emails.send({ from: TEST_SENDER, ...message }));
+      ({ data, error } = await resend.emails.send({ from: TEST_SENDER, ...message }));
     }
 
     if (error) {
@@ -62,9 +68,15 @@ export async function sendEmail(mail: Mail): Promise<void> {
         // kan oppdages uten å vise hemmeligheten.
         console.error(`Resend godtar ikke RESEND_API_KEY (${keyShape(key)}).`);
       }
+      return false;
     }
+    // Bare Resends egen ID logges, ikke mottaker eller emne. Med ID-en kan
+    // leveringen slås opp i Resend.
+    console.log(`E-post tatt imot av Resend (${data?.id ?? "uten ID"}).`);
+    return true;
   } catch (error) {
     console.error("E-post ble ikke sendt:", error);
+    return false;
   }
 }
 

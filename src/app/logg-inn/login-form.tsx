@@ -4,7 +4,14 @@ import { useActionState, useState } from "react";
 import { buttonClass, Field, Input } from "@/components/ui";
 import { type LoginState, requestCode, verifyCode } from "./actions";
 
-export function LoginForm({ initialEmail }: { initialEmail: string }) {
+export function LoginForm({
+  initialEmail,
+  invitation,
+}: {
+  initialEmail: string;
+  /** Satt når brukeren kom fra en invitasjonslenke. */
+  invitation?: { token: string; inviterName: string; maskedEmail: string };
+}) {
   const [request, requestAction, requesting] = useActionState<LoginState, FormData>(
     requestCode,
     { step: "email", email: initialEmail },
@@ -24,6 +31,7 @@ export function LoginForm({ initialEmail }: { initialEmail: string }) {
         </p>
         <form action={verifyAction} className="space-y-4">
           <input type="hidden" name="email" value={request.email} />
+          {invitation && <input type="hidden" name="invitasjon" value={invitation.token} />}
           <Field label="Kode fra e-posten">
             <Input
               name="code"
@@ -75,7 +83,20 @@ export function LoginForm({ initialEmail }: { initialEmail: string }) {
       onSubmit={() => setChangeEmail(false)}
       className="max-w-sm space-y-4"
     >
-      <Field label="E-postadresse" hint="Bruk adressen du ble invitert med.">
+      {invitation && (
+        <p className="rounded-md border border-line bg-surface p-4">
+          Du logger inn for å ta imot invitasjonen fra{" "}
+          <strong>{invitation.inviterName}</strong>. Den gjelder for {invitation.maskedEmail}.
+        </p>
+      )}
+      <Field
+        label="E-postadresse"
+        hint={
+          invitation
+            ? "Bruk adressen invitasjonen ble sendt til."
+            : "Bruk adressen du ble invitert med."
+        }
+      >
         <Input
           type="email"
           name="email"

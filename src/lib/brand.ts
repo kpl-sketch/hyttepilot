@@ -2,7 +2,7 @@
  * Tjenestens navn og kontaktadresse settes her, og bare her.
  * Navnet er et arbeidsnavn. Bytt det ved å sette NEXT_PUBLIC_APP_NAME.
  */
-export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "Hyttepiloten";
+export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "Hyttepilot";
 
 export const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL || "";
 

@@ -42,4 +42,7 @@ next-env.d.ts
 
 # lokal e-postlogg
 .dev-outbox.jsonl
+
+# skjermbilder fra npm run test:nettleser
+/skjermbilder/
 !.env.example

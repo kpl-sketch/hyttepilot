@@ -12,11 +12,15 @@ export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const hasSessionCookie = Boolean(getSessionCookie(request));
 
-  if (!hasSessionCookie && !PUBLIC_PATHS.includes(pathname)) {
+  // Invitasjonslenken må kunne åpnes uten innlogging. Siden viser da bare
+  // hvem som inviterer, og ingenting om hytta.
+  const isPublic = PUBLIC_PATHS.includes(pathname) || pathname.startsWith("/invitasjon/");
+
+  if (!hasSessionCookie && !isPublic) {
     return NextResponse.redirect(new URL("/logg-inn", request.url));
   }
   if (hasSessionCookie && pathname === "/") {
-    return NextResponse.redirect(new URL("/hytter", request.url));
+    return NextResponse.redirect(new URL("/krets", request.url));
   }
   return NextResponse.next();
 }

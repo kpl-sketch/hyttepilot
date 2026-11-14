@@ -10,8 +10,10 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /** Binærdata. Brukes til bildene, som ligger i databasen i piloten. */
 const bytea = customType<{ data: Buffer }>({
@@ -118,7 +120,12 @@ export const profile = pgTable("profile", {
     .primaryKey()
     .references(() => user.id, { onDelete: "cascade" }),
   phone: text("phone").notNull(),
-  /** Hytteeier i nettverket: kan legge inn hytter og ser alle hyttene. */
+  /**
+   * BRUKES IKKE LENGER. Tidligere ga feltet innsyn i alle hytter. Nå kan alle
+   * medlemmer legge inn hytte, og innsyn styres bare av `cabin_access`.
+   * Kolonnen står igjen til overgangen er ferdig og kan fjernes i en senere
+   * opprydding.
+   */
   isOwner: boolean("is_owner").notNull().default(false),
   pledgeAcceptedAt: timestamp("pledge_accepted_at", {
     withTimezone: true,
@@ -190,7 +197,11 @@ export const cabinPhoto = pgTable(
   (t) => [index("cabin_photo_cabin_idx").on(t.cabinId, t.position)],
 );
 
-/** Venner uten egen hytte som eieren har gitt tilgang til én bestemt hytte. */
+/**
+ * Deling: eieren har valgt at denne personen får se hytta og sende
+ * forespørsler. Dette er den eneste kilden til innsyn i andres hytter.
+ * Raden sier ingenting om ledighet, og den gir ingen rett til å dele videre.
+ */
 export const cabinAccess = pgTable(
   "cabin_access",
   {
@@ -226,12 +237,17 @@ export const availability = pgTable(
   (t) => [index("availability_cabin_idx").on(t.cabinId)],
 );
 
-export const invitationKind = pgEnum("invitation_kind", ["owner", "friend"]);
+export const invitationKind = pgEnum("invitation_kind", ["account", "cabin"]);
 
 /**
  * Invitasjon til en e-postadresse.
- * owner: hytteeier i nettverket, invitert av en administrator.
- * friend: venn som får se én hytte, invitert av hyttas eier.
+ * cabin: eieren deler én bestemt hytte med mottakeren.
+ * account: en administrator slipper mottakeren inn i tjenesten, slik at
+ *   vedkommende kan legge inn egen hytte. Gir ikke innsyn i noen hytter.
+ *
+ * Invitasjonen er personlig: bare den som logger inn med `email`, får
+ * tilgangen. `token` står i lenken i e-posten og brukes bare til å vise
+ * riktig velkomst. Lenken alene gir ingen tilgang.
  */
 export const invitation = pgTable(
   "invitation",
@@ -245,10 +261,28 @@ export const invitation = pgTable(
     invitedBy: text("invited_by")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    /** Tilfeldig nøkkel i invitasjonslenken. */
+    token: text("token").notNull().unique(),
+    /** Personlig hilsen fra den som inviterer. */
+    message: text("message").notNull().default(""),
     createdAt: createdAt(),
+    /** Etter dette tidspunktet kan invitasjonen ikke tas i bruk. */
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    /** Satt når eieren har trukket invitasjonen eller delingen tilbake. */
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
   },
-  (t) => [index("invitation_email_idx").on(t.email)],
+  (t) => [
+    index("invitation_email_idx").on(t.email),
+    // Høyst én gjeldende invitasjon per adresse og hytte. Da kan ikke et
+    // dobbelt trykk lage to invitasjoner eller to e-poster.
+    uniqueIndex("invitation_active_cabin_idx")
+      .on(t.email, t.cabinId)
+      .where(sql`${t.revokedAt} is null and ${t.cabinId} is not null`),
+    uniqueIndex("invitation_active_account_idx")
+      .on(t.email)
+      .where(sql`${t.revokedAt} is null and ${t.cabinId} is null`),
+  ],
 );
 
 export const bookingStatus = pgEnum("booking_status", [

@@ -45,7 +45,7 @@ export default function PrivacyPage() {
             <li>Tidspunktet du ga Hytteløftet.</li>
             <li>Hytter du legger inn: navn, sted, adresse, kartposisjon, beskrivelse, bilder, pris, regler, Vipps-nummer og praktiske opplysninger. Opptaksdata i bildene, som GPS-posisjon, fjernes før bildene lagres.</li>
             <li>Forespørsler du sender eller får, med datoer, antall personer, pris og meldinger.</li>
-            <li>Hvem som har invitert hvem.</li>
+            <li>Hvem som har invitert hvem, hvilken hytte invitasjonen gjelder, og en hilsen hvis avsenderen skrev en.</li>
             <li>Innlogginger: tidspunkt, IP-adresse og nettlesertype.</li>
           </ul>
           <p className="mt-2">Betaling skjer i Vipps, utenfor tjenesten. Vi lagrer ingen betalingsopplysninger.</p>
@@ -54,9 +54,11 @@ export default function PrivacyPage() {
         <section>
           <h2 className="text-xl font-bold">Hvem ser hva</h2>
           <ul className="mt-2 list-disc space-y-1 pl-6">
-            <li>Hytteeiere i kretsen ser alle hyttene og navnet på eieren.</li>
-            <li>Venner uten egen hytte ser bare hyttene de er invitert til.</li>
-            <li>Bildene av en hytte vises bare til dem som får se hytta.</li>
+            <li>En hytte er privat til eieren deler den. Bare eieren og de eieren har valgt å dele med, ser hytta, bildene og navnet på eieren.</li>
+            <li>Det å eie en hytte eller være administrator gir ikke innsyn i andres hytter.</li>
+            <li>Du ser navnet på dem du har en deling med. Ingen ser en liste over alle som er med.</li>
+            <li>Eieren ser navnet på dem hytta er delt med, og adressen eieren selv skrev inn i invitasjonen.</li>
+            <li>Åpnes en invitasjonslenke uten innlogging, vises bare navnet på den som inviterer og en maskert e-postadresse.</li>
             <li>Eieren ser navn, e-postadresse og mobilnummer til den som sender en forespørsel.</li>
             <li>Vipps-nummeret vises til låneren når eieren har sagt ja. Adresse, kartposisjon og praktiske opplysninger vises når lånet er betalt.</li>
           </ul>

@@ -8,7 +8,7 @@ export default function NotFound() {
         title="Fant ikke siden"
         lead="Siden finnes ikke, eller du har ikke tilgang til den."
       />
-      <ButtonLink href="/hytter">Til hyttene</ButtonLink>
+      <ButtonLink href="/krets">Til din hyttekrets</ButtonLink>
     </PublicShell>
   );
 }

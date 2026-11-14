@@ -3,6 +3,7 @@ import { ActionForm, SubmitButton } from "@/components/action-form";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { PhotoGallery } from "@/components/photo-gallery";
 import { ButtonLink, Field, Input, PageTitle, Panel, Textarea } from "@/components/ui";
+import { firstName } from "@/lib/emails";
 import { formatKroner } from "@/lib/pricing";
 import { getCalendar, getVisibleCabin } from "@/lib/services/cabins";
 import { listCabinPhotos } from "@/lib/services/photos";
@@ -21,12 +22,13 @@ export default async function CabinPage({ params }: PageProps<"/hytter/[id]">) {
     listCabinPhotos(cabin.id),
   ]);
   const perNight = Math.round(cabin.costPerNight * (1 + cabin.markupPercent / 100));
+  const owner = firstName(ownerName);
 
   return (
     <>
       <PageTitle
         title={cabin.name}
-        lead={`${cabin.area}. ${isOwn ? "Dette er din hytte." : `Eier: ${ownerName}.`}`}
+        lead={`${cabin.area}. ${isOwn ? "Dette er din hytte." : `Delt med deg av ${ownerName}.`}`}
       />
 
       <PhotoGallery photos={photos} cabinName={cabin.name} />
@@ -63,9 +65,14 @@ export default async function CabinPage({ params }: PageProps<"/hytter/[id]">) {
       </div>
 
       <Panel className="mt-10">
-        <h2 className="mb-4 text-2xl font-bold">
-          {isOwn ? "Slik ser kalenderen ut for vennene dine" : "Når vil du låne hytta?"}
+        <h2 className="text-2xl font-bold">
+          {isOwn ? "Slik ser kalenderen ut for dem du deler med" : "Når vil du låne hytta?"}
         </h2>
+        <p className="mt-1 mb-5 max-w-[60ch] text-muted">
+          {isOwn
+            ? "Bare du og de du har delt hytta med, ser denne siden."
+            : `${owner} har åpnet datoene under for forespørsler. Du spør, og ${owner} svarer ja eller nei.`}
+        </p>
         {isOwn ? (
           <>
             <DateRangePicker
@@ -91,6 +98,12 @@ export default async function CabinPage({ params }: PageProps<"/hytter/[id]">) {
                 cleaningFee: cabin.cleaningFee,
               }}
             />
+            {calendar.available.length === 0 && (
+              <p className="mt-3 max-w-[60ch]">
+                Hytta er delt med deg, men du kan ikke sende en forespørsel før {owner} har
+                åpnet noen datoer. Si gjerne fra til {owner} at du er interessert.
+              </p>
+            )}
             {calendar.available.length > 0 && (
               <div className="mt-6 space-y-4">
                 <Field label="Hvor mange blir dere?" className="max-w-[12rem]">
@@ -104,15 +117,16 @@ export default async function CabinPage({ params }: PageProps<"/hytter/[id]">) {
                   />
                 </Field>
                 <Field
-                  label={`Melding til ${ownerName}`}
+                  label={`Melding til ${owner}`}
                   hint="Hvem blir med, og hva er planen?"
                   className="max-w-xl"
                 >
                   <Textarea name="message" maxLength={1000} />
                 </Field>
                 <SubmitButton>Send forespørsel</SubmitButton>
-                <p className="text-sm text-muted">
-                  {ownerName} svarer ja eller nei. Du betaler ingenting før svaret er ja.
+                <p className="max-w-[60ch] text-sm text-muted">
+                  {owner} svarer ja eller nei. Ingenting er avtalt før svaret er ja, og du
+                  betaler ingenting før det.
                 </p>
               </div>
             )}

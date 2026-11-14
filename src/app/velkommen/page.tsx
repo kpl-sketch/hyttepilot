@@ -6,12 +6,13 @@ import { Pledge } from "@/components/pledge";
 import { PublicShell } from "@/components/public-shell";
 import { Field, Input, Loading, PageTitle, Panel } from "@/components/ui";
 import { PLEDGE_CONFIRM } from "@/lib/pledge";
+import { getPublicInvitation, isInvitationToken } from "@/lib/services/invitations";
 import { getSessionUser, getViewer } from "@/lib/session";
 import { completeOnboarding } from "./actions";
 
 export const metadata: Metadata = { title: "Velkommen" };
 
-export default function WelcomePage() {
+export default function WelcomePage({ searchParams }: PageProps<"/velkommen">) {
   return (
     <PublicShell>
       <PageTitle
@@ -19,19 +20,33 @@ export default function WelcomePage() {
         lead="To opplysninger og ett løfte, så er du med."
       />
       <Suspense fallback={<Loading />}>
-        <WelcomeForm />
+        <WelcomeForm searchParams={searchParams} />
       </Suspense>
     </PublicShell>
   );
 }
 
-async function WelcomeForm() {
+async function WelcomeForm({
+  searchParams,
+}: {
+  searchParams: PageProps<"/velkommen">["searchParams"];
+}) {
+  const { invitasjon } = await searchParams;
+  const token = isInvitationToken(invitasjon) ? invitasjon : "";
   const sessionUser = await getSessionUser();
-  if (!sessionUser) redirect("/logg-inn");
-  if (await getViewer()) redirect("/hytter");
+  if (!sessionUser) redirect(token ? `/logg-inn?invitasjon=${token}` : "/logg-inn");
+  if (await getViewer()) redirect(token ? `/invitasjon/${token}` : "/krets");
+  const invitation = token ? await getPublicInvitation(token) : null;
 
   return (
     <ActionForm action={completeOnboarding} className="space-y-8">
+      {token && <input type="hidden" name="invitasjon" value={token} />}
+      {invitation?.status === "valid" && (
+        <p className="max-w-xl rounded-md border border-line bg-surface p-4">
+          <strong>{invitation.inviterName}</strong> har invitert deg. Når du har gitt løftet,
+          ser du hva {invitation.kind === "cabin" ? "som er delt med deg" : "du kan gjøre"}.
+        </p>
+      )}
       <div className="grid max-w-xl gap-4 sm:grid-cols-2">
         <Field label="Navn">
           <Input name="name" autoComplete="name" required defaultValue={sessionUser.name} />

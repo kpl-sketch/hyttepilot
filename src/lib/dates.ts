@@ -94,3 +94,99 @@ export function isRangeFree(
   }
   return true;
 }
+
+/**
+ * Sammenhengende ledige perioder fra og med i dag: de åpne periodene til
+ * eieren, slått sammen der de overlapper eller ligger inntil hverandre, minus
+ * nettene som er opptatt. endDate er seneste avreisedag, som ellers.
+ */
+export function freePeriods(
+  available: DateRange[],
+  taken: DateRange[],
+  today: string,
+): DateRange[] {
+  const open = available
+    .map((p) => ({
+      startDate: p.startDate < today ? today : p.startDate,
+      endDate: p.endDate,
+    }))
+    .filter((p) => p.startDate < p.endDate)
+    .sort((a, b) => (a.startDate < b.startDate ? -1 : 1));
+
+  const merged: DateRange[] = [];
+  for (const period of open) {
+    const last = merged[merged.length - 1];
+    if (last && period.startDate <= last.endDate) {
+      if (period.endDate > last.endDate) last.endDate = period.endDate;
+    } else {
+      merged.push({ ...period });
+    }
+  }
+
+  const busy = [...taken].sort((a, b) => (a.startDate < b.startDate ? -1 : 1));
+  const free: DateRange[] = [];
+  for (const period of merged) {
+    let cursor = period.startDate;
+    for (const stay of busy) {
+      if (stay.endDate <= cursor || stay.startDate >= period.endDate) continue;
+      if (stay.startDate > cursor) free.push({ startDate: cursor, endDate: stay.startDate });
+      if (stay.endDate > cursor) cursor = stay.endDate;
+    }
+    if (cursor < period.endDate) free.push({ startDate: cursor, endDate: period.endDate });
+  }
+  return free;
+}
+
+/** En måned i kalenderen: «2027-02». */
+export function monthOf(iso: string): string {
+  return iso.slice(0, 7);
+}
+
+/**
+ * Alle månedene fra og med måneden til `from` til og med måneden til `to`,
+ * på formen «2027-02». `max` er bare en sikring mot uendelige lister.
+ */
+export function monthsBetween(from: string, to: string, max = 120): string[] {
+  const months: string[] = [];
+  let [year, month] = from.split("-").map(Number);
+  const last = monthOf(to);
+  while (months.length < max) {
+    const key = `${year}-${String(month).padStart(2, "0")}`;
+    if (key > last) break;
+    months.push(key);
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+  }
+  return months;
+}
+
+/** Dagene i en måned som datoer, med `null` foran den første så uka starter på mandag. */
+export function monthGrid(monthKey: string): (string | null)[] {
+  const [year, month] = monthKey.split("-").map(Number);
+  const first = new Date(Date.UTC(year, month - 1, 1));
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const leading = (first.getUTCDay() + 6) % 7;
+  const days: (string | null)[] = Array(leading).fill(null);
+  for (let d = 1; d <= daysInMonth; d++) {
+    days.push(`${monthKey}-${String(d).padStart(2, "0")}`);
+  }
+  return days;
+}
+
+const WEEKDAYS_LONG = [
+  "søndag",
+  "mandag",
+  "tirsdag",
+  "onsdag",
+  "torsdag",
+  "fredag",
+  "lørdag",
+];
+
+/** «fredag 19. februar 2027» */
+export function formatDateLong(iso: string): string {
+  return `${WEEKDAYS_LONG[toUtc(iso).getUTCDay()]} ${formatDate(iso)}`;
+}

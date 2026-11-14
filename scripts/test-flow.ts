@@ -1,17 +1,37 @@
 /**
- * Går gjennom hele låneflyten mot en ekte Postgres-database og sjekker
- * reglene: hvem som slipper inn, hvem som ser hva, og at to lån ikke kan
- * overlappe. Kjøres med: npm test
+ * Går gjennom hele flyten mot en ekte Postgres-database og sjekker reglene:
+ * hvem som slipper inn, hvem som ser hva, deling og invitasjoner, og at to lån
+ * ikke kan overlappe. Kjøres med: npm test
+ *
+ * Testbrukerne har faste navn:
+ *   Anne Admin   administrator, eier «Annes hytte»
+ *   Kari Eier    hytteeier A, eier «Karis hytte»
+ *   Per Eier     hytteeier B, eier «Pers hytte», invitert av Kari
+ *   Ola Venn     venn C uten hytte, invitert av Per
+ *   Lise Venn    venn uten hytte, invitert av Per
+ * Alle adresser slutter på @test.local, som ikke finnes. Ingen e-post sendes:
+ * den skrives til filen .dev-outbox.jsonl, og testen leser den derfra.
+ *
+ * «Akseptansetest N» viser til listen i prosjektets leveransedokument.
  *
  * Testen TØMMER databasen. Den nekter derfor å kjøre mot noe annet enn en
  * lokal database.
  */
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { sql } from "drizzle-orm";
 import sharp from "sharp";
-import { addDays, todayInOslo } from "../src/lib/dates";
+import {
+  addDays,
+  formatDateLong,
+  freePeriods,
+  monthGrid,
+  monthOf,
+  monthsBetween,
+  todayInOslo,
+} from "../src/lib/dates";
 import { db } from "../src/lib/db";
 import { profile, user } from "../src/lib/db/schema";
 import { type Actor, UserError } from "../src/lib/errors";
@@ -33,16 +53,24 @@ import {
   getOwnCabin,
   getVisibleCabin,
   listOwnCabins,
-  listVisibleCabins,
+  listSharedCabins,
   updateCabin,
 } from "../src/lib/services/cabins";
 import {
   claimInvitations,
-  inviteFriend,
-  inviteOwner,
+  getCircle,
+  getInvitationForViewer,
+  getPublicInvitation,
+  inviteAccount,
+  inviteToCabin,
   isEmailAllowed,
-  listFriendInvitations,
-  removeFriendInvitation,
+  listAccountInvitations,
+  listCabinSharing,
+  previewShare,
+  revokeAccess,
+  revokeAccountInvitation,
+  revokeInvitation,
+  shareWithPerson,
 } from "../src/lib/services/invitations";
 import { isThrottled } from "../src/lib/services/login";
 import {
@@ -52,6 +80,9 @@ import {
   makeCoverPhoto,
   removeCabinPhoto,
 } from "../src/lib/services/photos";
+
+// E-postene leses fra utboksen. De trenger ikke stå i terminalen også.
+process.env.EMAIL_QUIET = "1";
 
 const url = process.env.DATABASE_URL ?? "";
 if (!/@(127\.0\.0\.1|localhost)[:/]/.test(url)) {
@@ -93,8 +124,49 @@ async function register(email: string, name: string): Promise<Actor> {
 async function actor(id: string): Promise<Actor> {
   const [u] = await db.select().from(user).where(sql`${user.id} = ${id}`);
   const [p] = await db.select().from(profile).where(sql`${profile.userId} = ${id}`);
+  assert.ok(p, "brukeren skal ha fullført velkomstsiden");
   const isAdmin = (process.env.ADMIN_EMAILS ?? "").split(",").includes(u.email);
-  return { id, email: u.email, name: u.name, isAdmin, isOwner: isAdmin || p.isOwner };
+  return { id, email: u.email, name: u.name, isAdmin };
+}
+
+type Sent = { to: string; subject: string; text: string };
+
+/** Alle e-postene i den lokale utboksen. Ingen av dem er sendt til noen. */
+async function outbox(): Promise<Sent[]> {
+  try {
+    const lines = (await readFile(".dev-outbox.jsonl", "utf8")).split("\n");
+    return lines.filter(Boolean).map((line) => JSON.parse(line) as Sent);
+  } catch {
+    return [];
+  }
+}
+
+/** Utfører handlingen og gir tilbake e-postene den førte til. */
+async function sentDuring<T>(fn: () => Promise<T>): Promise<{ result: T; mails: Sent[] }> {
+  const before = (await outbox()).length;
+  const result = await fn();
+  return { result, mails: (await outbox()).slice(before) };
+}
+
+/** Nøkkelen i invitasjonslenken i en e-post. */
+function tokenIn(mail: Sent): string {
+  const found = mail.text.match(/\/invitasjon\/([A-Za-z0-9_-]+)/);
+  assert.ok(found, "e-posten skal ha en invitasjonslenke");
+  return found[1];
+}
+
+/** Setter fristen på en invitasjon tilbake i tid, som om 30 dager var gått. */
+async function expire(email: string) {
+  await db.execute(
+    sql`update "invitation" set "expires_at" = now() - interval '1 day' where "email" = ${email} and "accepted_at" is null`,
+  );
+}
+
+async function accessCount(cabinId: string, userId: string): Promise<number> {
+  const result = await db.execute<{ n: number }>(
+    sql`select count(*)::int as n from "cabin_access" where "cabin_id" = ${cabinId} and "user_id" = ${userId}`,
+  );
+  return result.rows[0].n;
 }
 
 const cabinData = (name: string) => ({
@@ -198,74 +270,373 @@ async function main() {
 
   const admin = await register("admin@test.local", "Anne Admin");
   assert.equal(admin.isAdmin, true);
-
-  await inviteOwner(admin, "Kari@Test.Local");
-  await check("invitert hytteeier slipper inn", async () => {
-    assert.equal(await isEmailAllowed("kari@test.local"), true);
-  });
-  await check("samme hytteeier kan ikke inviteres to ganger", () =>
-    refused(() => inviteOwner(admin, "kari@test.local"), /allerede invitert/),
-  );
-  const kari = await register("kari@test.local", "Kari Eier");
-  await check("invitert hytteeier blir hytteeier ved registrering", () => {
-    assert.equal(kari.isOwner, true);
-    assert.equal(kari.isAdmin, false);
-  });
-  await check("hytteeier kan ikke invitere andre hytteeiere", () =>
-    refused(() => inviteOwner(kari, "per@test.local"), /administratorer/),
-  );
-  await check("ugyldig e-postadresse avvises", () =>
-    refused(() => inviteOwner(admin, "ikke-en-adresse")),
-  );
-
-  console.log("Hytter og synlighet");
-  const karisHytte = await createCabin(kari, cabinData("Karis hytte"));
   const annesHytte = await createCabin(admin, cabinData("Annes hytte"));
-  await addAvailability(kari, karisHytte, d(10), d(40));
   await addAvailability(admin, annesHytte, d(10), d(40));
 
-  await inviteFriend(kari, karisHytte, "ola@test.local");
-  await inviteFriend(kari, karisHytte, "lise@test.local");
-  const ola = await register("ola@test.local", "Ola Venn");
-  const lise = await register("lise@test.local", "Lise Venn");
-
-  await check("venn blir ikke hytteeier", () => {
-    assert.equal(ola.isOwner, false);
+  const kariInvitation = await sentDuring(() => inviteAccount(admin, "Kari@Test.Local", "Bli med!"));
+  await check("administrator kan slippe inn en person uten å dele en hytte", async () => {
+    assert.equal(kariInvitation.result.emailAccepted, true);
+    assert.equal(await isEmailAllowed("kari@test.local"), true);
+    assert.equal(kariInvitation.mails.length, 1);
+    assert.equal(kariInvitation.mails[0].to, "kari@test.local");
+    assert.match(kariInvitation.mails[0].text, /gir ikke tilgang til andres hytter/);
+    assert.match(kariInvitation.mails[0].text, /«Bli med!»/);
   });
-  await check("venn kan ikke legge inn hytte", () =>
-    refused(() => createCabin(ola, cabinData("Olas påfunn")), /inviterte hytteeiere/),
-  );
-  await check("venn ser bare hytta han er invitert til", async () => {
-    const seen = await listVisibleCabins(ola);
-    assert.deepEqual(
-      seen.map((c) => c.cabin.name),
-      ["Karis hytte"],
+  await check("samme adresse kan ikke inviteres to ganger", async () => {
+    const again = await sentDuring(() =>
+      refused(() => inviteAccount(admin, "kari@test.local"), /allerede invitert/),
     );
-    assert.equal(await getVisibleCabin(ola, annesHytte), null);
+    assert.equal(again.mails.length, 0, "ingen ny e-post");
   });
-  await check("hytteeier ser alle hyttene", async () => {
-    assert.equal((await listVisibleCabins(kari)).length, 2);
+  const kari = await register("kari@test.local", "Kari Eier");
+  await check("invitasjon fra administrator gir adgang, men ingen hytter", async () => {
+    assert.equal(kari.isAdmin, false);
+    assert.deepEqual(await listSharedCabins(kari), []);
+    assert.equal(await getVisibleCabin(kari, annesHytte), null);
+    const seen = await getInvitationForViewer(kari, tokenIn(kariInvitation.mails[0]));
+    assert.ok(seen?.mine);
+    assert.equal(seen.status, "accepted");
+    assert.equal(seen.cabin, null);
+  });
+  await check("bare administratorer kan invitere uten å dele en hytte", async () => {
+    await refused(() => inviteAccount(kari, "noen@test.local"), /administratorer/);
+    await refused(() => listAccountInvitations(kari), /administratorer/);
+    await refused(() => inviteAccount(admin, "kari@test.local"), /allerede med/);
+  });
+  await check("ugyldig e-postadresse avvises", () =>
+    refused(() => inviteAccount(admin, "ikke-en-adresse"), /gyldig e-postadresse/),
+  );
+  await check("administrator kan trekke tilbake en invitasjon som ikke er brukt", async () => {
+    await inviteAccount(admin, "angret@test.local");
+    const [waiting] = (await listAccountInvitations(admin)).filter((i) => i.status === "valid");
+    assert.equal(waiting.email, "angret@test.local");
+    await refused(() => revokeAccountInvitation(kari, waiting.id), /administratorer/);
+    await revokeAccountInvitation(admin, waiting.id);
+    assert.equal(await isEmailAllowed("angret@test.local"), false);
+  });
+
+  console.log("Privat som utgangspunkt");
+  const karisHytte = await createCabin(kari, cabinData("Karis hytte"));
+  await addAvailability(kari, karisHytte, d(10), d(40));
+  await check("en ny hytte er privat: ingen andre ser den", async () => {
+    assert.equal(await getVisibleCabin(admin, karisHytte), null);
+    assert.deepEqual(await listSharedCabins(admin), []);
+    const [own] = await listOwnCabins(kari);
+    assert.equal(own.sharedWith, 0);
+    assert.equal(own.pendingInvitations, 0);
+    assert.deepEqual(own.free, [{ startDate: d(10), endDate: d(40) }]);
+  });
+  await check("det å eie en hytte gir ikke innsyn i andres", async () => {
+    assert.equal(await getVisibleCabin(kari, annesHytte), null);
+    assert.deepEqual(await listSharedCabins(kari), []);
+  });
+  await check("administrator ser ikke andres hytter og kan ikke be om dem", async () => {
+    assert.equal(await getVisibleCabin(admin, karisHytte), null);
+    await refused(
+      () => createBooking(admin, karisHytte, { startDate: d(12), endDate: d(14), guests: "2", message: "" }),
+      /Fant ikke hytta/,
+    );
+    assert.equal(await listCabinSharing(admin, karisHytte), null);
+  });
+
+  console.log("Akseptansetest 1: A inviterer B til hytte A");
+  const perInvitation = await sentDuring(() =>
+    inviteToCabin(kari, karisHytte, " Per@Test.Local ", "Velkommen på hytta, Per!"),
+  );
+  const persToken = tokenIn(perInvitation.mails[0]);
+  await check("invitasjonen sier hvem som inviterer, hvilken hytte og hva mottakeren får", async () => {
+    assert.deepEqual(perInvitation.result, {
+      status: "invited",
+      recipient: "per@test.local",
+      emailAccepted: true,
+    });
+    assert.equal(perInvitation.mails.length, 1);
+    const [mail] = perInvitation.mails;
+    assert.equal(mail.to, "per@test.local");
+    assert.match(mail.subject, /^Kari Eier inviterer deg til /);
+    assert.match(mail.text, /dele hytta Karis hytte \(Hafjell\) med deg/);
+    assert.match(mail.text, /«Velkommen på hytta, Per!»/);
+    assert.match(mail.text, /Invitasjonen gjelder bare denne hytta/);
+    assert.match(mail.text, /gjelder for per@test\.local til /);
+    assert.equal(mail.text.includes("Fjellvegen"), false, "adressen skal ikke stå i e-posten");
+  });
+  await check("lenken viser bare avsender og maskert adresse uten innlogging", async () => {
+    const open = await getPublicInvitation(persToken);
+    assert.deepEqual(open, {
+      status: "valid",
+      kind: "cabin",
+      inviterName: "Kari Eier",
+      maskedEmail: "p•••@test.local",
+    });
+    assert.equal(JSON.stringify(open).includes("Karis hytte"), false);
+  });
+  await check("eieren ser invitasjonen som venter", async () => {
+    const sharing = await listCabinSharing(kari, karisHytte);
+    assert.deepEqual(sharing?.people, []);
+    assert.deepEqual(sharing?.invitations.map((i) => [i.email, i.expired]), [
+      ["per@test.local", false],
+    ]);
+    assert.equal((await listOwnCabins(kari))[0].pendingInvitations, 1);
+  });
+  const per = await register("per@test.local", "Per Eier");
+  await check("B ser riktig avsender og hytte etter innlogging", async () => {
+    const shared = await listSharedCabins(per);
+    assert.deepEqual(
+      shared.map((c) => [c.cabin.name, c.ownerName]),
+      [["Karis hytte", "Kari Eier"]],
+    );
+    assert.deepEqual(shared[0].free, [{ startDate: d(10), endDate: d(40) }]);
+    const welcome = await getInvitationForViewer(per, persToken);
+    assert.ok(welcome?.mine);
+    assert.equal(welcome.status, "accepted");
+    assert.equal(welcome.inviterName, "Kari Eier");
+    assert.equal(welcome.message, "Velkommen på hytta, Per!");
+    assert.deepEqual(welcome.cabin, { id: karisHytte, name: "Karis hytte", area: "Hafjell" });
+    assert.equal((await getCircle(per)).invitedBy, "Kari Eier");
+  });
+  await check("B ser ingen uvedkommende hytter", async () => {
+    assert.equal(await getVisibleCabin(per, annesHytte), null);
+    assert.equal((await listSharedCabins(per)).length, 1);
   });
   await check("Vipps-nummer og adresse følger ikke med til andre", async () => {
-    const seen = await getVisibleCabin(ola, karisHytte);
+    const seen = await getVisibleCabin(per, karisHytte);
     assert.ok(seen);
-    assert.equal("vippsNumber" in seen.cabin, false);
-    assert.equal("arrivalInfo" in seen.cabin, false);
-    for (const hidden of ["address", "latitude", "longitude"]) {
+    for (const hidden of ["vippsNumber", "arrivalInfo", "address", "latitude", "longitude"]) {
       assert.equal(hidden in seen.cabin, false, `${hidden} skal ikke følge med`);
     }
-    const [listed] = await listVisibleCabins(ola);
+    const [listed] = await listSharedCabins(per);
     assert.equal(JSON.stringify(listed).includes("Fjellvegen"), false);
   });
-  await check("bare eieren kan invitere til hytta", () =>
-    refused(() => inviteFriend(ola, karisHytte, "kompis@test.local"), /egne hytter/),
+
+  console.log("Akseptansetest 2: B deler frivillig egen hytte med A");
+  const persHytte = await createCabin(per, cabinData("Pers hytte"));
+  await addAvailability(per, persHytte, d(10), d(40));
+  await check("alle medlemmer kan legge inn hytte, og den er privat", async () => {
+    assert.equal((await listOwnCabins(per)).length, 1);
+    assert.equal(await getVisibleCabin(kari, persHytte), null);
+    assert.deepEqual(await listSharedCabins(kari), []);
+  });
+  await check("B får forslaget om å dele tilbake, men ingenting er delt", async () => {
+    const circle = await getCircle(per);
+    assert.deepEqual(circle.people, [
+      {
+        id: kari.id,
+        name: "Kari Eier",
+        sharesWithMe: [{ id: karisHytte, name: "Karis hytte" }],
+        iShareWith: [],
+      },
+    ]);
+  });
+  await check("forhåndsvisningen viser mottaker og hytte uten å dele noe", async () => {
+    const preview = await sentDuring(() =>
+      previewShare(per, persHytte, { personId: kari.id }, "Takk for sist"),
+    );
+    assert.equal(preview.result.recipient, "Kari Eier");
+    assert.equal(preview.result.cabinName, "Pers hytte");
+    assert.deepEqual(preview.result.sharedWith, []);
+    assert.match(preview.result.mail.subject, /Per Eier har delt Pers hytte med deg/);
+    assert.equal(preview.mails.length, 0, "forhåndsvisning sender ingenting");
+    assert.equal(await getVisibleCabin(kari, persHytte), null, "forhåndsvisning deler ingenting");
+  });
+  const shareBack = await sentDuring(() =>
+    shareWithPerson(per, persHytte, kari.id, "Takk for sist"),
   );
+  await check("etter Bs valg får A riktig tilgang og beskjed", async () => {
+    assert.deepEqual(shareBack.result, {
+      status: "shared",
+      recipient: "Kari Eier",
+      emailAccepted: true,
+    });
+    assert.deepEqual(
+      (await listSharedCabins(kari)).map((c) => [c.cabin.name, c.ownerName]),
+      [["Pers hytte", "Per Eier"]],
+    );
+    assert.equal(shareBack.mails.length, 1);
+    assert.equal(shareBack.mails[0].to, "kari@test.local");
+    assert.match(shareBack.mails[0].subject, /Per Eier har delt Pers hytte med deg/);
+    assert.match(shareBack.mails[0].text, /«Takk for sist»/);
+    const kretsen = await getCircle(kari);
+    assert.deepEqual(kretsen.people[0].sharesWithMe, [{ id: persHytte, name: "Pers hytte" }]);
+    assert.deepEqual(kretsen.people[0].iShareWith, [{ id: karisHytte, name: "Karis hytte" }]);
+  });
+  await check("samme deling kan ikke gjøres to ganger", async () => {
+    const again = await sentDuring(() =>
+      refused(() => shareWithPerson(per, persHytte, kari.id), /ser allerede/),
+    );
+    assert.equal(again.mails.length, 0);
+    assert.equal(await accessCount(persHytte, kari.id), 1);
+  });
+  await check("man kan bare dele på denne måten med folk i egen krets", async () => {
+    await refused(() => shareWithPerson(per, persHytte, admin.id), /kretsen din/);
+    await refused(() => shareWithPerson(per, persHytte, per.id), /kretsen din/);
+    await refused(() => shareWithPerson(per, persHytte, "finnes-ikke"), /kretsen din/);
+  });
+
+  console.log("Akseptansetest 3: B inviterer C til sin hytte");
+  const olaInvitation = await sentDuring(() => inviteToCabin(per, persHytte, "ola@test.local"));
+  const olasToken = tokenIn(olaInvitation.mails[0]);
+  await inviteToCabin(per, persHytte, "lise@test.local");
+  const ola = await register("ola@test.local", "Ola Venn");
+  const lise = await register("lise@test.local", "Lise Venn");
+  await check("C ser hytta til B", async () => {
+    assert.deepEqual(
+      (await listSharedCabins(ola)).map((c) => c.cabin.name),
+      ["Pers hytte"],
+    );
+  });
+  await check("C får ikke tilgang til As hytte gjennom B", async () => {
+    assert.equal(await getVisibleCabin(ola, karisHytte), null);
+    assert.equal(await getVisibleCabin(ola, annesHytte), null);
+    await refused(
+      () => createBooking(ola, karisHytte, { startDate: d(12), endDate: d(14), guests: "2", message: "" }),
+      /Fant ikke hytta/,
+    );
+  });
+  await check("C ser bare B i kretsen sin, ikke A eller andre B har delt med", async () => {
+    assert.deepEqual(
+      (await getCircle(ola)).people.map((p) => p.name),
+      ["Per Eier"],
+    );
+    assert.deepEqual(
+      (await getCircle(kari)).people.map((p) => p.name),
+      ["Per Eier"],
+    );
+    assert.deepEqual(
+      (await getCircle(per)).people.map((p) => p.name).sort(),
+      ["Kari Eier", "Lise Venn", "Ola Venn"],
+    );
+  });
+  await check("den som har fått tilgang, kan ikke dele hytta videre", async () => {
+    await refused(() => inviteToCabin(ola, persHytte, "kompis@test.local"), /egne hytter/);
+    await refused(() => previewShare(ola, persHytte, { email: "kompis@test.local" }, ""), /egne hytter/);
+    await refused(() => shareWithPerson(ola, persHytte, per.id), /egne hytter/);
+    assert.equal(await isEmailAllowed("kompis@test.local"), false);
+    assert.equal(await listCabinSharing(ola, persHytte), null);
+  });
   await check("bare eieren kan endre ledige perioder", () =>
-    refused(() => addAvailability(ola, karisHytte, d(50), d(60)), /Fant ikke hytta/),
+    refused(() => addAvailability(ola, persHytte, d(50), d(60)), /Fant ikke hytta/),
   );
-  await check("venn registrert fra før får tilgang med en gang", async () => {
-    await inviteFriend(admin, annesHytte, "lise@test.local");
-    assert.equal((await listVisibleCabins(lise)).length, 2);
+  await check("eieren ser hvem hytta er delt med", async () => {
+    const sharing = await listCabinSharing(per, persHytte);
+    assert.deepEqual(
+      sharing?.people.map((p) => [p.name, p.email]),
+      [
+        // Kari fikk hytta delt som person i kretsen. Adressen hennes vises ikke.
+        ["Kari Eier", null],
+        ["Lise Venn", "lise@test.local"],
+        ["Ola Venn", "ola@test.local"],
+      ],
+    );
+    assert.deepEqual(sharing?.invitations, []);
+    assert.equal((await listOwnCabins(per))[0].sharedWith, 3);
+  });
+  await check("person som er med fra før, får tilgang med en gang", async () => {
+    const shared = await sentDuring(() => inviteToCabin(admin, annesHytte, "lise@test.local"));
+    assert.equal(shared.result.status, "shared");
+    assert.equal(shared.result.recipient, "Lise Venn");
+    assert.equal(shared.mails.length, 1);
+    assert.match(shared.mails[0].subject, /Anne Admin har delt Annes hytte med deg/);
+    assert.equal((await listSharedCabins(lise)).length, 2);
+    await refused(() => inviteToCabin(admin, annesHytte, "lise@test.local"), /ser allerede/);
+  });
+  await check("eieren kan ikke invitere seg selv", () =>
+    refused(() => inviteToCabin(per, persHytte, "PER@test.local"), /din egen hytte/),
+  );
+
+  console.log("Akseptansetest 5: videresendt invitasjon og direkte lenker");
+  await check("en annen innlogget person får ingenting ut av en videresendt invitasjon", async () => {
+    const seen = await getInvitationForViewer(kari, olasToken);
+    assert.deepEqual(seen, {
+      mine: false,
+      status: "accepted",
+      inviterName: "Per Eier",
+      maskedEmail: "o•••@test.local",
+    });
+    await claimInvitations(lise.id, lise.email);
+    assert.equal(await getVisibleCabin(lise, karisHytte), null);
+  });
+  await check("en videresendt lenke slipper ikke inn en som ikke er invitert", async () => {
+    assert.equal(await isEmailAllowed("fremmed@test.local"), false);
+    assert.equal((await getPublicInvitation(olasToken))?.status, "accepted");
+  });
+  await check("direkte lenke til hytte gir ingenting uten deling", async () => {
+    assert.equal(await getVisibleCabin(lise, karisHytte), null);
+    assert.equal(await getVisibleCabin(ola, annesHytte), null);
+    assert.equal(await getVisibleCabin(ola, "ikke-en-id"), null);
+    assert.equal(await getOwnCabin(ola, persHytte), null);
+  });
+
+  console.log("Akseptansetest 6: gjentatt åpning, feil konto, utløp og tilbakekalling");
+  await check("gjentatt åpning gir verken dobbel tilgang eller ny e-post", async () => {
+    const again = await sentDuring(async () => {
+      for (let i = 0; i < 3; i++) await claimInvitations(per.id, per.email);
+      await getPublicInvitation(persToken);
+      await getInvitationForViewer(per, persToken);
+    });
+    assert.equal(again.mails.length, 0);
+    assert.equal(await accessCount(karisHytte, per.id), 1);
+    assert.equal((await getInvitationForViewer(per, persToken))?.status, "accepted");
+  });
+  await check("samme adresse kan ikke inviteres to ganger til samme hytte", async () => {
+    await inviteToCabin(kari, karisHytte, "nabo@test.local");
+    const again = await sentDuring(() =>
+      refused(() => inviteToCabin(kari, karisHytte, "Nabo@test.local"), /allerede invitert/),
+    );
+    assert.equal(again.mails.length, 0);
+    await refused(() => previewShare(kari, karisHytte, { email: "nabo@test.local" }, ""), /allerede invitert/);
+  });
+  await check("to like innsendinger samtidig gir én invitasjon og én e-post", async () => {
+    const both = await sentDuring(() =>
+      Promise.allSettled([
+        inviteToCabin(kari, karisHytte, "dobbel@test.local"),
+        inviteToCabin(kari, karisHytte, "dobbel@test.local"),
+      ]),
+    );
+    assert.equal(both.result.filter((r) => r.status === "fulfilled").length, 1);
+    assert.equal(both.mails.filter((m) => m.to === "dobbel@test.local").length, 1);
+    const sharing = await listCabinSharing(kari, karisHytte);
+    assert.equal(sharing?.invitations.filter((i) => i.email === "dobbel@test.local").length, 1);
+  });
+  await check("utløpt invitasjon slipper ingen inn og gir tydelig status", async () => {
+    const sent = await sentDuring(() => inviteToCabin(kari, karisHytte, "sen@test.local"));
+    const token = tokenIn(sent.mails[0]);
+    await expire("sen@test.local");
+    assert.equal((await getPublicInvitation(token))?.status, "expired");
+    assert.equal(await isEmailAllowed("sen@test.local"), false);
+    const sharing = await listCabinSharing(kari, karisHytte);
+    assert.equal(sharing?.invitations.find((i) => i.email === "sen@test.local")?.expired, true);
+
+    // Eieren kan sende en ny. Den gamle lenken virker fortsatt ikke.
+    const renewed = await sentDuring(() => inviteToCabin(kari, karisHytte, "sen@test.local"));
+    assert.equal(renewed.mails.length, 1);
+    assert.equal((await getPublicInvitation(tokenIn(renewed.mails[0])))?.status, "valid");
+    assert.equal((await getPublicInvitation(token))?.status, "revoked");
+    assert.equal(await isEmailAllowed("sen@test.local"), true);
+  });
+  await check("tilbaketrukket invitasjon slipper ingen inn og gir tydelig status", async () => {
+    const sent = await sentDuring(() => inviteToCabin(kari, karisHytte, "angrer@test.local"));
+    const token = tokenIn(sent.mails[0]);
+    const sharing = await listCabinSharing(kari, karisHytte);
+    const waiting = sharing?.invitations.find((i) => i.email === "angrer@test.local");
+    assert.ok(waiting);
+    await refused(() => revokeInvitation(per, waiting.id), /Fant ikke invitasjonen/);
+    await refused(() => revokeInvitation(kari, "ikke-en-id"), /Fant ikke invitasjonen/);
+    await revokeInvitation(kari, waiting.id);
+    assert.equal((await getPublicInvitation(token))?.status, "revoked");
+    assert.equal(await isEmailAllowed("angrer@test.local"), false);
+    // Skulle noen likevel ha rukket å opprette bruker, gir invitasjonen ingenting.
+    const sen = await register("angrer@test.local", "Anders Angrer");
+    assert.equal(await getVisibleCabin(sen, karisHytte), null);
+  });
+  await check("ukjent eller ødelagt lenke gir ingenting", async () => {
+    assert.equal(await getPublicInvitation("finnes-ikke-denne-noekkelen-her"), null);
+    assert.equal(await getPublicInvitation("kort"), null);
+    assert.equal(await getPublicInvitation("../../admin"), null);
+    assert.equal(await getInvitationForViewer(per, undefined), null);
+  });
+  await check("brukt invitasjon kan ikke trekkes tilbake som om den ventet", async () => {
+    const sharing = await listCabinSharing(per, persHytte);
+    assert.deepEqual(sharing?.invitations, []);
   });
 
   console.log("Adresse og kartposisjon");
@@ -333,7 +704,7 @@ async function main() {
   });
 
   const lookup = await fakeAddressSearch();
-  await check("adressesøket gir forslag med plassering til hytteeiere", async () => {
+  await check("adressesøket gir forslag med plassering", async () => {
     const found = await searchAddresses(kari, "Fjellvegen 1");
     assert.deepEqual(found, [
       { label: "Fjellvegen 12, 2636 Øyer", latitude: 61.234568, longitude: 10.456789 },
@@ -354,9 +725,10 @@ async function main() {
     ]);
     assert.equal((await labels("storgata 1 lillestrøm"))[0], "Storgata 1");
   });
-  await check("bare hytteeiere kan søke etter adresser", () =>
-    refused(() => searchAddresses(ola, "Fjellvegen 1"), /Bare hytteeiere/),
-  );
+  await check("adressesøket krever innlogging, men ikke egen hytte fra før", async () => {
+    await refused(() => searchAddresses(null, "Fjellvegen 1"), /Logg inn/);
+    assert.equal((await searchAddresses(ola, "Fjellvegen 1")).length, 2);
+  });
   await check("adressesøket tåler korte søk, jokertegn og at tjenesten er nede", async () => {
     const before = lookup.seen.length;
     assert.deepEqual(await searchAddresses(kari, "Fj"), []);
@@ -386,9 +758,10 @@ async function main() {
     assert.equal(bilder.length, 2);
     const own = (await listOwnCabins(kari)).find((c) => c.id === medBilder);
     assert.equal(own?.coverPhotoId, bilder[0].id);
-    const seen = (await listVisibleCabins(admin)).find((c) => c.cabin.id === medBilder);
+    await shareWithPerson(kari, medBilder, per.id);
+    const seen = (await listSharedCabins(per)).find((c) => c.cabin.id === medBilder);
     assert.equal(seen?.cabin.coverPhotoId, bilder[0].id);
-    assert.equal((await getVisibleCabin(admin, medBilder))?.cabin.coverPhotoId, bilder[0].id);
+    assert.equal((await getVisibleCabin(per, medBilder))?.cabin.coverPhotoId, bilder[0].id);
   });
   await check("bildene lagres forminsket, som WebP og uten GPS-posisjon", async () => {
     assert.deepEqual([bilder[0].width, bilder[0].height], [1600, 1200]);
@@ -425,22 +798,23 @@ async function main() {
   });
   await check("bare eieren kan legge til, fjerne og flytte bilder", async () => {
     const bilde = await photo("ny.jpg", "#f4c04e");
-    await refused(() => addCabinPhotos(ola, karisHytte, [bilde]), /Fant ikke hytta/);
+    await refused(() => addCabinPhotos(per, karisHytte, [bilde]), /Fant ikke hytta/);
     await refused(() => addCabinPhotos(admin, karisHytte, [bilde]), /Fant ikke hytta/);
     await refused(() => removeCabinPhoto(admin, bilder[0].id), /Fant ikke bildet/);
-    await refused(() => makeCoverPhoto(ola, bilder[1].id), /Fant ikke bildet/);
+    await refused(() => makeCoverPhoto(per, bilder[1].id), /Fant ikke bildet/);
     await refused(() => addCabinPhotos(kari, karisHytte, []), /minst ett bilde/);
     assert.equal(await addCabinPhotos(kari, karisHytte, [bilde]), 1);
     assert.equal(await addCabinPhotos(admin, annesHytte, [bilde]), 1);
   });
-  await check("bare de som får se hytta, får se bildene", async () => {
+  await check("bare de eieren har delt med, får se bildene, også via direkte lenke", async () => {
     const [karis] = await listCabinPhotos(karisHytte);
     const [annes] = await listCabinPhotos(annesHytte);
-    assert.ok(await getPhotoForViewer(ola, karis.id, "thumb"), "invitert venn");
-    assert.equal(await getPhotoForViewer(ola, annes.id, "thumb"), null);
-    assert.equal(await getPhotoForViewer(ola, annes.id, "full"), null);
-    assert.ok(await getPhotoForViewer(lise, annes.id, "full"), "venn invitert til begge");
-    assert.ok(await getPhotoForViewer(kari, annes.id, "full"), "annen hytteeier");
+    assert.ok(await getPhotoForViewer(per, karis.id, "thumb"), "Kari har delt med Per");
+    assert.ok(await getPhotoForViewer(lise, annes.id, "full"), "Anne har delt med Lise");
+    assert.equal(await getPhotoForViewer(ola, karis.id, "thumb"), null, "venn av Per");
+    assert.equal(await getPhotoForViewer(ola, karis.id, "full"), null);
+    assert.equal(await getPhotoForViewer(admin, karis.id, "full"), null, "administrator");
+    assert.equal(await getPhotoForViewer(kari, annes.id, "full"), null, "annen hytteeier");
     assert.equal(await getPhotoForViewer(kari, "ikke-en-id", "full"), null);
     assert.equal(await getPhotoForViewer(kari, randomUUID(), "full"), null);
   });
@@ -474,7 +848,7 @@ async function main() {
     assert.equal((await listCabinPhotos(medBilder))[0].id, before[0].id);
   });
 
-  console.log("Forespørsler");
+  console.log("Forespørsler (akseptansetest 4, 8 og 10)");
   const request = (start: number, end: number, guests = "2") => ({
     startDate: d(start),
     endDate: d(end),
@@ -483,47 +857,55 @@ async function main() {
   });
 
   await check("kan ikke låne utenfor ledig periode", () =>
-    refused(() => createBooking(ola, karisHytte, request(5, 12)), /ikke ledig/),
+    refused(() => createBooking(ola, persHytte, request(5, 12)), /ikke ledig/),
   );
   await check("kan ikke låne bakover i tid", () =>
-    refused(() => createBooking(ola, karisHytte, request(-3, 12)), /bak i tid/),
+    refused(() => createBooking(ola, persHytte, request(-3, 12)), /bak i tid/),
   );
   await check("kan ikke være flere enn sengeplassene", () =>
-    refused(() => createBooking(ola, karisHytte, request(12, 14, "9")), /sengeplasser/),
-  );
-  await check("kan ikke be om en hytte man ikke ser", () =>
-    refused(() => createBooking(ola, annesHytte, request(12, 14)), /Fant ikke hytta/),
+    refused(() => createBooking(ola, persHytte, request(12, 14, "9")), /sengeplasser/),
   );
   await check("eier kan ikke be om sin egen hytte", () =>
-    refused(() => createBooking(kari, karisHytte, request(12, 14)), /egen hytte/),
+    refused(() => createBooking(per, persHytte, request(12, 14)), /egen hytte/),
   );
 
-  const olasId = await createBooking(ola, karisHytte, request(12, 14));
+  const olasRequest = await sentDuring(() => createBooking(ola, persHytte, request(12, 14)));
+  const olasId = olasRequest.result;
+  await check("C har ingen hytte og kan likevel sende en vanlig forespørsel", async () => {
+    assert.deepEqual(await listOwnCabins(ola), []);
+    const [mine] = await listOutgoing(ola);
+    assert.equal(mine.booking.status, "pending");
+    assert.equal(mine.cabinName, "Pers hytte");
+  });
   await check("prisen er selvkost, påslag og vask", async () => {
     const [mine] = await listOutgoing(ola);
     // 2 netter × 400 = 800, 10 % påslag = 80, vask 500
     assert.equal(mine.booking.totalPrice, 1380);
-    assert.equal(mine.booking.status, "pending");
     assert.equal(mine.vippsNumber, null);
     assert.equal(mine.arrivalInfo, null);
     assert.deepEqual([mine.address, mine.latitude, mine.longitude], [null, null, null]);
   });
   await check("samme låner kan ikke sende to forespørsler for samme tid", () =>
-    refused(() => createBooking(ola, karisHytte, request(13, 15)), /allerede en forespørsel/),
+    refused(() => createBooking(ola, persHytte, request(13, 15)), /allerede en forespørsel/),
   );
 
-  const lisesId = await createBooking(lise, karisHytte, request(13, 16));
+  const lisesId = await createBooking(lise, persHytte, request(13, 16));
   await check("eieren ser begge forespørslene, med kontaktinfo", async () => {
-    const incoming = await listIncoming(kari);
+    const incoming = await listIncoming(per);
     assert.equal(incoming.length, 2);
     assert.equal(incoming[0].borrowerPhone, "91234567");
     assert.equal((await listIncoming(ola)).length, 0);
+    assert.equal((await listIncoming(admin)).length, 0, "administrator ser ikke andres forespørsler");
   });
-  await check("bare eieren kan svare", () =>
-    refused(() => decideBooking(lise, olasId, "approve", ""), /Fant ikke forespørselen/),
-  );
+  await check("en forespørsel sperrer ikke kalenderen før eieren har sagt ja", async () => {
+    assert.deepEqual((await getCalendar(persHytte)).taken, []);
+  });
+  await check("bare eieren kan svare", async () => {
+    await refused(() => decideBooking(lise, olasId, "approve", ""), /Fant ikke forespørselen/);
+    await refused(() => decideBooking(admin, olasId, "approve", ""), /Fant ikke forespørselen/);
+  });
 
-  await decideBooking(kari, olasId, "approve", "Velkommen!");
+  const approval = await sentDuring(() => decideBooking(per, olasId, "approve", "Velkommen!"));
   await check("etter ja vises Vipps-nummer, men ikke adressen", async () => {
     const [mine] = await listOutgoing(ola);
     assert.equal(mine.booking.status, "approved");
@@ -531,29 +913,37 @@ async function main() {
     assert.equal(mine.arrivalInfo, null);
     assert.deepEqual([mine.address, mine.latitude, mine.longitude], [null, null, null]);
     assert.equal(mine.booking.ownerReply, "Velkommen!");
+    assert.equal(approval.mails[0].text.includes("Fjellvegen"), false);
+    assert.equal(approval.mails[0].text.includes("Nøkkelboks"), false);
   });
   await check("eieren kan ikke si ja til to lån som overlapper", () =>
-    refused(() => decideBooking(kari, lisesId, "approve", ""), /allerede sagt ja/),
+    refused(() => decideBooking(per, lisesId, "approve", ""), /allerede sagt ja/),
   );
   await check("en forespørsel kan bare besvares én gang", () =>
-    refused(() => decideBooking(kari, olasId, "decline", ""), /allerede besvart/),
+    refused(() => decideBooking(per, olasId, "decline", ""), /allerede besvart/),
   );
   await check("nettene er opptatt i kalenderen etter ja", async () => {
-    const calendar = await getCalendar(karisHytte);
+    const calendar = await getCalendar(persHytte);
     assert.deepEqual(calendar.taken, [{ startDate: d(12), endDate: d(14) }]);
-    await refused(() => createBooking(lise, karisHytte, request(11, 13)), /ikke ledig/);
+    await refused(() => createBooking(lise, persHytte, request(11, 13)), /ikke ledig/);
+    const [shared] = (await listSharedCabins(lise)).filter((c) => c.cabin.id === persHytte);
+    assert.deepEqual(shared.free, [
+      { startDate: d(10), endDate: d(12) },
+      { startDate: d(14), endDate: d(40) },
+    ]);
   });
+  const decline = await sentDuring(() => decideBooking(per, lisesId, "decline", "Opptatt, dessverre."));
+  let lisesStay = "";
   await check("avreisedag kan være neste låners ankomstdag", async () => {
-    await decideBooking(kari, lisesId, "decline", "Opptatt, dessverre.");
-    const id = await createBooking(lise, karisHytte, request(14, 16));
-    await decideBooking(kari, id, "approve", "");
+    lisesStay = await createBooking(lise, persHytte, request(14, 16));
+    await decideBooking(per, lisesStay, "approve", "");
   });
 
-  console.log("Betaling og avlysning");
+  console.log("Betaling og avlysning (akseptansetest 8 og 10)");
   await check("venn kan ikke markere betalt", () =>
     refused(() => markPaid(ola, olasId), /Fant ikke forespørselen/),
   );
-  await markPaid(kari, olasId);
+  const payment = await sentDuring(() => markPaid(per, olasId));
   await check("etter betaling vises adressen til låneren", async () => {
     const mine = (await listOutgoing(ola)).find((b) => b.booking.id === olasId);
     assert.equal(mine?.booking.status, "paid");
@@ -561,8 +951,18 @@ async function main() {
     assert.equal(mine?.address, "Fjellvegen 12, 2636 Øyer");
     assert.deepEqual([mine?.latitude, mine?.longitude], [61.2345, 10.4567]);
   });
+  await check("adresse og ankomstinfo vises bare til den som har betalt", async () => {
+    const lises = await listOutgoing(lise);
+    assert.equal(lises.some((b) => b.booking.id === olasId), false, "andre ser ikke oppholdet");
+    const approved = lises.find((b) => b.booking.id === lisesStay);
+    assert.equal(approved?.booking.status, "approved");
+    assert.deepEqual([approved?.address, approved?.arrivalInfo], [null, null]);
+    assert.equal(JSON.stringify(await listSharedCabins(lise)).includes("Fjellvegen"), false);
+    assert.equal(JSON.stringify(await getVisibleCabin(lise, persHytte)).includes("Nøkkelboks"), false);
+    assert.equal(payment.mails[0].text.includes("Fjellvegen"), false, "adressen står ikke i e-posten");
+  });
   await check("kan ikke markere betalt to ganger", () =>
-    refused(() => markPaid(kari, olasId), /sagt ja til/),
+    refused(() => markPaid(per, olasId), /sagt ja til/),
   );
   await check("låneren kan ikke avlyse et betalt lån selv", () =>
     refused(() => cancelBooking(ola, olasId), /Ta kontakt med eieren/),
@@ -570,21 +970,168 @@ async function main() {
   await check("uvedkommende kan ikke avlyse", () =>
     refused(() => cancelBooking(admin, olasId), /Fant ikke forespørselen/),
   );
-  await check("eieren kan avlyse, og nettene blir ledige igjen", async () => {
-    await cancelBooking(kari, olasId);
-    const calendar = await getCalendar(karisHytte);
+
+  console.log("Akseptansetest 7: tilbaketrukket deling");
+  await check("eieren ser hva som blir stående før delingen fjernes", async () => {
+    const sharing = await listCabinSharing(per, persHytte);
+    const olas = sharing?.people.find((p) => p.userId === ola.id);
+    assert.deepEqual([olas?.pendingRequests, olas?.confirmedStays], [0, 1]);
+  });
+  await check("bare eieren kan trekke tilbake en deling", async () => {
+    await refused(() => revokeAccess(lise, persHytte, ola.id), /Fant ikke delingen/);
+    await refused(() => revokeAccess(admin, persHytte, ola.id), /Fant ikke delingen/);
+    await refused(() => revokeAccess(per, persHytte, admin.id), /Fant ikke delingen/);
+  });
+  const revocation = await sentDuring(() => revokeAccess(per, persHytte, ola.id));
+  await check("etter tilbaketrekking ser ikke personen hytta og kan ikke sende nye forespørsler", async () => {
+    assert.deepEqual(revocation.result, { name: "Ola Venn", cabinId: persHytte });
+    assert.equal(await getVisibleCabin(ola, persHytte), null);
+    assert.deepEqual(await listSharedCabins(ola), []);
+    assert.deepEqual((await getCircle(ola)).people, []);
+    await refused(() => createBooking(ola, persHytte, request(20, 22)), /Fant ikke hytta/);
+  });
+  await check("oppholdet som var bekreftet, står urørt", async () => {
+    const mine = (await listOutgoing(ola)).find((b) => b.booking.id === olasId);
+    assert.equal(mine?.booking.status, "paid");
+    assert.equal(mine?.address, "Fjellvegen 12, 2636 Øyer");
+    assert.equal(mine?.arrivalInfo, "Nøkkelboks kode 1234");
+    const incoming = (await listIncoming(per)).find((b) => b.booking.id === olasId);
+    assert.equal(incoming?.booking.status, "paid");
+    const taken = (await getCalendar(persHytte)).taken;
+    assert.equal(taken.some((t) => t.startDate === d(12) && t.endDate === d(14)), true);
+    assert.equal(revocation.mails.length, 0, "ingen e-post, og ingenting er avlyst");
+  });
+  const cancellation = await sentDuring(() => cancelBooking(per, olasId));
+  await check("eieren avlyser med en egen handling, og nettene blir ledige igjen", async () => {
+    const calendar = await getCalendar(persHytte);
     assert.deepEqual(calendar.taken, [{ startDate: d(14), endDate: d(16) }]);
+    const mine = (await listOutgoing(ola)).find((b) => b.booking.id === olasId);
+    assert.equal(mine?.booking.status, "cancelled");
+    assert.deepEqual([mine?.address, mine?.arrivalInfo, mine?.vippsNumber], [null, null, null]);
+  });
+  await check("eieren kan dele med samme person på nytt", async () => {
+    const again = await inviteToCabin(per, persHytte, "ola@test.local");
+    assert.equal(again.status, "shared");
+    assert.ok(await getVisibleCabin(ola, persHytte));
+    assert.equal(await accessCount(persHytte, ola.id), 1);
   });
 
-  console.log("Fjerne tilgang");
-  await check("eieren kan fjerne en venns tilgang", async () => {
-    const friends = await listFriendInvitations(kari, karisHytte);
-    const olasInvitation = friends.find((f) => f.email === "ola@test.local");
-    assert.ok(olasInvitation?.acceptedAt);
-    await refused(() => removeFriendInvitation(lise, olasInvitation.id), /Fant ikke/);
-    await removeFriendInvitation(kari, olasInvitation.id);
-    assert.equal((await listVisibleCabins(ola)).length, 0);
-    assert.equal(await getVisibleCabin(ola, karisHytte), null);
+  console.log("Akseptansetest 9: to bekreftelser samtidig");
+  await inviteToCabin(admin, annesHytte, "ola@test.local");
+  await check("to overlappende forespørsler kan ikke bekreftes samtidig", async () => {
+    const rounds = 6;
+    for (let round = 0; round < rounds; round++) {
+      const start = 12 + round * 4;
+      const first = await createBooking(ola, annesHytte, request(start, start + 3));
+      const second = await createBooking(lise, annesHytte, request(start + 1, start + 4));
+      const answers = await Promise.allSettled([
+        decideBooking(admin, first, "approve", ""),
+        decideBooking(admin, second, "approve", ""),
+      ]);
+      assert.equal(
+        answers.filter((a) => a.status === "fulfilled").length,
+        1,
+        `runde ${round + 1}: nøyaktig ett ja skal gå gjennom`,
+      );
+      const stopped = answers.find((a) => a.status === "rejected");
+      assert.ok(stopped?.status === "rejected" && stopped.reason instanceof UserError);
+      assert.match(stopped.reason.message, /allerede sagt ja/);
+    }
+    const confirmed = await db.execute<{ start_date: string; end_date: string }>(
+      sql`select "start_date", "end_date" from "booking" where "cabin_id" = ${annesHytte} and "status" in ('approved', 'paid') order by "start_date"`,
+    );
+    assert.equal(confirmed.rows.length, rounds);
+    for (let i = 1; i < confirmed.rows.length; i++) {
+      assert.ok(
+        confirmed.rows[i - 1].end_date <= confirmed.rows[i].start_date,
+        "ingen bekreftede opphold overlapper",
+      );
+    }
+  });
+
+  console.log("Akseptansetest 11: varsler");
+  const only = (mails: Sent[], to: string, subject: RegExp) => {
+    assert.equal(mails.length, 1, `forventet én e-post, fikk ${mails.length}`);
+    assert.equal(mails[0].to, to);
+    assert.match(mails[0].subject, subject);
+  };
+  await check("hvert steg gir én e-post, til riktig mottaker", () => {
+    only(olasRequest.mails, "per@test.local", /^Ola Venn vil låne Pers hytte$/);
+    only(approval.mails, "ola@test.local", /^Ja! Du får låne Pers hytte$/);
+    only(decline.mails, "lise@test.local", /^Pers hytte passer ikke denne gangen$/);
+    only(payment.mails, "ola@test.local", /^Pers hytte er reservert$/);
+    only(cancellation.mails, "ola@test.local", /^Lånet av Pers hytte er avlyst$/);
+    only(olaInvitation.mails, "ola@test.local", /^Per Eier inviterer deg til /);
+  });
+  await check("ingen e-post går til andre enn testbrukerne", async () => {
+    const all = await outbox();
+    assert.ok(all.length > 0);
+    assert.deepEqual(
+      all.filter((mail) => !mail.to.endsWith("@test.local")),
+      [],
+    );
+  });
+  await check("tjenesten skiller mellom lagret invitasjon og e-post som leverandøren tok imot", async () => {
+    // Uten e-postoppsett i produksjon tar ingen leverandør imot e-posten.
+    const env = process.env as Record<string, string | undefined>;
+    const before = env.NODE_ENV;
+    const silenced = console.error;
+    env.NODE_ENV = "production";
+    console.error = () => {};
+    try {
+      const sent = await sentDuring(() => inviteToCabin(kari, karisHytte, "uten-epost@test.local"));
+      assert.equal(sent.result.status, "invited");
+      assert.equal(sent.result.emailAccepted, false, "eieren får vite at e-posten ikke gikk");
+      assert.equal(sent.mails.length, 0);
+    } finally {
+      env.NODE_ENV = before;
+      console.error = silenced;
+    }
+    assert.equal(await isEmailAllowed("uten-epost@test.local"), true, "invitasjonen er lagret");
+  });
+
+  console.log("Kalender (akseptansetest 13)");
+  await check("ledige perioder slås sammen, og opptatte netter trekkes fra", () => {
+    const free = freePeriods(
+      [
+        { startDate: "2027-01-01", endDate: "2027-01-10" },
+        { startDate: "2027-01-10", endDate: "2027-01-20" },
+        { startDate: "2027-03-01", endDate: "2027-03-05" },
+        { startDate: "2026-12-01", endDate: "2026-12-03" },
+      ],
+      [
+        { startDate: "2027-01-05", endDate: "2027-01-07" },
+        { startDate: "2027-03-01", endDate: "2027-03-05" },
+      ],
+      "2026-12-02",
+    );
+    assert.deepEqual(free, [
+      { startDate: "2026-12-02", endDate: "2026-12-03" },
+      { startDate: "2027-01-01", endDate: "2027-01-05" },
+      { startDate: "2027-01-07", endDate: "2027-01-20" },
+    ]);
+    assert.deepEqual(freePeriods([], [], "2026-12-02"), []);
+  });
+  await check("kalenderen når siste registrerte dato, også etter tolv måneder", async () => {
+    await addAvailability(kari, karisHytte, d(380), d(430));
+    const calendar = await getCalendar(karisHytte);
+    const lastDay = calendar.available.reduce((max, p) => (p.endDate > max ? p.endDate : max), today);
+    assert.equal(lastDay, d(430));
+    const months = monthsBetween(today, lastDay);
+    assert.ok(months.length >= 14, `forventet minst 14 måneder, fikk ${months.length}`);
+    assert.equal(months[0], monthOf(today));
+    assert.equal(months[months.length - 1], monthOf(d(430)));
+    assert.equal(new Set(months).size, months.length);
+    const free = freePeriods(calendar.available, calendar.taken, calendar.today);
+    assert.deepEqual(free[free.length - 1], { startDate: d(380), endDate: d(430) });
+  });
+  await check("hver dato har ukedag og dato til skjermleseren, og uka starter på mandag", () => {
+    assert.equal(formatDateLong("2027-02-19"), "fredag 19. februar 2027");
+    assert.deepEqual(monthGrid("2027-02").slice(0, 2), ["2027-02-01", "2027-02-02"]);
+    assert.equal(monthGrid("2027-02").length, 28);
+    // 1. november 2026 er en søndag: seks tomme ruter først.
+    assert.deepEqual(monthGrid("2026-11").slice(0, 7), [null, null, null, null, null, null, "2026-11-01"]);
+    assert.deepEqual(monthsBetween("2026-11-14", "2027-02-01"), ["2026-11", "2026-12", "2027-01", "2027-02"]);
   });
 
   console.log("Brems på innlogging");

@@ -15,8 +15,12 @@ Pilot for en lukket tjeneste der hytteeiere låner ut hytta til folk de kjenner.
 - Språk: all tekst brukeren ser, er på norsk bokmål. Kommentarer i koden er også på norsk.
 - Tjenestens navn er et arbeidsnavn. Skriv det aldri rett inn i koden. Bruk `APP_NAME` fra `src/lib/brand.ts`.
 - Regler og tilgangssjekker ligger i `src/lib/services/`. Sider og skjemaer kaller tjenestelaget og sjekker ikke tilgang selv.
+- En hytte er privat til eieren deler den. Innsyn i en annens hytte følger bare av en rad i `cabin_access`, som bare eieren kan lage. Legg aldri inn en regel som gir innsyn til «alle hytteeiere», administratorer eller venners venner.
+- En invitasjon gir tilgang til den som logger inn med adressen den ble sendt til. Nøkkelen i lenken gir ingenting alene. Sider som kan åpnes uten innlogging, viser ikke noe om hytta.
+- Å fjerne en deling skal aldri endre en forespørsel eller et opphold.
 - Brukeren hentes alltid fra innloggingen med `requireViewer()`, aldri fra skjemafelt.
 - Vipps-nummer, adresse, kartposisjon (`address`, `latitude`, `longitude`) og `arrivalInfo` skal ikke sendes til andre enn eieren før reglene i `bookings.ts` tillater det.
 - Bildene ligger i tabellen `cabin_photo`. Kolonnene `full` og `thumb` er store: hent dem bare i `getPhotoForViewer`, aldri i lister. Bilder vises gjennom `/bilder/[id]`, som bruker de samme reglene som hytta.
 - Etter endring i `src/lib/db/schema.ts`: kjør `npm run db:generate` og legg ved den nye filen i `drizzle/`.
-- Før du sier at noe virker: kjør `npm run typecheck`, `npm run lint` og `npm test` (lokal database).
+- Før du sier at noe virker: kjør `npm run typecheck`, `npm run lint` og `npm test` (lokal database). Endrer du sider eller skjemaer, kjør også `npm run test:nettleser`.
+- Test bare mot lokal database og med adresser som slutter på `@test.local`. Send aldri e-post til ekte mottakere fra en test.

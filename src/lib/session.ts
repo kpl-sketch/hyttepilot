@@ -27,14 +27,12 @@ export const getViewer = cache(async (): Promise<Viewer | null> => {
     .where(eq(profile.userId, sessionUser.id))
     .limit(1);
   if (!row) return null;
-  const isAdmin = isAdminEmail(sessionUser.email);
   return {
     id: sessionUser.id,
     email: sessionUser.email,
     name: sessionUser.name,
     phone: row.phone,
-    isAdmin,
-    isOwner: isAdmin || row.isOwner,
+    isAdmin: isAdminEmail(sessionUser.email),
   };
 });
 

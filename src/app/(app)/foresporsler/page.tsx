@@ -130,8 +130,8 @@ export default async function RequestsPage({ searchParams }: PageProps<"/forespo
         {outgoing.length === 0 && (
           <Panel>
             <p className="text-lg">Du har ikke bedt om å låne noen hytte ennå.</p>
-            <ButtonLink href="/hytter" className="mt-4">
-              Se hyttene
+            <ButtonLink href="/krets" className="mt-4">
+              Se hyttene som er delt med deg
             </ButtonLink>
           </Panel>
         )}

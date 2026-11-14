@@ -1,7 +1,7 @@
 import "server-only";
-import { and, asc, eq, getTableColumns, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, gt, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
-import { isIsoDate, todayInOslo } from "../dates";
+import { type DateRange, freePeriods, isIsoDate, todayInOslo } from "../dates";
 import { db } from "../db";
 import { availability, booking, cabin, cabinAccess, cabinPhoto, user } from "../db/schema";
 import { type Actor, UserError } from "../errors";
@@ -107,31 +107,30 @@ const publicCabin = {
   coverPhotoId,
 };
 
-/** Hyttene brukeren får se. Hytteeiere ser alle. Venner ser bare det de er invitert til. */
-export async function listVisibleCabins(actor: Actor) {
-  const base = db
-    .select({ cabin: publicCabin, ownerName: user.name })
-    .from(cabin)
-    .innerJoin(user, eq(user.id, cabin.ownerId));
-
-  if (actor.isOwner) return base.orderBy(asc(cabin.area), asc(cabin.name));
-
-  const granted = await db
-    .select({ cabinId: cabinAccess.cabinId })
+/**
+ * Hyttene andre har delt med brukeren, med de ledige periodene framover.
+ * Egne hytter er ikke med: de hentes med listOwnCabins.
+ *
+ * En rad i cabin_access er den eneste veien til innsyn i en annens hytte.
+ * Det gjelder også for hytteeiere og administratorer.
+ */
+export async function listSharedCabins(actor: Actor) {
+  const rows = await db
+    .select({ cabin: publicCabin, ownerName: user.name, sharedAt: cabinAccess.createdAt })
     .from(cabinAccess)
-    .where(eq(cabinAccess.userId, actor.id));
-  if (granted.length === 0) return [];
-  return base
-    .where(
-      inArray(
-        cabin.id,
-        granted.map((g) => g.cabinId),
-      ),
-    )
+    .innerJoin(cabin, eq(cabin.id, cabinAccess.cabinId))
+    .innerJoin(user, eq(user.id, cabin.ownerId))
+    .where(and(eq(cabinAccess.userId, actor.id), ne(cabin.ownerId, actor.id)))
     .orderBy(asc(cabin.area), asc(cabin.name));
+  const calendars = await getCalendars(rows.map((row) => row.cabin.id));
+  return rows.map((row) => ({ ...row, free: freeNow(calendars.get(row.cabin.id)) }));
 }
 
-/** Én hytte, eller null hvis brukeren ikke har lov til å se den. */
+/**
+ * Én hytte, eller null hvis brukeren ikke har lov til å se den: enten eier
+ * brukeren hytta, eller så har eieren delt den med brukeren. Alle sider,
+ * bilder og forespørsler går gjennom denne sjekken.
+ */
 export async function getVisibleCabin(actor: Actor, cabinId: string) {
   if (!z.uuid().safeParse(cabinId).success) return null;
   const [row] = await db
@@ -141,7 +140,7 @@ export async function getVisibleCabin(actor: Actor, cabinId: string) {
     .where(eq(cabin.id, cabinId))
     .limit(1);
   if (!row) return null;
-  if (actor.isOwner || row.cabin.ownerId === actor.id) return row;
+  if (row.cabin.ownerId === actor.id) return row;
 
   const [granted] = await db
     .select({ cabinId: cabinAccess.cabinId })
@@ -151,12 +150,35 @@ export async function getVisibleCabin(actor: Actor, cabinId: string) {
   return granted ? row : null;
 }
 
+/** Så mange har eieren delt hytta med. */
+const sharedWithCount = sql<number>`(
+  select count(*)::int from cabin_access a where a.cabin_id = "cabin"."id"
+)`;
+
+/** Invitasjoner til hytta som er sendt, men ikke tatt i bruk ennå. */
+const pendingInvitationCount = sql<number>`(
+  select count(*)::int from invitation i
+  where i.cabin_id = "cabin"."id"
+    and i.accepted_at is null and i.revoked_at is null and i.expires_at > now()
+)`;
+
+/**
+ * Brukerens egne hytter, med det som trengs for å si om hytta faktisk er
+ * delt: hvor mange som ser den, og hvilke perioder som er ledige.
+ */
 export async function listOwnCabins(actor: Actor) {
-  return db
-    .select({ ...getTableColumns(cabin), coverPhotoId })
+  const rows = await db
+    .select({
+      ...getTableColumns(cabin),
+      coverPhotoId,
+      sharedWith: sharedWithCount,
+      pendingInvitations: pendingInvitationCount,
+    })
     .from(cabin)
     .where(eq(cabin.ownerId, actor.id))
     .orderBy(asc(cabin.name));
+  const calendars = await getCalendars(rows.map((row) => row.id));
+  return rows.map((row) => ({ ...row, free: freeNow(calendars.get(row.id)) }));
 }
 
 export async function getOwnCabin(actor: Actor, cabinId: string) {
@@ -172,11 +194,11 @@ export async function getOwnCabin(actor: Actor, cabinId: string) {
 /**
  * Legger inn en hytte, med bilder hvis eieren valgte noen. Bildene behandles
  * før noe lagres, så et bilde som ikke kan leses, stopper hele innleggingen.
+ *
+ * Alle medlemmer kan legge inn hytte. En ny hytte er privat: ingen andre ser
+ * den før eieren deler den (se services/invitations.ts).
  */
 export async function createCabin(actor: Actor, data: unknown, photoFiles: File[] = []) {
-  if (!actor.isOwner) {
-    throw new UserError("Bare inviterte hytteeiere kan legge inn hytter.");
-  }
   const input = cabinValues(data);
   const photos = await processPhotos(photoFiles);
   return db.transaction(async (tx) => {
@@ -231,29 +253,63 @@ export async function removeAvailability(actor: Actor, availabilityId: string) {
   await db.delete(availability).where(eq(availability.id, availabilityId));
 }
 
-/** Ledige perioder og opptatte netter fra i dag og framover. */
-export async function getCalendar(cabinId: string) {
+export type Calendar = {
+  today: string;
+  available: (DateRange & { id: string })[];
+  taken: DateRange[];
+};
+
+/**
+ * Ledige perioder og opptatte netter fra i dag og framover, for flere hytter
+ * på én gang. Den som kaller, har allerede sjekket at brukeren får se hyttene.
+ * En natt er opptatt fra eieren har sagt ja (status approved eller paid).
+ */
+export async function getCalendars(cabinIds: string[]): Promise<Map<string, Calendar>> {
   const today = todayInOslo();
+  const calendars = new Map<string, Calendar>(
+    cabinIds.map((id) => [id, { today, available: [], taken: [] }]),
+  );
+  if (cabinIds.length === 0) return calendars;
+
   const [available, taken] = await Promise.all([
     db
       .select({
         id: availability.id,
+        cabinId: availability.cabinId,
         startDate: availability.startDate,
         endDate: availability.endDate,
       })
       .from(availability)
-      .where(and(eq(availability.cabinId, cabinId), gt(availability.endDate, today)))
+      .where(and(inArray(availability.cabinId, cabinIds), gt(availability.endDate, today)))
       .orderBy(asc(availability.startDate)),
     db
-      .select({ startDate: booking.startDate, endDate: booking.endDate })
+      .select({
+        cabinId: booking.cabinId,
+        startDate: booking.startDate,
+        endDate: booking.endDate,
+      })
       .from(booking)
       .where(
         and(
-          eq(booking.cabinId, cabinId),
+          inArray(booking.cabinId, cabinIds),
           inArray(booking.status, ["approved", "paid"]),
           gt(booking.endDate, today),
         ),
       ),
   ]);
-  return { today, available, taken };
+  for (const { cabinId, ...period } of available) calendars.get(cabinId)?.available.push(period);
+  for (const { cabinId, ...stay } of taken) calendars.get(cabinId)?.taken.push(stay);
+  return calendars;
+}
+
+/** Ledige perioder og opptatte netter for én hytte. */
+export async function getCalendar(cabinId: string): Promise<Calendar> {
+  const calendars = await getCalendars([cabinId]);
+  return calendars.get(cabinId) ?? { today: todayInOslo(), available: [], taken: [] };
+}
+
+/** Periodene som faktisk kan forespørres nå: åpnet av eieren og ikke opptatt. */
+function freeNow(calendar: Calendar | undefined): DateRange[] {
+  if (!calendar) return [];
+  return freePeriods(calendar.available, calendar.taken, calendar.today);
 }
