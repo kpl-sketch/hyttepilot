@@ -10,7 +10,12 @@ if (!url) {
   process.exit(0);
 }
 
-const pool = new pg.Pool({ connectionString: url, max: 1 });
+// Samme justering som i src/lib/db/index.ts: be uttrykkelig om verify-full.
+const connectionString = url.replace(
+  /([?&]sslmode=)(prefer|require|verify-ca)\b/,
+  "$1verify-full",
+);
+const pool = new pg.Pool({ connectionString, max: 1 });
 try {
   await migrate(drizzle(pool), { migrationsFolder: "./drizzle" });
   console.log("Databasen er oppdatert.");

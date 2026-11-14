@@ -18,8 +18,9 @@ export async function sendEmail(mail: Mail): Promise<void> {
     const useOutbox =
       process.env.NODE_ENV !== "production" || process.env.EMAIL_DEV_OUTBOX === "1";
     if (!useOutbox) {
+      // Emnet logges ikke: e-posten med innloggingskode har koden i emnet.
       console.error(
-        `E-post er ikke satt opp (mangler RESEND_API_KEY eller EMAIL_FROM). Ikke sendt: «${mail.subject}»`,
+        "E-post er ikke satt opp (mangler RESEND_API_KEY eller EMAIL_FROM). En e-post ble ikke sendt.",
       );
       return;
     }
