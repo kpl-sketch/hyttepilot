@@ -11,11 +11,13 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.mjs",
     "overgang:rapport": "node --env-file-if-exists=.env.local scripts/overgang-rapport.mjs",
-    "test": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env.local scripts/test-flow.ts",
+    "test": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env.local scripts/test-flow.ts && npm run test:database",
+    "test:database": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env.local scripts/test-pool.ts",
     "test:nettleser": "node --env-file=.env.local scripts/test-browser.mjs"
   },
   "dependencies": {
     "@fontsource-variable/schibsted-grotesk": "^5.3.0",
+    "@vercel/functions": "^3.11.3",
     "better-auth": "^1.7.23",
     "drizzle-orm": "^0.45.4",
     "next": "16.4.6",

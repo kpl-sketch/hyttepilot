@@ -1,6 +1,7 @@
 import "server-only";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
+import type { Pool } from "pg";
+import { createPool } from "./pool";
 import * as schema from "./schema";
 
 // Én tilkoblingspool per serverprosess. I utvikling lagres den på globalThis,
@@ -19,8 +20,7 @@ function connectionString(): string | undefined {
   );
 }
 
-const pool =
-  globalForDb.pgPool ?? new Pool({ connectionString: connectionString(), max: 5 });
+const pool = globalForDb.pgPool ?? createPool({ connectionString: connectionString() });
 
 if (process.env.NODE_ENV !== "production") globalForDb.pgPool = pool;
 

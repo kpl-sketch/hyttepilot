@@ -125,7 +125,7 @@ skrives i stedet til filen `.dev-outbox.jsonl` og til terminalen.
 | `npm run build` | Oppdaterer databasen og bygger for produksjon |
 | `npm run typecheck` | Sjekker typene |
 | `npm run lint` | Sjekker kodestil |
-| `npm test` | Går gjennom deling, invitasjoner og låneflyten mot en **lokal** database. Tømmer databasen. |
+| `npm test` | Går gjennom deling, invitasjoner og låneflyten mot en **lokal** database, og sjekker tilkoblingene til databasen. Tømmer databasen. |
 | `npm run test:nettleser` | Samme flyt i en nettleser på mobilstørrelse, delvis bare med tastatur. Se toppen av `scripts/test-browser.mjs`. Tømmer databasen. |
 | `npm run overgang:rapport` | Viser hvilke tilganger som faller bort ved overgangen til eksplisitt deling. Leser bare. |
 | `npm run db:generate` | Lager en ny migrering etter endring i `src/lib/db/schema.ts` |
@@ -159,6 +159,8 @@ src/components/date-range-picker.tsx  Kalenderen, med status som tekst for hver 
 src/app/(app)/actions.ts  Skjemaene: henter brukeren og kaller tjenestelaget
 src/proxy.ts              Sender uinnloggede til innlogging
 scripts/test-flow.ts      Testen av reglene, mot databasen
+scripts/test-pool.ts      Testen av tilkoblingene til databasen
+src/lib/db/pool.ts        Tilkoblingene til databasen, tilpasset Vercel
 scripts/test-browser.mjs  Testen i nettleser, på mobilstørrelse og med tastatur
 scripts/overgang-rapport.mjs  Leserapport før overgangen til eksplisitt deling
 scripts/pilotmaaling.sql  Tallene for piloten: invitert, delt, invitert videre, opphold
@@ -173,6 +175,14 @@ Regelen for ny funksjonalitet: tilgangssjekken skal ligge i tjenestelaget
 - **Next.js 16 med Cache Components.** Alt som leser innloggingen, må ligge bak
   `<Suspense>`. Se `src/app/(app)/layout.tsx`. Dokumentasjonen for denne versjonen
   ligger i `node_modules/next/dist/docs/`.
+- **Vercel setter serveren på pause mellom forespørsler.** Arbeid mot databasen
+  som ikke er avsluttet da, blir stående halvferdig, og neste besøk får feil som
+  «Authentication timed out». `src/lib/db/pool.ts` holder derfor serveren våken
+  til hver tilkobling er levert tilbake og lukket, og prøver en spørring på nytt
+  når tilkoblingen sviktet og det er trygt. Bruk alltid `db` fra `src/lib/db`, og
+  lag ikke egne tilkoblinger. Vercels `attachDatabasePool` brukes ikke: den leser
+  klokka når en tilkobling hentes, og det gir feil i Next når sider hentes på
+  forhånd.
 - **Bildene ligger i databasen** (tabellen `cabin_photo`), ikke i en egen
   fillagring. Det holder for piloten og gir samme tilgangskontroll som resten av
   hytta. Nettleseren forminsker hvert bilde før opplasting, og serveren lagrer det

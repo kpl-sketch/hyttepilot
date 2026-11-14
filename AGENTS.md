@@ -24,6 +24,7 @@ Pilot for en lukket tjeneste der hytteeiere låner ut hytta til folk de kjenner.
 - Brukeren hentes alltid fra innloggingen med `requireViewer()`, aldri fra skjemafelt.
 - Vipps-nummer, adresse, kartposisjon (`address`, `latitude`, `longitude`) og `arrivalInfo` skal ikke sendes til andre enn eieren før reglene i `bookings.ts` tillater det.
 - Bildene ligger i tabellen `cabin_photo`. Kolonnene `full` og `thumb` er store: hent dem bare i `getPhotoForViewer`, aldri i lister. Bilder vises gjennom `/bilder/[id]`, som bruker de samme reglene som hytta.
+- Databasen nås bare gjennom `db` fra `src/lib/db`. Lag ikke egne tilkoblinger, og bruk ikke `attachDatabasePool` fra Vercel: `src/lib/db/pool.ts` forklarer hvorfor.
 - Etter endring i `src/lib/db/schema.ts`: kjør `npm run db:generate` og legg ved den nye filen i `drizzle/`.
 - Før du sier at noe virker: kjør `npm run typecheck`, `npm run lint` og `npm test` (lokal database). Endrer du sider eller skjemaer, kjør også `npm run test:nettleser`.
 - Test bare mot lokal database og med adresser som slutter på `@test.local`. Send aldri e-post til ekte mottakere fra en test.
