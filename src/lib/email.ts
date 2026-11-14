@@ -21,7 +21,7 @@ export function canSendEmail(): boolean {
 }
 
 export async function sendEmail(mail: Mail): Promise<void> {
-  const key = process.env.RESEND_API_KEY;
+  const key = process.env.RESEND_API_KEY?.trim();
   const from = process.env.EMAIL_FROM;
 
   if (!key || !from) {
@@ -55,7 +55,14 @@ export async function sendEmail(mail: Mail): Promise<void> {
       ({ error } = await resend.emails.send({ from: TEST_SENDER, ...message }));
     }
 
-    if (error) console.error("E-post ble ikke sendt:", error);
+    if (error) {
+      console.error("E-post ble ikke sendt:", error);
+      if (/api key/i.test(error.message)) {
+        // Nøkkelen selv logges aldri, bare formen, slik at en feil innliming
+        // kan oppdages uten å vise hemmeligheten.
+        console.error(`Resend godtar ikke RESEND_API_KEY (${keyShape(key)}).`);
+      }
+    }
   } catch (error) {
     console.error("E-post ble ikke sendt:", error);
   }
@@ -66,4 +73,14 @@ const TEST_SENDER = `${APP_NAME} <onboarding@resend.dev>`;
 
 function isUnverifiedDomain(error: { name: string; message: string }): boolean {
   return error.name === "validation_error" && /not verified/i.test(error.message);
+}
+
+/** Beskriver formen på en nøkkel uten å røpe innholdet. */
+function keyShape(key: string): string {
+  return [
+    `lengde ${key.length}`,
+    `starter med re_: ${key.startsWith("re_") ? "ja" : "nei"}`,
+    `mellomrom eller linjeskift: ${/\s/.test(key) ? "ja" : "nei"}`,
+    `andre tegn enn bokstaver, tall, _ og -: ${/[^A-Za-z0-9_\-\s]/.test(key) ? "ja" : "nei"}`,
+  ].join(", ");
 }
