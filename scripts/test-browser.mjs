@@ -260,6 +260,8 @@ async function main() {
       .getByRole("heading", { name: "Du må bli invitert av noen som allerede er med" })
       .waitFor();
     await anne.getByText("Du kan ikke registrere deg selv.").waitFor();
+    // Den som ikke er invitert, får vite hva som er neste steg.
+    await anne.getByText("Kjenner du noen som er med? Be dem invitere deg.").waitFor();
     await anne.getByRole("heading", { name: "Slik virker det" }).waitFor();
     assert.equal(await anne.getByRole("main").getByRole("listitem").count(), 3);
     await anne.getByRole("heading", { name: "Har du ikke hytte?" }).waitFor();

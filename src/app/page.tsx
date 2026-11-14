@@ -30,11 +30,17 @@ export default function LandingPage() {
         <h2 className="max-w-[26ch] text-2xl font-bold tracking-tight">
           Du må bli invitert av noen som allerede er med
         </h2>
+        {/* Den som ikke er invitert, får et neste steg i stedet for en stengt dør. */}
         <p className="mt-2 max-w-[48ch] text-lg">
-          Du kan ikke registrere deg selv. Har du fått en invitasjon, logger du inn med
-          adressen den ble sendt til.
+          Du kan ikke registrere deg selv.{" "}
+          <strong className="font-semibold">
+            Kjenner du noen som er med? Be dem invitere deg.
+          </strong>
         </p>
-        <ButtonLink href="/logg-inn" className="mt-4">
+        <p className="mt-4 max-w-[48ch] text-muted">
+          Har du fått en invitasjon, logger du inn med adressen den ble sendt til.
+        </p>
+        <ButtonLink href="/logg-inn" className="mt-3">
           Logg inn
         </ButtonLink>
       </Panel>
