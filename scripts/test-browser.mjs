@@ -250,7 +250,16 @@ async function main() {
       .waitFor();
     // Å låne bort tilbake er et valg, ikke et løfte.
     await anne.getByText("kan de velge å låne bort sin til deg").waitFor();
-    await anne.getByText("Du blir invitert av noen som allerede er med.").waitFor();
+    // Tjenesten er lukket. Det står først på siden og ved innloggingen.
+    assert.match(
+      (await anne.getByRole("main").innerText()).trimStart(),
+      /^Bare for inviterte/i,
+      "at tjenesten er lukket, skal stå først",
+    );
+    await anne
+      .getByRole("heading", { name: "Du må bli invitert av noen som allerede er med" })
+      .waitFor();
+    await anne.getByText("Du kan ikke registrere deg selv.").waitFor();
     await anne.getByRole("heading", { name: "Slik virker det" }).waitFor();
     assert.equal(await anne.getByRole("main").getByRole("listitem").count(), 3);
     await anne.getByRole("heading", { name: "Har du ikke hytte?" }).waitFor();

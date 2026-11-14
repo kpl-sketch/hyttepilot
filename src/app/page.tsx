@@ -1,5 +1,5 @@
 import { PublicShell } from "@/components/public-shell";
-import { ButtonLink } from "@/components/ui";
+import { ButtonLink, Panel } from "@/components/ui";
 import { WHAT_IT_IS } from "@/lib/brand";
 
 /** Eierens tre steg. Kontrollen kommer etter ideen, som trygghet. */
@@ -12,6 +12,10 @@ const steps = [
 export default function LandingPage() {
   return (
     <PublicShell>
+      {/* Tjenesten er lukket. Det skal stå først, før noen leser resten. */}
+      <p className="mb-5 inline-block rounded-full bg-pine px-3.5 py-1.5 text-sm font-bold uppercase tracking-wider text-white">
+        Bare for inviterte
+      </p>
       <h1 className="max-w-[17ch] text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl">
         Lån bort hytta til folk du kjenner.{" "}
         <span className="whitespace-nowrap">Lån deres.</span>
@@ -22,10 +26,18 @@ export default function LandingPage() {
         de velge å låne bort sin til deg.
       </p>
 
-      <div className="mt-8 flex flex-wrap items-center gap-4">
-        <ButtonLink href="/logg-inn">Logg inn</ButtonLink>
-        <p className="text-muted">Du blir invitert av noen som allerede er med.</p>
-      </div>
+      <Panel className="mt-8">
+        <h2 className="max-w-[26ch] text-2xl font-bold tracking-tight">
+          Du må bli invitert av noen som allerede er med
+        </h2>
+        <p className="mt-2 max-w-[48ch] text-lg">
+          Du kan ikke registrere deg selv. Har du fått en invitasjon, logger du inn med
+          adressen den ble sendt til.
+        </p>
+        <ButtonLink href="/logg-inn" className="mt-4">
+          Logg inn
+        </ButtonLink>
+      </Panel>
 
       {/* Et opplyst vindu betyr at hytta er ledig. Samme gulfarge brukes i kalenderen. */}
       <svg
