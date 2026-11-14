@@ -367,18 +367,24 @@ async function main() {
     await per.keyboard.type("Per Eier");
     await tabTo(per, /Mobilnummer/);
     await per.keyboard.type("91234567");
-    await tabTo(per, /Jeg har lest og lover/);
+    await tabTo(per, /Jeg lover å holde Hytteløftet/);
     await per.keyboard.press("Space");
+    await shot(per, "06b-velkommen");
     await tabTo(per, /Gi løftet og bli med/);
     await per.keyboard.press("Enter");
   });
-  await check("første side viser hvem som inviterte, hilsenen og akkurat den hytta", async () => {
+  await check("låneren lander rett på hytta, med hvem som inviterte og hilsenen", async () => {
+    await per.waitForURL(new RegExp(`/hytter/${fjellro}\\?invitasjon=`));
     await per.getByRole("heading", { name: "Kari Eier viser deg Fjellro" }).waitFor();
     await per.getByText("Velkommen på hytta, Per!").waitFor();
-    await per.getByText("Du ble invitert av Kari Eier.").waitFor();
-    assert.equal(await per.getByRole("link", { name: /Fjellro/ }).count(), 2);
-    await per.getByText("Ledig for forespørsel:").waitFor();
+    await per.getByRole("heading", { name: "Når vil du låne hytta?" }).waitFor();
     await shot(per, "07-forste-side-etter-innlogging");
+  });
+  await check("hyttekretsen viser hvem som inviterte, og akkurat den hytta", async () => {
+    await per.goto(`${BASE}/krets`);
+    await per.getByText("Du ble invitert av Kari Eier.").waitFor();
+    assert.equal(await per.getByRole("link", { name: /Fjellro/ }).count(), 1);
+    await per.getByText("Ledig for forespørsel:").waitFor();
   });
 
   await check("gjentatt åpning av invitasjonen gir verken ny e-post eller dobbel tilgang", async () => {
@@ -396,7 +402,9 @@ async function main() {
   });
 
   console.log("Kalender og forespørsel, bare med tastatur");
-  await tabTo(per, /Se Fjellro og ledige datoer/);
+  await per.goto(perLink);
+  await per.getByRole("heading", { name: "Kari Eier viser deg Fjellro" }).waitFor();
+  await tabTo(per, /Se ledige datoer/);
   await per.keyboard.press("Enter");
   await per.getByRole("heading", { name: "Når vil du låne hytta?" }).waitFor();
   await check("kalenderen sier dato og ledighet for hver dag", async () => {

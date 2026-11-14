@@ -6,13 +6,14 @@ import { ButtonLink, Field, Input, PageTitle, Panel, Textarea } from "@/componen
 import { firstName } from "@/lib/emails";
 import { formatKroner } from "@/lib/pricing";
 import { getCalendar, getVisibleCabin } from "@/lib/services/cabins";
+import { getInvitationForViewer } from "@/lib/services/invitations";
 import { listCabinPhotos } from "@/lib/services/photos";
 import { requireViewer } from "@/lib/session";
 import { createBookingAction } from "../../actions";
 
-export default async function CabinPage({ params }: PageProps<"/hytter/[id]">) {
+export default async function CabinPage({ params, searchParams }: PageProps<"/hytter/[id]">) {
   const viewer = await requireViewer();
-  const { id } = await params;
+  const [{ id }, { invitasjon }] = await Promise.all([params, searchParams]);
   const found = await getVisibleCabin(viewer, id);
   if (!found) notFound();
   const { cabin, ownerName } = found;
@@ -24,12 +25,45 @@ export default async function CabinPage({ params }: PageProps<"/hytter/[id]">) {
   const perNight = Math.round(cabin.costPerNight * (1 + cabin.markupPercent / 100));
   const owner = firstName(ownerName);
 
+  // Kommer låneren rett fra invitasjonen, står hilsenen øverst på hytta.
+  const invited =
+    !isOwn && typeof invitasjon === "string"
+      ? await getInvitationForViewer(viewer, invitasjon)
+      : null;
+  const welcome =
+    invited?.mine && invited.status === "accepted" && invited.cabin?.id === cabin.id
+      ? invited
+      : null;
+
   return (
     <>
       <PageTitle
         title={cabin.name}
         lead={`${cabin.area}. ${isOwn ? "Dette er din hytte." : `Hytta til ${ownerName}.`}`}
       />
+
+      {welcome && (
+        <section
+          aria-labelledby="velkommen"
+          className="mb-8 rounded-2xl bg-fjord-soft p-5 sm:p-7"
+        >
+          <h2 id="velkommen" className="text-2xl font-bold">
+            {welcome.inviterName} viser deg {cabin.name}
+          </h2>
+          {welcome.message && (
+            <blockquote className="mt-3 max-w-[60ch] border-l-4 border-window pl-4 whitespace-pre-line">
+              {welcome.message}
+              <footer className="mt-1 text-sm text-muted">Hilsen {owner}</footer>
+            </blockquote>
+          )}
+          <p className="mt-3 max-w-[60ch]">
+            Velg datoer som passer, og send {owner} en forespørsel. {owner} svarer ja eller nei.
+          </p>
+          <ButtonLink href="#datoer" className="mt-4">
+            Se ledige datoer
+          </ButtonLink>
+        </section>
+      )}
 
       <PhotoGallery photos={photos} cabinName={cabin.name} />
 
@@ -65,7 +99,7 @@ export default async function CabinPage({ params }: PageProps<"/hytter/[id]">) {
       </div>
 
       <Panel className="mt-10">
-        <h2 className="text-2xl font-bold">
+        <h2 id="datoer" className="scroll-mt-24 text-2xl font-bold">
           {isOwn ? "Slik ser kalenderen ut for dem du har valgt" : "Når vil du låne hytta?"}
         </h2>
         <p className="mt-1 mb-5 max-w-[60ch] text-muted">

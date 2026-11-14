@@ -155,7 +155,14 @@ async function Invitation({ params }: { params: PageProps<"/invitasjon/[token]">
     );
   }
 
-  if (mine.status === "accepted") redirect(`/krets?invitasjon=${token}`);
+  // Tatt imot: rett til hytta, ikke via hyttekretsen. Uten hytte går veien til kretsen.
+  if (mine.status === "accepted") {
+    redirect(
+      mine.cabin
+        ? `/hytter/${mine.cabin.id}?invitasjon=${token}`
+        : `/krets?invitasjon=${token}`,
+    );
+  }
 
   // Invitasjonen venter fortsatt. Mottakeren tar imot med et eget trykk.
   return (

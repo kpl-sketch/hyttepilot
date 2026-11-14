@@ -5,7 +5,7 @@ import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Pledge } from "@/components/pledge";
 import { PublicShell } from "@/components/public-shell";
 import { Field, Input, Loading, PageTitle, Panel } from "@/components/ui";
-import { PLEDGE_CONFIRM } from "@/lib/pledge";
+import { PLEDGE_CONFIRM, PLEDGE_SHORT } from "@/lib/pledge";
 import { getPublicInvitation, isInvitationToken } from "@/lib/services/invitations";
 import { getSessionUser, getViewer } from "@/lib/session";
 import { completeOnboarding } from "./actions";
@@ -58,7 +58,16 @@ async function WelcomeForm({
 
       <Panel>
         <h2 className="mb-3 text-2xl font-bold">Hytteløftet</h2>
-        <Pledge />
+        <p className="max-w-[60ch]">{PLEDGE_SHORT}</p>
+        {/* Hele løftet ligger ett trykk unna. Avkrysningen gjelder hele teksten. */}
+        <details className="mt-3">
+          <summary className="cursor-pointer font-semibold underline">
+            Les hele løftet
+          </summary>
+          <div className="mt-4">
+            <Pledge />
+          </div>
+        </details>
         <label className="mt-6 flex cursor-pointer items-start gap-3 rounded-xl bg-paper p-4 font-semibold">
           <input type="checkbox" name="pledge" required className="mt-1 size-5 accent-pine" />
           <span>{PLEDGE_CONFIRM}</span>

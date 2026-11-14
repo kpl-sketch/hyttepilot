@@ -38,4 +38,8 @@ export const PLEDGE_POINTS: { title: string; body: string }[] = [
 
 export const PLEDGE_OUTRO = `Dette er ikke et juridisk dokument. Det er et løfte mellom folk som stoler på hverandre, og tilliten er det som gjør ${APP_NAME} mulig.`;
 
-export const PLEDGE_CONFIRM = "Jeg har lest og lover å holde Hytteløftet.";
+/** Løftet i én setning, for velkomstsiden. Hele teksten ligger bak «Les hele løftet». */
+export const PLEDGE_SHORT =
+  "Kort sagt: Du behandler hytta som din egen, følger eierens regler, sier fra hvis noe går galt og betaler det dere blir enige om.";
+
+export const PLEDGE_CONFIRM = "Jeg lover å holde Hytteløftet.";

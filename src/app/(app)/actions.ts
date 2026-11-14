@@ -255,7 +255,7 @@ export async function revokeInvitationAction(
   redirect(`/mine-hytter/${cabinId}?endret=invitasjon#deling`);
 }
 
-/** Mottakeren tar imot invitasjoner som venter, og går til hyttekretsen sin. */
+/** Mottakeren tar imot invitasjoner som venter, og går rett til hytta hun er invitert til. */
 export async function acceptInvitationAction(
   _prev: FormState,
   formData: FormData,
@@ -267,7 +267,8 @@ export async function acceptInvitationAction(
   } catch (error) {
     return toFormState(error);
   }
-  redirect(isInvitationToken(token) ? `/krets?invitasjon=${token}` : "/krets");
+  // Invitasjonssiden sender videre til hytta når invitasjonen er tatt imot.
+  redirect(isInvitationToken(token) ? `/invitasjon/${token}` : "/krets");
 }
 
 /* ------------------------------ Administrasjon ------------------------------ */
