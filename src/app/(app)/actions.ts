@@ -45,6 +45,8 @@ function cabinFields(formData: FormData) {
     rules: text(formData, "rules"),
     minAge: text(formData, "minAge"),
     vippsNumber: text(formData, "vippsNumber"),
+    address: text(formData, "address"),
+    position: text(formData, "position"),
     arrivalInfo: text(formData, "arrivalInfo"),
   };
 }

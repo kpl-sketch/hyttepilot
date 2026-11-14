@@ -1,7 +1,16 @@
 import type { Metadata } from "next";
 import { ActionForm, SubmitButton } from "@/components/action-form";
-import { ButtonLink, Field, PageTitle, Panel, StatusBadge, Textarea } from "@/components/ui";
+import {
+  ButtonLink,
+  buttonClass,
+  Field,
+  PageTitle,
+  Panel,
+  StatusBadge,
+  Textarea,
+} from "@/components/ui";
 import { formatRange, nightsBetween } from "@/lib/dates";
+import { directionLinks } from "@/lib/position";
 import { formatKroner } from "@/lib/pricing";
 import { listIncoming, listOutgoing } from "@/lib/services/bookings";
 import { requireViewer } from "@/lib/session";
@@ -127,7 +136,7 @@ export default async function RequestsPage({ searchParams }: PageProps<"/forespo
           </Panel>
         )}
         <div className="space-y-4">
-          {outgoing.map(({ booking, cabinName, cabinArea, ownerName, vippsNumber, arrivalInfo }) => (
+          {outgoing.map(({ booking, cabinName, cabinArea, ownerName, vippsNumber, ...arrival }) => (
             <Panel key={booking.id}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <h3 className="text-xl font-bold">
@@ -155,12 +164,13 @@ export default async function RequestsPage({ searchParams }: PageProps<"/forespo
                 </p>
               )}
               {booking.status === "paid" && (
-                <div className="mt-3 max-w-[60ch]">
-                  <h4 className="font-bold">Adresse og praktiske opplysninger</h4>
-                  <p className="mt-1 whitespace-pre-line">
-                    {arrivalInfo || `${ownerName} har ikke lagt inn noe ennå. Ta kontakt direkte.`}
-                  </p>
-                </div>
+                <ArrivalDetails
+                  ownerName={ownerName}
+                  address={arrival.address ?? ""}
+                  latitude={arrival.latitude}
+                  longitude={arrival.longitude}
+                  arrivalInfo={arrival.arrivalInfo ?? ""}
+                />
               )}
 
               {(booking.status === "pending" || booking.status === "approved") && (
@@ -178,5 +188,60 @@ export default async function RequestsPage({ searchParams }: PageProps<"/forespo
         </div>
       </section>
     </>
+  );
+}
+
+/**
+ * Det låneren trenger for å finne fram: adressen, lenker som viser veien i
+ * kartet, og eierens egne opplysninger. Vises bare når lånet er betalt.
+ */
+function ArrivalDetails({
+  ownerName,
+  address,
+  latitude,
+  longitude,
+  arrivalInfo,
+}: {
+  ownerName: string;
+  address: string;
+  latitude: number | null;
+  longitude: number | null;
+  arrivalInfo: string;
+}) {
+  const directions = directionLinks({ address, latitude, longitude });
+  return (
+    <div className="mt-3 max-w-[60ch]">
+      <h4 className="font-bold">Adresse og praktiske opplysninger</h4>
+      {address && <p className="mt-1">{address}</p>}
+      {!address && directions && (
+        <p className="mt-1">
+          Hytta har ingen adresse, men {ownerName} har lagt inn hvor den ligger i kartet.
+        </p>
+      )}
+      {directions && (
+        <p className="mt-3 flex flex-wrap gap-3">
+          <a
+            href={directions.google}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={buttonClass("secondary")}
+          >
+            Vis veien i Google Maps
+          </a>
+          <a
+            href={directions.apple}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={buttonClass("secondary")}
+          >
+            Vis veien i Apple Kart
+          </a>
+        </p>
+      )}
+      {arrivalInfo && <p className="mt-3 whitespace-pre-line">{arrivalInfo}</p>}
+      {!directions && !arrivalInfo && (
+        <p className="mt-1">{ownerName} har ikke lagt inn noe ennå. Ta kontakt direkte.</p>
+      )}
+    </div>
   );
 }

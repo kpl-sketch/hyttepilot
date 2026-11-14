@@ -43,7 +43,7 @@ export default function PrivacyPage() {
           <ul className="mt-2 list-disc space-y-1 pl-6">
             <li>Navn, e-postadresse og mobilnummer.</li>
             <li>Tidspunktet du ga Hytteløftet.</li>
-            <li>Hytter du legger inn: navn, sted, beskrivelse, bilder, pris, regler, Vipps-nummer og praktiske opplysninger. Opptaksdata i bildene, som GPS-posisjon, fjernes før bildene lagres.</li>
+            <li>Hytter du legger inn: navn, sted, adresse, kartposisjon, beskrivelse, bilder, pris, regler, Vipps-nummer og praktiske opplysninger. Opptaksdata i bildene, som GPS-posisjon, fjernes før bildene lagres.</li>
             <li>Forespørsler du sender eller får, med datoer, antall personer, pris og meldinger.</li>
             <li>Hvem som har invitert hvem.</li>
             <li>Innlogginger: tidspunkt, IP-adresse og nettlesertype.</li>
@@ -58,7 +58,7 @@ export default function PrivacyPage() {
             <li>Venner uten egen hytte ser bare hyttene de er invitert til.</li>
             <li>Bildene av en hytte vises bare til dem som får se hytta.</li>
             <li>Eieren ser navn, e-postadresse og mobilnummer til den som sender en forespørsel.</li>
-            <li>Vipps-nummeret vises til låneren når eieren har sagt ja. Adresse og praktiske opplysninger vises når lånet er betalt.</li>
+            <li>Vipps-nummeret vises til låneren når eieren har sagt ja. Adresse, kartposisjon og praktiske opplysninger vises når lånet er betalt.</li>
           </ul>
         </section>
 
@@ -67,6 +67,15 @@ export default function PrivacyPage() {
           <p className="mt-2">
             Tjenesten kjører hos leverandører av nettdrift, database og utsending av e-post.
             De behandler opplysningene på våre vegne.
+          </p>
+          <p className="mt-2">
+            Når en hytteeier skriver inn adressen til hytta, slår vi den opp i Kartverkets åpne
+            adresseregister for å foreslå riktig adresse og plassering. Kartverket får bare
+            søketeksten, ikke hvem som søker.
+          </p>
+          <p className="mt-2">
+            Lenkene som viser veien til hytta, åpner Google Maps eller Apple Kart. De får da
+            vite adressen eller posisjonen du ber om veibeskrivelse til.
           </p>
         </section>
 

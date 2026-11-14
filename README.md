@@ -10,6 +10,9 @@ litt over selvkost. Navnet er et arbeidsnavn og byttes ett sted: `NEXT_PUBLIC_AP
 - **Hytter.** Eieren legger inn hytte, pris, regler og ledige perioder.
 - **Bilder.** Opptil åtte bilder per hytte, valgt når hytta legges inn eller senere.
   Det første er forsidebildet. Bildene vises bare til dem som får se hytta.
+- **Adresse og vei.** Eieren legger inn adressen, med forslag fra Kartverkets
+  adresseregister, og en nøyaktig kartposisjon. Låneren får adressen og lenker som
+  viser veien i kartet når lånet er betalt.
 - **Synlighet.** Hytteeiere ser alle hyttene. Venner uten hytte ser bare hyttene de
   er invitert til.
 - **Forespørsler.** Låneren velger datoer i kalenderen. Eieren svarer ja eller nei.
@@ -79,6 +82,9 @@ src/lib/services/         Alle regler og tilgangssjekker. Start her.
   cabins.ts                 hytter, synlighet, ledige perioder
   bookings.ts               forespørsel, ja/nei, betalt, avlysning
   photos.ts                 bilder: hvem får legge til, fjerne og se dem
+  addresses.ts              adressesøk mot Kartverket, bare for hytteeiere
+src/lib/position.ts       Leser koordinater og kartlenker, lager veilenker
+src/app/adressesok/       Adresseforslagene i hytteskjemaet, bak innlogging
 src/lib/photo-processing.ts  Forminsker bildene og fjerner opptaksdata (sharp)
 src/lib/photo-limits.ts   Grensene for antall og størrelse på bilder
 src/app/bilder/[id]/      Adressen som viser et bilde, bak innlogging
@@ -107,6 +113,11 @@ Regelen for ny funksjonalitet: tilgangssjekken skal ligge i tjenestelaget
   hytta. Nettleseren forminsker hvert bilde før opplasting, og serveren lagrer det
   som WebP uten GPS-posisjon og andre opptaksdata. Blir det mange hytter, bør
   bildene flyttes til en fillagring, for eksempel Vercel Blob.
+- **Adresseforslagene kommer fra Kartverket** (`ws.geonorge.no/adresser/v1`), som er
+  åpent og gratis. Søket går via serveren, så Kartverket ser ikke hvem som søker.
+  Svarer ikke tjenesten, kommer det ingen forslag, og eieren skriver adressen selv.
+  Tjenesten dekker bare norske adresser. Hytter i utlandet får posisjon fra
+  koordinater eller en kartlenke.
 - **Forhåndsvisninger deler database med produksjon** hvis de får samme
   `DATABASE_URL`. Bruk en egen database for forhåndsvisninger når piloten er i bruk.
 - **Personvernsiden er et utkast.** Den beskriver hva som lagres, men er ikke

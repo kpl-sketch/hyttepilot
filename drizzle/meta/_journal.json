@@ -15,6 +15,13 @@
       "when": 1794663404970,
       "tag": "0001_bilder",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794664651565,
+      "tag": "0002_adresse",
+      "breakpoints": true
     }
   ]
 }

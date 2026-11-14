@@ -285,6 +285,9 @@ export async function listOutgoing(actor: Actor) {
       cabinName: cabin.name,
       cabinArea: cabin.area,
       vippsNumber: cabin.vippsNumber,
+      address: cabin.address,
+      latitude: cabin.latitude,
+      longitude: cabin.longitude,
       arrivalInfo: cabin.arrivalInfo,
       ownerName: user.name,
     })
@@ -294,12 +297,17 @@ export async function listOutgoing(actor: Actor) {
     .where(eq(booking.borrowerId, actor.id))
     .orderBy(desc(booking.createdAt));
 
-  return rows.map((row) => ({
-    ...row,
-    vippsNumber:
-      row.booking.status === "approved" || row.booking.status === "paid"
-        ? row.vippsNumber
-        : null,
-    arrivalInfo: row.booking.status === "paid" ? row.arrivalInfo : null,
-  }));
+  // Adresse, kartposisjon og praktiske opplysninger følger bare med når lånet er betalt.
+  return rows.map((row) => {
+    const paid = row.booking.status === "paid";
+    return {
+      ...row,
+      vippsNumber:
+        row.booking.status === "approved" || paid ? row.vippsNumber : null,
+      address: paid ? row.address : null,
+      latitude: paid ? row.latitude : null,
+      longitude: paid ? row.longitude : null,
+      arrivalInfo: paid ? row.arrivalInfo : null,
+    };
+  });
 }

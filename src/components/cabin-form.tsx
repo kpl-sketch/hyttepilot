@@ -1,7 +1,9 @@
 import type { Cabin } from "@/lib/db/schema";
 import type { FormState } from "@/lib/errors";
 import { MAX_PHOTOS } from "@/lib/photo-limits";
+import { formatPosition } from "@/lib/position";
 import { ActionForm, SubmitButton } from "./action-form";
+import { AddressFields } from "./address-fields";
 import { PhotoPicker } from "./photo-picker";
 import { Field, Input, Textarea } from "./ui";
 
@@ -109,7 +111,7 @@ export function CabinForm({
       </fieldset>
 
       <fieldset className="grid gap-4 sm:grid-cols-2">
-        <legend className="mb-3 text-xl font-bold">Regler og praktisk</legend>
+        <legend className="mb-3 text-xl font-bold">Regler</legend>
         <Field
           label="Dine regler"
           hint="Dyr, røyking, fest, antall gjester."
@@ -120,10 +122,26 @@ export function CabinForm({
         <Field label="Aldersgrense" hint="La stå tom hvis du ikke har noen.">
           <Input name="minAge" type="number" min={18} max={99} defaultValue={cabin?.minAge ?? ""} />
         </Field>
+      </fieldset>
+
+      <fieldset>
+        <legend className="mb-1 text-xl font-bold">Adresse og veien dit</legend>
+        <p className="mb-4 max-w-[60ch] text-muted">
+          Vises til låneren først når lånet er betalt. Da får låneren også en lenke som
+          viser veien i kartet.
+        </p>
+        <AddressFields
+          defaultAddress={cabin?.address}
+          defaultPosition={
+            cabin && cabin.latitude !== null && cabin.longitude !== null
+              ? formatPosition({ latitude: cabin.latitude, longitude: cabin.longitude })
+              : ""
+          }
+        />
         <Field
-          label="Adresse, nøkkel og veibeskrivelse"
-          hint="Vises til låneren først når lånet er betalt."
-          className="sm:col-span-2"
+          label="Nøkkel og veibeskrivelse"
+          hint="Hvor nøkkelen ligger, parkering og det siste stykket fram."
+          className="mt-4"
         >
           <Textarea name="arrivalInfo" maxLength={2000} defaultValue={cabin?.arrivalInfo} />
         </Field>

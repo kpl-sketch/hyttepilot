@@ -6,6 +6,7 @@ import { db } from "../db";
 import { availability, booking, cabin, cabinAccess, cabinPhoto, user } from "../db/schema";
 import { type Actor, UserError } from "../errors";
 import { photoRows, processPhotos } from "../photo-processing";
+import { parsePosition } from "../position";
 
 const whole = (label: string, min: number, max: number) =>
   z.coerce
@@ -19,6 +20,27 @@ const phone = z
   .trim()
   .transform((v) => v.replace(/[\s-]/g, ""))
   .pipe(z.string().regex(/^(\+47)?\d{8}$/, "Skriv et norsk mobilnummer med åtte sifre."));
+
+/**
+ * Kartposisjonen slik eieren skrev den: koordinater eller en lenke fra en
+ * karttjeneste. Tomt felt betyr at hytta ikke har noen posisjon.
+ */
+const position = z
+  .string()
+  .trim()
+  .max(1000, "Kartposisjonen er for lang.")
+  .default("")
+  .transform((value, context) => {
+    if (value === "") return { latitude: null, longitude: null };
+    const found = parsePosition(value);
+    if (found) return found;
+    context.addIssue({
+      code: "custom",
+      message:
+        "Fant ingen kartposisjon i det du skrev. Skriv to tall, for eksempel 61.2345, 10.4567.",
+    });
+    return z.NEVER;
+  });
 
 export const cabinInput = z.object({
   name: z.string().trim().min(2, "Gi hytta et navn.").max(80),
@@ -35,8 +57,16 @@ export const cabinInput = z.object({
     .transform((v) => (v === "" ? null : Number(v)))
     .pipe(z.number().int().min(18, "Aldersgrensen må være minst 18.").max(99).nullable()),
   vippsNumber: phone,
+  address: z.string().trim().max(200, "Adressen er for lang.").default(""),
+  position,
   arrivalInfo: z.string().trim().max(2000).default(""),
 });
+
+/** Feltene slik de lagres: posisjonen er delt i breddegrad og lengdegrad. */
+function cabinValues(data: unknown) {
+  const { position: place, ...fields } = parse(cabinInput, data);
+  return { ...fields, latitude: place.latitude, longitude: place.longitude };
+}
 
 export { phone as phoneSchema };
 
@@ -59,8 +89,8 @@ const coverPhotoId = sql<string | null>`(
 )`;
 
 /**
- * Feltene andre enn eieren får se. Vipps-nummer, adresse og praktiske
- * opplysninger er holdt utenfor og hentes bare der de skal vises.
+ * Feltene andre enn eieren får se. Vipps-nummer, adresse, kartposisjon og
+ * praktiske opplysninger er holdt utenfor og hentes bare der de skal vises.
  */
 const publicCabin = {
   id: cabin.id,
@@ -147,7 +177,7 @@ export async function createCabin(actor: Actor, data: unknown, photoFiles: File[
   if (!actor.isOwner) {
     throw new UserError("Bare inviterte hytteeiere kan legge inn hytter.");
   }
-  const input = parse(cabinInput, data);
+  const input = cabinValues(data);
   const photos = await processPhotos(photoFiles);
   return db.transaction(async (tx) => {
     const [created] = await tx
@@ -164,7 +194,7 @@ export async function createCabin(actor: Actor, data: unknown, photoFiles: File[
 export async function updateCabin(actor: Actor, cabinId: string, data: unknown) {
   const own = await getOwnCabin(actor, cabinId);
   if (!own) throw new UserError("Fant ikke hytta.");
-  const input = parse(cabinInput, data);
+  const input = cabinValues(data);
   await db.update(cabin).set(input).where(eq(cabin.id, cabinId));
 }
 

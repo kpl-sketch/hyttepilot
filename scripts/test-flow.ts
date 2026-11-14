@@ -8,6 +8,7 @@
  */
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
+import { createServer } from "node:http";
 import { sql } from "drizzle-orm";
 import sharp from "sharp";
 import { addDays, todayInOslo } from "../src/lib/dates";
@@ -15,6 +16,8 @@ import { db } from "../src/lib/db";
 import { profile, user } from "../src/lib/db/schema";
 import { type Actor, UserError } from "../src/lib/errors";
 import { PLEDGE_VERSION } from "../src/lib/pledge";
+import { directionLinks, parsePosition } from "../src/lib/position";
+import { searchAddresses } from "../src/lib/services/addresses";
 import {
   cancelBooking,
   createBooking,
@@ -27,9 +30,11 @@ import {
   addAvailability,
   createCabin,
   getCalendar,
+  getOwnCabin,
   getVisibleCabin,
   listOwnCabins,
   listVisibleCabins,
+  updateCabin,
 } from "../src/lib/services/cabins";
 import {
   claimInvitations,
@@ -103,8 +108,54 @@ const cabinData = (name: string) => ({
   rules: "Ingen fest.",
   minAge: "25",
   vippsNumber: "912 34 567",
+  address: "Fjellvegen 12, 2636 Øyer",
+  position: "61.2345, 10.4567",
   arrivalInfo: "Nøkkelboks kode 1234",
 });
+
+/**
+ * Etterligner Kartverkets adressesøk, slik at testen ikke trenger nett.
+ * Svarer med to adresser når søket starter på «fjellvegen».
+ */
+async function fakeAddressSearch() {
+  const seen: string[] = [];
+  const server = createServer((request, response) => {
+    const search = new URL(request.url ?? "", "http://x").searchParams.get("sok") ?? "";
+    seen.push(search);
+    if (search.startsWith("nede")) {
+      response.writeHead(503).end();
+      return;
+    }
+    // «bare uten stjerne» finnes bare når søket ikke har jokertegn.
+    const exactOnly = search === "bare uten stjerne";
+    const adresser =
+      search.toLowerCase().startsWith("fjellvegen") || exactOnly
+        ? [
+            {
+              adressetekst: "Fjellvegen 12",
+              postnummer: "2636",
+              poststed: "ØYER",
+              kommunenavn: "ØYER",
+              representasjonspunkt: { epsg: "EPSG:4258", lat: 61.23456789, lon: 10.45678912 },
+            },
+            {
+              adressetekst: "Fjellvegen 12",
+              postnummer: "8610",
+              poststed: "MO I RANA",
+              representasjonspunkt: { epsg: "EPSG:4258", lat: 66.3, lon: 14.1 },
+            },
+            { adressetekst: "Uten punkt 1", postnummer: "0001", poststed: "OSLO" },
+          ]
+        : [];
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ metadata: { totaltAntallTreff: adresser.length }, adresser }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("fikk ingen port");
+  process.env.ADDRESS_SEARCH_URL = `http://127.0.0.1:${address.port}/sok`;
+  return { seen, close: () => new Promise((resolve) => server.close(resolve)) };
+}
 
 /** Et ensfarget bilde slik et kamera lagrer det: liggende, med GPS-posisjon. */
 async function photo(name: string, background: string): Promise<File> {
@@ -188,6 +239,11 @@ async function main() {
     assert.ok(seen);
     assert.equal("vippsNumber" in seen.cabin, false);
     assert.equal("arrivalInfo" in seen.cabin, false);
+    for (const hidden of ["address", "latitude", "longitude"]) {
+      assert.equal(hidden in seen.cabin, false, `${hidden} skal ikke følge med`);
+    }
+    const [listed] = await listVisibleCabins(ola);
+    assert.equal(JSON.stringify(listed).includes("Fjellvegen"), false);
   });
   await check("bare eieren kan invitere til hytta", () =>
     refused(() => inviteFriend(ola, karisHytte, "kompis@test.local"), /egne hytter/),
@@ -199,6 +255,95 @@ async function main() {
     await inviteFriend(admin, annesHytte, "lise@test.local");
     assert.equal((await listVisibleCabins(lise)).length, 2);
   });
+
+  console.log("Adresse og kartposisjon");
+  await check("kartposisjon leses fra tall, grader og kartlenker", () => {
+    const at = (text: string) => {
+      const found = parsePosition(text);
+      return found ? [found.latitude, found.longitude] : null;
+    };
+    assert.deepEqual(at("61.2345, 10.4567"), [61.2345, 10.4567]);
+    assert.deepEqual(at(" 61.2345 10.4567 "), [61.2345, 10.4567]);
+    assert.deepEqual(at("61,2345 10,4567"), [61.2345, 10.4567]);
+    assert.deepEqual(at("-33.8568, 151.2153"), [-33.8568, 151.2153]);
+    assert.deepEqual(at("61.23456789, 10.45678912"), [61.234568, 10.456789]);
+    assert.deepEqual(at(`61°14'04.2"N 10°27'24.1"E`), [61.2345, 10.456694]);
+    assert.deepEqual(at("61°14′04.2″N 10°27′24.1″Ø"), [61.2345, 10.456694]);
+    assert.deepEqual(
+      at("https://www.google.com/maps/place/Hytta/@61.2,10.4,15z/data=!3m1!4b1!4m6!3m5!8m2!3d61.2345!4d10.4567"),
+      [61.2345, 10.4567],
+    );
+    assert.deepEqual(at("https://www.google.com/maps/@61.2345,10.4567,15z"), [61.2345, 10.4567]);
+    assert.deepEqual(at("https://www.google.com/maps?q=61.2345,10.4567"), [61.2345, 10.4567]);
+    assert.deepEqual(at("https://maps.apple.com/?ll=61.2345,10.4567&q=Hytta"), [61.2345, 10.4567]);
+    assert.deepEqual(
+      at("https://www.openstreetmap.org/#map=15/61.2345/10.4567"),
+      [61.2345, 10.4567],
+    );
+    for (const nothing of ["", "Fjellvegen 12", "https://maps.app.goo.gl/abc123", "91.5, 10", "61.2, 181", "61.2345"]) {
+      assert.equal(at(nothing), null, `«${nothing}» er ikke en posisjon`);
+    }
+  });
+  await check("adresse og kartposisjon lagres på hytta", async () => {
+    const own = await getOwnCabin(kari, karisHytte);
+    assert.equal(own?.address, "Fjellvegen 12, 2636 Øyer");
+    assert.deepEqual([own?.latitude, own?.longitude], [61.2345, 10.4567]);
+  });
+  await check("hytte kan lagres uten adresse og kartposisjon", async () => {
+    const uten = await createCabin(kari, { ...cabinData("Uten adresse"), address: "", position: "" });
+    const own = await getOwnCabin(kari, uten);
+    assert.deepEqual([own?.address, own?.latitude, own?.longitude], ["", null, null]);
+    await updateCabin(kari, uten, {
+      ...cabinData("Uten adresse"),
+      address: "",
+      position: "https://www.google.com/maps?q=60.5,9.25",
+    });
+    const moved = await getOwnCabin(kari, uten);
+    assert.deepEqual([moved?.latitude, moved?.longitude], [60.5, 9.25]);
+    await db.execute(sql`delete from "cabin" where "id" = ${uten}`);
+  });
+  await check("kartposisjon som ikke kan leses, avvises", () =>
+    refused(
+      () => createCabin(kari, { ...cabinData("Feil posisjon"), position: "oppe i lia" }),
+      /Fant ingen kartposisjon/,
+    ),
+  );
+  await check("veilenkene bruker posisjonen, ellers adressen", () => {
+    const begge = directionLinks({ address: "Fjellvegen 12", latitude: 61.2345, longitude: 10.4567 });
+    assert.equal(begge?.google, "https://www.google.com/maps/dir/?api=1&destination=61.2345%2C10.4567");
+    assert.equal(begge?.apple, "https://maps.apple.com/?daddr=61.2345%2C10.4567");
+    const bareAdresse = directionLinks({ address: "Fjellvegen 12, 2636 Øyer", latitude: null, longitude: null });
+    assert.equal(
+      bareAdresse?.google,
+      "https://www.google.com/maps/dir/?api=1&destination=Fjellvegen%2012%2C%202636%20%C3%98yer",
+    );
+    assert.equal(directionLinks({ address: " ", latitude: null, longitude: null }), null);
+  });
+
+  const lookup = await fakeAddressSearch();
+  await check("adressesøket gir forslag med plassering til hytteeiere", async () => {
+    const found = await searchAddresses(kari, "Fjellvegen 1");
+    assert.deepEqual(found, [
+      { label: "Fjellvegen 12, 2636 Øyer", latitude: 61.234568, longitude: 10.456789 },
+      { label: "Fjellvegen 12, 8610 Mo i Rana", latitude: 66.3, longitude: 14.1 },
+    ]);
+    assert.equal(lookup.seen.at(-1), "Fjellvegen 1*", "søket skal treffe mens eieren skriver");
+  });
+  await check("bare hytteeiere kan søke etter adresser", () =>
+    refused(() => searchAddresses(ola, "Fjellvegen 1"), /Bare hytteeiere/),
+  );
+  await check("adressesøket tåler korte søk, jokertegn og at tjenesten er nede", async () => {
+    const before = lookup.seen.length;
+    assert.deepEqual(await searchAddresses(kari, "Fj"), []);
+    assert.deepEqual(await searchAddresses(kari, 12345), []);
+    assert.equal(lookup.seen.length, before, "korte søk skal ikke sendes videre");
+    await searchAddresses(kari, "Fjellvegen* 12?, Øyer");
+    assert.equal(lookup.seen.at(-1), "Fjellvegen 12 Øyer*");
+    assert.equal((await searchAddresses(kari, "bare uten stjerne")).length, 2);
+    assert.deepEqual(await searchAddresses(kari, "nede for vedlikehold"), []);
+    assert.deepEqual(await searchAddresses(kari, "finnes ikke"), []);
+  });
+  await lookup.close();
 
   console.log("Bilder");
   await check("hytte uten bilder har ikke forsidebilde", async () => {
@@ -336,6 +481,7 @@ async function main() {
     assert.equal(mine.booking.status, "pending");
     assert.equal(mine.vippsNumber, null);
     assert.equal(mine.arrivalInfo, null);
+    assert.deepEqual([mine.address, mine.latitude, mine.longitude], [null, null, null]);
   });
   await check("samme låner kan ikke sende to forespørsler for samme tid", () =>
     refused(() => createBooking(ola, karisHytte, request(13, 15)), /allerede en forespørsel/),
@@ -358,6 +504,7 @@ async function main() {
     assert.equal(mine.booking.status, "approved");
     assert.equal(mine.vippsNumber, "91234567");
     assert.equal(mine.arrivalInfo, null);
+    assert.deepEqual([mine.address, mine.latitude, mine.longitude], [null, null, null]);
     assert.equal(mine.booking.ownerReply, "Velkommen!");
   });
   await check("eieren kan ikke si ja til to lån som overlapper", () =>
@@ -386,6 +533,8 @@ async function main() {
     const mine = (await listOutgoing(ola)).find((b) => b.booking.id === olasId);
     assert.equal(mine?.booking.status, "paid");
     assert.equal(mine?.arrivalInfo, "Nøkkelboks kode 1234");
+    assert.equal(mine?.address, "Fjellvegen 12, 2636 Øyer");
+    assert.deepEqual([mine?.latitude, mine?.longitude], [61.2345, 10.4567]);
   });
   await check("kan ikke markere betalt to ganger", () =>
     refused(() => markPaid(kari, olasId), /sagt ja til/),

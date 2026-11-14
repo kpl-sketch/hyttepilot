@@ -2,6 +2,7 @@ import {
   boolean,
   customType,
   date,
+  doublePrecision,
   index,
   integer,
   pgEnum,
@@ -148,7 +149,15 @@ export const cabin = pgTable(
     minAge: integer("min_age"),
     /** Mobilnummeret låneren skal vippse til. */
     vippsNumber: text("vipps_number").notNull(),
-    /** Adresse, nøkkel og veibeskrivelse. Vises til låneren når lånet er betalt. */
+    /** Adressen til hytta. Vises til låneren når lånet er betalt. */
+    address: text("address").notNull().default(""),
+    /**
+     * Nøyaktig plassering i grader. Vises til låneren når lånet er betalt.
+     * Begge er satt, eller ingen av dem.
+     */
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
+    /** Nøkkel og veibeskrivelse. Vises til låneren når lånet er betalt. */
     arrivalInfo: text("arrival_info").notNull().default(""),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
