@@ -1,4 +1,5 @@
 import "server-only";
+import { hkdfSync } from "node:crypto";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
@@ -18,10 +19,24 @@ import { isEmailAllowed } from "./services/invitations";
  * serverhandlinger (se src/app/logg-inn/actions.ts). Det finnes ingen åpne
  * API-ruter for innlogging.
  */
+/**
+ * Nøkkelen som signerer innloggingskaker. Er BETTER_AUTH_SECRET satt, brukes
+ * den. Ellers avledes nøkkelen av DATABASE_URL, som allerede er hemmelig og
+ * settes automatisk av Vercel. Da er det én hemmelighet mindre å holde styr på.
+ * Bytter databasen passord, må alle logge inn på nytt.
+ */
+function authSecret(): string | undefined {
+  if (process.env.BETTER_AUTH_SECRET) return process.env.BETTER_AUTH_SECRET;
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) return undefined;
+  const key = hkdfSync("sha256", databaseUrl, "hyttepilot", "better-auth-secret", 32);
+  return Buffer.from(key).toString("base64");
+}
+
 export const auth = betterAuth({
   appName: APP_NAME,
   baseURL: appUrl(),
-  secret: process.env.BETTER_AUTH_SECRET,
+  secret: authSecret(),
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: { user, session, account, verification },

@@ -47,9 +47,11 @@ skrives i stedet til filen `.dev-outbox.jsonl` og til terminalen.
    Vercel setter da `DATABASE_URL` selv.
 3. Opprett en konto hos Resend, bekreft et domene du eier, og lag en API-nøkkel.
    Uten bekreftet domene kan Resend bare sende til din egen adresse.
-4. Sett miljøvariablene fra `.env.example` i Vercel: `BETTER_AUTH_SECRET`,
-   `BETTER_AUTH_URL`, `ADMIN_EMAILS`, `RESEND_API_KEY`, `EMAIL_FROM`,
-   `NEXT_PUBLIC_APP_NAME`, `NEXT_PUBLIC_CONTROLLER_NAME` og `NEXT_PUBLIC_CONTACT_EMAIL`.
+4. Sett miljøvariablene fra `.env.example` i Vercel: `ADMIN_EMAILS`,
+   `RESEND_API_KEY`, `EMAIL_FROM`, `NEXT_PUBLIC_APP_NAME`,
+   `NEXT_PUBLIC_CONTROLLER_NAME` og `NEXT_PUBLIC_CONTACT_EMAIL`. Sett
+   `BETTER_AUTH_URL` for produksjon når tjenesten har fått eget domene.
+   `BETTER_AUTH_SECRET` er valgfri.
 5. Deploy. Byggingen oppdaterer databasen automatisk (`scripts/migrate.mjs`).
 6. Logg inn med en adresse fra `ADMIN_EMAILS` og inviter den første hytteeieren.
 
