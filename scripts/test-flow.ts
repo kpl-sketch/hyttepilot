@@ -36,7 +36,8 @@ import { db } from "../src/lib/db";
 import { profile, user } from "../src/lib/db/schema";
 import { type Actor, UserError } from "../src/lib/errors";
 import { PLEDGE_VERSION } from "../src/lib/pledge";
-import { directionLinks, parsePosition } from "../src/lib/position";
+import { directionLinks, isShortMapLink, parsePosition } from "../src/lib/position";
+import { positionInMapPage, resolveShortMapLink } from "../src/lib/services/map-links";
 import { searchAddresses } from "../src/lib/services/addresses";
 import {
   cancelBooking,
@@ -685,6 +686,56 @@ async function main() {
     const moved = await getOwnCabin(kari, uten);
     assert.deepEqual([moved?.latitude, moved?.longitude], [60.5, 9.25]);
     await db.execute(sql`delete from "cabin" where "id" = ${uten}`);
+  });
+  await check("korte delingslenker fra Google Maps kjennes igjen", () => {
+    for (const link of [
+      "https://maps.app.goo.gl/GJ56gRgET5qrftZCA?g_st=ic",
+      " https://maps.app.goo.gl/abc123 ",
+      "https://goo.gl/maps/abc123",
+    ]) {
+      assert.ok(isShortMapLink(link), `«${link}» er en kort lenke`);
+    }
+    for (const other of ["https://maps.app.goo.gl/", "https://goo.gl/abc", "https://evil.example/maps/x", "61.2, 10.4", ""]) {
+      assert.ok(!isShortMapLink(other), `«${other}» er ikke en kort lenke`);
+    }
+  });
+  await check("kort delingslenke følges til posisjonen hos Google", async () => {
+    const visited: string[] = [];
+    // Svarene Google kan gi, uten å gå ut på nettet.
+    const pages: Record<string, () => Response> = {
+      "https://maps.app.goo.gl/sted": () => redirect("https://www.google.com/maps/place/Hytta/@61.2,10.4,15z/data=!3d61.2345!4d10.4567"),
+      "https://maps.app.goo.gl/samtykke": () =>
+        redirect(`https://consent.google.com/ml?continue=${encodeURIComponent("https://maps.google.com/?q=60.5,9.25")}`),
+      "https://maps.app.goo.gl/navn": () => redirect("https://maps.google.com/?q=Fjellvegen+12&ftid=0x1:0x2"),
+      "https://maps.google.com/?q=Fjellvegen+12&ftid=0x1:0x2": () =>
+        new Response('<meta content="https://maps.google.com/maps/api/staticmap?center=59.9139%2C10.7522&amp;zoom=15">'),
+      "https://maps.app.goo.gl/ut": () => redirect("https://evil.example/?q=61.2,10.4"),
+      "https://maps.app.goo.gl/borte": () => new Response("Ikke funnet", { status: 404 }),
+    };
+    function redirect(to: string) {
+      return new Response(null, { status: 302, headers: { location: to } });
+    }
+    const fake = (async (input: URL | RequestInfo) => {
+      const url = input.toString();
+      visited.push(url);
+      const page = pages[url];
+      if (!page) throw new Error(`Testen kjenner ikke ${url}`);
+      return page();
+    }) as typeof fetch;
+    const at = async (link: string) => {
+      const found = await resolveShortMapLink(link, fake);
+      return found && [found.latitude, found.longitude];
+    };
+    assert.deepEqual(await at("https://maps.app.goo.gl/sted"), [61.2345, 10.4567]);
+    assert.deepEqual(await at("http://maps.app.goo.gl/samtykke"), [60.5, 9.25]);
+    assert.deepEqual(await at("https://maps.app.goo.gl/navn"), [59.9139, 10.7522]);
+    assert.equal(await at("https://maps.app.goo.gl/ut"), null);
+    assert.ok(!visited.some((url) => url.includes("evil.example")), "følger aldri lenker ut av Google");
+    assert.equal(await at("https://maps.app.goo.gl/borte"), null);
+    const before = visited.length;
+    assert.equal(await at("https://evil.example/maps/x"), null);
+    assert.equal(visited.length, before, "henter ingenting for lenker som ikke er korte Google-lenker");
+    assert.equal(positionInMapPage("<html>ingen posisjon her</html>"), null);
   });
   await check("kartposisjon som ikke kan leses, avvises", () =>
     refused(

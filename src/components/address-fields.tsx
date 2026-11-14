@@ -1,7 +1,7 @@
 "use client";
 
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
-import { formatPosition, mapLink, parsePosition } from "@/lib/position";
+import { formatPosition, isShortMapLink, mapLink, parsePosition } from "@/lib/position";
 import { inputClass } from "./ui";
 
 type Suggestion = { label: string; latitude: number; longitude: number };
@@ -26,8 +26,11 @@ export function AddressFields({
   const [active, setActive] = useState(-1);
   const [locating, setLocating] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [resolving, setResolving] = useState(false);
+  const [linkFailed, setLinkFailed] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const request = useRef<AbortController | null>(null);
+  const linkRequest = useRef<AbortController | null>(null);
   const addressId = useId();
   const positionId = useId();
   const listId = useId();
@@ -37,6 +40,41 @@ export function AddressFields({
     request.current?.abort();
   }
   useEffect(() => stopSearch, []);
+  useEffect(() => () => linkRequest.current?.abort(), []);
+
+  /**
+   * En kort delingslenke fra Google Maps har ingen koordinater i seg. Serveren
+   * følger lenken og gir oss posisjonen, som vi setter inn i feltet.
+   */
+  async function onPositionChange(value: string) {
+    setPosition(value);
+    setLinkFailed(false);
+    linkRequest.current?.abort();
+    if (!isShortMapLink(value)) {
+      setResolving(false);
+      return;
+    }
+    const controller = new AbortController();
+    linkRequest.current = controller;
+    setResolving(true);
+    try {
+      const response = await fetch("/kartlenke", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: value.trim() }),
+        signal: controller.signal,
+      });
+      const data = response.ok
+        ? ((await response.json()) as { position?: { latitude: number; longitude: number } | null })
+        : null;
+      if (data?.position) setPosition(formatPosition(data.position));
+      else setLinkFailed(true);
+    } catch {
+      if (!controller.signal.aborted) setLinkFailed(true);
+    } finally {
+      if (linkRequest.current === controller) setResolving(false);
+    }
+  }
 
   function onAddressChange(value: string) {
     setAddress(value);
@@ -177,18 +215,19 @@ export function AddressFields({
           Kartposisjon
         </label>
         <span className="block max-w-[60ch] text-sm text-muted">
-          Fylles inn når du velger adressen fra forslagene. Har hytta ingen adresse, kan du
-          lime inn koordinater eller en lenke fra Google Maps.
+          Fylles inn når du velger adressen fra forslagene. Du kan også lime inn en lenke fra
+          Google Maps, for eksempel fra «Del» i appen, eller koordinater.
         </span>
         <input
           id={positionId}
           name="position"
           value={position}
-          onChange={(event) => setPosition(event.target.value)}
+          onChange={(event) => void onPositionChange(event.target.value)}
           maxLength={1000}
           autoComplete="off"
           placeholder="61.2345, 10.4567"
-          aria-invalid={unreadable}
+          aria-invalid={unreadable && !resolving}
+          aria-busy={resolving}
           className={`${inputClass} sm:max-w-md`}
         />
         <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1">
@@ -210,10 +249,17 @@ export function AddressFields({
               Sjekk posisjonen i kartet
             </a>
           )}
-          {unreadable && (
+          {resolving && <span role="status">Henter posisjonen fra lenken …</span>}
+          {unreadable && !resolving && !linkFailed && (
             <span className="text-barn">Vi finner ingen koordinater i dette ennå.</span>
           )}
         </div>
+        {linkFailed && !resolving && (
+          <p role="alert" className="mt-2 max-w-[60ch] font-medium text-barn">
+            Vi fikk ikke lest posisjonen fra lenken. Åpne den i Google Maps, trykk lenge på
+            hytta i kartet og kopier tallene som kommer opp.
+          </p>
+        )}
         {notice && (
           <p role="alert" className="mt-2 max-w-[60ch] font-medium text-barn">
             {notice}

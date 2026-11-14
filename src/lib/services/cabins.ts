@@ -6,7 +6,8 @@ import { db } from "../db";
 import { availability, booking, cabin, cabinAccess, cabinPhoto, user } from "../db/schema";
 import { type Actor, UserError } from "../errors";
 import { photoRows, processPhotos } from "../photo-processing";
-import { parsePosition } from "../position";
+import { isShortMapLink, parsePosition } from "../position";
+import { expandPositionField } from "./map-links";
 
 const whole = (label: string, min: number, max: number) =>
   z.coerce
@@ -34,6 +35,14 @@ const position = z
     if (value === "") return { latitude: null, longitude: null };
     const found = parsePosition(value);
     if (found) return found;
+    if (isShortMapLink(value)) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Vi fikk ikke lest posisjonen fra lenken. Åpne den i Google Maps, trykk lenge på hytta i kartet og kopier tallene som kommer opp.",
+      });
+      return z.NEVER;
+    }
     context.addIssue({
       code: "custom",
       message:
@@ -62,9 +71,16 @@ export const cabinInput = z.object({
   arrivalInfo: z.string().trim().max(2000).default(""),
 });
 
-/** Feltene slik de lagres: posisjonen er delt i breddegrad og lengdegrad. */
-function cabinValues(data: unknown) {
-  const { position: place, ...fields } = parse(cabinInput, data);
+/**
+ * Feltene slik de lagres: posisjonen er delt i breddegrad og lengdegrad. En
+ * kort delingslenke fra Google Maps følges først, slik at den blir til koordinater.
+ */
+async function cabinValues(data: unknown) {
+  const raw =
+    data && typeof data === "object"
+      ? { ...data, position: await expandPositionField((data as { position?: unknown }).position) }
+      : data;
+  const { position: place, ...fields } = parse(cabinInput, raw);
   return { ...fields, latitude: place.latitude, longitude: place.longitude };
 }
 
@@ -199,7 +215,7 @@ export async function getOwnCabin(actor: Actor, cabinId: string) {
  * den før eieren deler den (se services/invitations.ts).
  */
 export async function createCabin(actor: Actor, data: unknown, photoFiles: File[] = []) {
-  const input = cabinValues(data);
+  const input = await cabinValues(data);
   const photos = await processPhotos(photoFiles);
   return db.transaction(async (tx) => {
     const [created] = await tx
@@ -216,7 +232,7 @@ export async function createCabin(actor: Actor, data: unknown, photoFiles: File[
 export async function updateCabin(actor: Actor, cabinId: string, data: unknown) {
   const own = await getOwnCabin(actor, cabinId);
   if (!own) throw new UserError("Fant ikke hytta.");
-  const input = cabinValues(data);
+  const input = await cabinValues(data);
   await db.update(cabin).set(input).where(eq(cabin.id, cabinId));
 }
 

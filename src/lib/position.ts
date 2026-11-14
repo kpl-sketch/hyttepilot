@@ -82,6 +82,25 @@ export function parsePosition(text: string): Position | null {
   return null;
 }
 
+/**
+ * En kort delingslenke fra Google Maps, for eksempel maps.app.goo.gl/abc123.
+ * Den har ingen koordinater i seg, så serveren må følge den for å finne stedet
+ * (se services/map-links.ts).
+ */
+export function isShortMapLink(text: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(text.trim());
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+  const host = url.hostname.toLowerCase();
+  if (host === "maps.app.goo.gl") return url.pathname.length > 1;
+  if (host === "goo.gl" || host === "www.goo.gl") return url.pathname.startsWith("/maps/");
+  return false;
+}
+
 /** Posisjonen som tekst, slik den vises i skjemaet: «61.2345, 10.4567». */
 export function formatPosition(position: Position): string {
   return `${position.latitude}, ${position.longitude}`;
