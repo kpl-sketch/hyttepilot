@@ -25,11 +25,39 @@ function placeName(name: string): string {
     .join(" ");
 }
 
+/** Så mange forslag vises i skjemaet. */
+const SHOWN = 6;
+
+/** Vi henter flere treff enn vi viser, og legger de som ligner mest på søket, først. */
+const FETCHED = 20;
+
+type Found = AddressSuggestion & { street: string };
+
+/**
+ * Kartverket søker i nesten alle felt, så «Storgata 1» kan gi Storgata 61 før
+ * Storgata 1. Her kommer adresser som står i søket først, deretter adresser
+ * som begynner med søket, og til slutt resten i den rekkefølgen de kom.
+ */
+function rank(found: Found[], search: string): AddressSuggestion[] {
+  const typed = search.toLowerCase();
+  const score = (street: string) => {
+    const name = street.toLowerCase();
+    if (typed === name || typed.startsWith(`${name} `)) return 0;
+    if (name.startsWith(typed)) return 1;
+    return 2;
+  };
+  return found
+    .map((item, index) => ({ item, index, score: score(item.street) }))
+    .sort((a, b) => a.score - b.score || a.index - b.index)
+    .slice(0, SHOWN)
+    .map(({ item }) => ({ label: item.label, latitude: item.latitude, longitude: item.longitude }));
+}
+
 /** Plukker ut det vi trenger av svaret, og tåler at felt mangler. */
-function toSuggestions(data: unknown): AddressSuggestion[] {
+function toSuggestions(data: unknown): Found[] {
   const list = (data as { adresser?: unknown } | null)?.adresser;
   if (!Array.isArray(list)) return [];
-  const suggestions: AddressSuggestion[] = [];
+  const suggestions: Found[] = [];
   const seen = new Set<string>();
   for (const item of list as Record<string, unknown>[]) {
     const street = typeof item?.adressetekst === "string" ? item.adressetekst.trim() : "";
@@ -45,6 +73,7 @@ function toSuggestions(data: unknown): AddressSuggestion[] {
     if (seen.has(label)) continue;
     seen.add(label);
     suggestions.push({
+      street,
       label,
       latitude: Math.round(latitude * 1e6) / 1e6,
       longitude: Math.round(longitude * 1e6) / 1e6,
@@ -53,10 +82,10 @@ function toSuggestions(data: unknown): AddressSuggestion[] {
   return suggestions;
 }
 
-async function lookUp(search: string): Promise<AddressSuggestion[]> {
+async function lookUp(search: string): Promise<Found[]> {
   const url = new URL(process.env.ADDRESS_SEARCH_URL || DEFAULT_URL);
   url.searchParams.set("sok", search);
-  url.searchParams.set("treffPerSide", "6");
+  url.searchParams.set("treffPerSide", String(FETCHED));
   url.searchParams.set("side", "0");
   url.searchParams.set("asciiKompatibel", "true");
   url.searchParams.set("utkoordsys", "4258");
@@ -85,7 +114,7 @@ export async function searchAddresses(
   try {
     // Stjernen gjør at «Fjellvegen 1» også finner Fjellvegen 12 mens eieren skriver.
     const started = await lookUp(`${text}*`);
-    return started.length > 0 ? started : await lookUp(text);
+    return rank(started.length > 0 ? started : await lookUp(text), text);
   } catch (error) {
     console.warn("Adressesøket svarte ikke:", error instanceof Error ? error.message : error);
     return [];

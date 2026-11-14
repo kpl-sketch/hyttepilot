@@ -126,6 +126,18 @@ async function fakeAddressSearch() {
       response.writeHead(503).end();
       return;
     }
+    if (search.toLowerCase().startsWith("storgata 1")) {
+      // Slik Kartverket svarer: treff i andre felt kan komme før adressen selv.
+      const point = { lat: 60, lon: 10 };
+      const streets = ["Storgata 61", "Storgata 12", "Storgata 1", "Storgata 1B", "Storgata 100"];
+      const adresser = [
+        ...streets.map((adressetekst) => ({ adressetekst, postnummer: "2000", poststed: "LILLESTRØM", representasjonspunkt: point })),
+        ...Array.from({ length: 10 }, (_, i) => ({ adressetekst: `Storgata ${20 + i}`, postnummer: "2000", poststed: "LILLESTRØM", representasjonspunkt: point })),
+      ];
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ adresser }));
+      return;
+    }
     // «bare uten stjerne» finnes bare når søket ikke har jokertegn.
     const exactOnly = search === "bare uten stjerne";
     const adresser =
@@ -328,6 +340,19 @@ async function main() {
       { label: "Fjellvegen 12, 8610 Mo i Rana", latitude: 66.3, longitude: 14.1 },
     ]);
     assert.equal(lookup.seen.at(-1), "Fjellvegen 1*", "søket skal treffe mens eieren skriver");
+  });
+  await check("adressen som ligner mest på søket, kommer først", async () => {
+    const labels = async (query: string) =>
+      (await searchAddresses(kari, query)).map((found) => found.label.split(",")[0]);
+    assert.deepEqual(await labels("Storgata 1"), [
+      "Storgata 1",
+      "Storgata 12",
+      "Storgata 1B",
+      "Storgata 100",
+      "Storgata 61",
+      "Storgata 20",
+    ]);
+    assert.equal((await labels("storgata 1 lillestrøm"))[0], "Storgata 1");
   });
   await check("bare hytteeiere kan søke etter adresser", () =>
     refused(() => searchAddresses(ola, "Fjellvegen 1"), /Bare hytteeiere/),
