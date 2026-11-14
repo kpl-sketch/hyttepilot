@@ -8,8 +8,12 @@ import { PhotoPicker } from "./photo-picker";
 import { Field, Input, Textarea } from "./ui";
 
 /**
- * Skjema for å legge inn eller endre en hytte. Bilder velges her når hytta
- * legges inn. Etterpå styres de i egen del på siden for hytta.
+ * Skjema for å legge inn eller endre en hytte.
+ *
+ * En ny hytte legges inn med det som trengs for at noen kan spørre om å låne
+ * den: navn, sted, sengeplasser, bilder og pris per døgn. Vask, påslag,
+ * regler, adresse og nøkkel fylles ut senere i det fulle skjemaet på siden
+ * for hytta. Vipps-nummeret settes til eierens mobilnummer og kan endres der.
  */
 export function CabinForm({
   action,
@@ -21,6 +25,7 @@ export function CabinForm({
   /** Forslag til Vipps-nummer for en ny hytte: eierens eget mobilnummer. */
   defaultVipps?: string;
 }) {
+  if (!cabin) return <NewCabinForm action={action} defaultVipps={defaultVipps} />;
   return (
     <ActionForm action={action} className="space-y-10">
       {cabin && <input type="hidden" name="cabinId" value={cabin.id} />}
@@ -47,17 +52,6 @@ export function CabinForm({
           />
         </Field>
       </fieldset>
-
-      {!cabin && (
-        <fieldset>
-          <legend className="mb-1 text-xl font-bold">Bilder</legend>
-          <p className="mb-4 max-w-[60ch] text-muted">
-            Opptil {MAX_PHOTOS} bilder. Det første blir forsidebildet. Du kan legge til og
-            bytte bilder senere.
-          </p>
-          <PhotoPicker />
-        </fieldset>
-      )}
 
       <fieldset className="grid gap-4 sm:grid-cols-3">
         <legend className="mb-1 text-xl font-bold">Pris</legend>
@@ -147,7 +141,50 @@ export function CabinForm({
         </Field>
       </fieldset>
 
-      <SubmitButton>{cabin ? "Lagre endringene" : "Legg inn hytta"}</SubmitButton>
+      <SubmitButton>Lagre endringene</SubmitButton>
+    </ActionForm>
+  );
+}
+
+function NewCabinForm({
+  action,
+  defaultVipps,
+}: {
+  action: (prev: FormState, formData: FormData) => Promise<FormState>;
+  defaultVipps?: string;
+}) {
+  return (
+    <ActionForm action={action} className="space-y-10">
+      {/* Fylles ut senere i det fulle skjemaet. */}
+      <input type="hidden" name="markupPercent" value="0" />
+      <input type="hidden" name="cleaningFee" value="0" />
+      <input type="hidden" name="vippsNumber" value={defaultVipps ?? ""} />
+
+      <div className="grid max-w-xl gap-4 sm:grid-cols-2">
+        <Field label="Navn på hytta">
+          <Input name="name" required maxLength={80} />
+        </Field>
+        <Field label="Sted" hint="For eksempel Hafjell eller Kragerø.">
+          <Input name="area" required maxLength={80} />
+        </Field>
+        <Field label="Sengeplasser">
+          <Input name="beds" type="number" min={1} max={40} required defaultValue={6} />
+        </Field>
+        <Field label="Pris per døgn" hint="Hele kroner. Mange tar bare det hytta koster i strøm og avgifter.">
+          <Input name="costPerNight" type="number" min={0} max={20000} required />
+        </Field>
+      </div>
+
+      <fieldset>
+        <legend className="mb-1 text-xl font-bold">Bilder</legend>
+        <p className="mb-4 max-w-[60ch] text-muted">
+          Frivillig, men et bilde gjør det lettere å si ja. Opptil {MAX_PHOTOS} bilder. Det
+          første blir forsidebildet.
+        </p>
+        <PhotoPicker />
+      </fieldset>
+
+      <SubmitButton>Legg inn hytta</SubmitButton>
     </ActionForm>
   );
 }

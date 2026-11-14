@@ -199,20 +199,30 @@ async function onboard(page, name) {
 
 async function addCabin(page, { name, area, cost, cleaning }) {
   await page.goto(`${BASE}/mine-hytter/ny`);
-  // Skjemaet er langt, og flere ledetekster ligner. Feltene fylles etter navn.
+  // Det korte skjemaet: navn, sted, sengeplasser, pris og bilder.
   const field = (key) => page.locator(`form [name="${key}"]`);
   await field("name").fill(name);
   await field("area").fill(area);
-  await field("description").fill("Tømmerhytte med peis og badstue. Fem minutter til skiløypa.");
   await field("costPerNight").fill(String(cost));
-  await field("markupPercent").fill("0");
-  await field("cleaningFee").fill(String(cleaning));
-  await field("rules").fill("Ingen fest. Hund er velkommen.");
-  await field("address").fill("Fjellvegen 12, 2636 Øyer");
-  await field("arrivalInfo").fill("Nøkkelboks ved døra, kode 1234.");
+  if (name === "Fjellro") await shot(page, "04a-legg-inn-hytte");
   await page.getByRole("button", { name: "Legg inn hytta" }).click();
   await page.getByText("Hytta er lagret. Bare du ser den til du velger noen.").waitFor();
-  return page.url().match(/mine-hytter\/([0-9a-f-]+)/)[1];
+  const id = page.url().match(/mine-hytter\/([0-9a-f-]+)/)[1];
+
+  // Resten fylles ut i det fulle skjemaet på siden for hytta.
+  const details = page.locator("form", {
+    has: page.getByRole("button", { name: "Lagre endringene" }),
+  });
+  const detail = (key) => details.locator(`[name="${key}"]`);
+  await detail("description").fill("Tømmerhytte med peis og badstue. Fem minutter til skiløypa.");
+  await detail("cleaningFee").fill(String(cleaning));
+  await detail("rules").fill("Ingen fest. Hund er velkommen.");
+  await detail("address").fill("Fjellvegen 12, 2636 Øyer");
+  await detail("arrivalInfo").fill("Nøkkelboks ved døra, kode 1234.");
+  await details.getByRole("button", { name: "Lagre endringene" }).click();
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("link", { name: "legg inn adresse og hvor nøkkelen ligger" }).waitFor({ state: "detached" });
+  return id;
 }
 
 /**
@@ -305,9 +315,10 @@ async function main() {
   console.log("Dele egen hytte");
   const fjellro = await addCabin(kari, { name: "Fjellro", area: "Hafjell", cost: 252, cleaning: 500 });
   await check("ny hytte er privat, og siden sier hva som gjenstår", async () => {
-    await kari.getByRole("heading", { name: "Hytta er privat" }).waitFor();
-    await kari.getByText("Bare du.").waitFor();
-    await shot(kari, "04-ny-hytte-er-privat", kari.locator("section", { hasText: "Hytta er privat" }).first());
+    await kari.getByRole("heading", { name: "Tre steg, så kan hytta lånes" }).waitFor();
+    await kari.getByText("Bare du ser hytta.").waitFor();
+    await kari.getByText("Ingen datoer er åpne ennå.").waitFor();
+    await shot(kari, "04-ny-hytte-er-privat", kari.locator("section", { hasText: "Tre steg" }).first());
   });
   await openDates(kari, d(10), d(40));
   await openDates(kari, d(380), d(430));
@@ -577,7 +588,7 @@ async function main() {
   });
   const stop = kari.getByRole("button", { name: "Ta bort Per Eier" });
   await stop.waitFor();
-  await shot(kari, "14-styre-deling", kari.locator("section", { hasText: "Velg hvem som får se hytta" }));
+  await shot(kari, "14-styre-deling", kari.locator("section", { hasText: "Vis hytta til noen du kjenner" }).last());
   await stop.click();
   await kari.getByText("Personen ser ikke lenger hytta").waitFor();
   await kari.getByText("Forespørsler og opphold er ikke endret.").waitFor();

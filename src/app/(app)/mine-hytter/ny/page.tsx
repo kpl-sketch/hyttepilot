@@ -12,7 +12,7 @@ export default async function NewCabinPage() {
     <>
       <PageTitle
         title="Legg inn hytte"
-        lead="Bare du ser hytta til du selv velger hvem som får se den. Ledige datoer og personer legger du til etterpå."
+        lead="Steg 1 av 3. Bare du ser hytta til du selv velger hvem som får se den. Beskrivelse, regler og nøkkel kan du legge til senere."
       />
       <CabinForm action={createCabinAction} defaultVipps={viewer.phone} />
     </>

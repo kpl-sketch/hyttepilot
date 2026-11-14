@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import type { ReactNode } from "react";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { CabinForm } from "@/components/cabin-form";
 import { photoSrc } from "@/components/cabin-photo";
@@ -76,6 +77,8 @@ export default async function ManageCabinPage({
   const free = freePeriods(calendar.available, calendar.taken, calendar.today);
   const isShared = people.length > 0;
   const hasDates = free.length > 0;
+  const ready = isShared && hasDates;
+  const missingPractical = !cabin.address.trim() || !cabin.arrivalInfo.trim();
 
   return (
     <>
@@ -92,37 +95,35 @@ export default async function ManageCabinPage({
         className="mb-8 rounded-2xl bg-fjord-soft p-5 sm:p-7"
       >
         <h2 id="status" className="text-2xl font-bold">
-          {isShared && hasDates
-            ? "Hytta kan lånes"
-            : isShared
-              ? "Noen ser hytta, men den har ingen ledige datoer"
-              : "Hytta er privat"}
+          {ready ? "Hytta kan lånes" : "Tre steg, så kan hytta lånes"}
         </h2>
-        <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">
-          <dt className="font-semibold">Hvem ser hytta</dt>
-          <dd>
+        <ol className="mt-4 space-y-3">
+          <Step done number={1} title="Legg inn hytta">
+            {cabin.area}, {cabin.beds} sengeplasser.
+          </Step>
+          <Step done={hasDates} number={2} title="Åpne datoer" href="#datoer">
+            {hasDates
+              ? `Ledig for forespørsel: ${
+                  list(free.slice(0, 3).map((p) => formatRange(p.startDate, p.endDate))) +
+                  (free.length > 3 ? ` og ${free.length - 3} til` : "")
+                }.`
+              : "Ingen datoer er åpne ennå."}
+          </Step>
+          <Step done={isShared} number={3} title="Vis hytta til noen du kjenner" href="#deling">
             {isShared
-              ? `Du, ${list(people.map((p) => p.name))}.`
-              : "Bare du."}
+              ? `${list(people.map((p) => p.name))} ser hytta.`
+              : "Bare du ser hytta."}
             {invitations.length > 0 &&
               ` ${invitations.length === 1 ? "Én invitasjon" : `${invitations.length} invitasjoner`} venter.`}
-          </dd>
-          <dt className="font-semibold">Ledig for forespørsel</dt>
-          <dd>
-            {hasDates
-              ? list(free.slice(0, 3).map((p) => formatRange(p.startDate, p.endDate))) +
-                (free.length > 3 ? ` og ${free.length - 3} til` : "") +
-                "."
-              : "Ingen datoer er åpne."}
-          </dd>
-        </dl>
-        {!(isShared && hasDates) && (
-          <p className="mt-3 max-w-[60ch] text-muted">
-            Noen kan først be om å låne hytta når du har gjort begge deler:{" "}
-            {!hasDates && <a href="#datoer" className="underline">åpnet noen datoer</a>}
-            {!hasDates && !isShared && " og "}
-            {!isShared && <a href="#deling" className="underline">valgt hvem som får se hytta</a>}
-            .
+          </Step>
+        </ol>
+        {missingPractical && (
+          <p className="mt-4 max-w-[60ch]">
+            Før noen kommer:{" "}
+            <a href="#detaljer" className="underline">
+              legg inn adresse og hvor nøkkelen ligger
+            </a>
+            . Låneren ser det først når oppholdet er betalt.
           </p>
         )}
       </section>
@@ -130,7 +131,7 @@ export default async function ManageCabinPage({
       <div className="space-y-8">
         <Panel>
           <h2 id="datoer" className="scroll-mt-6 text-2xl font-bold">
-            Ledige perioder
+            Steg 2: Åpne datoer
           </h2>
           <p className="mt-1 max-w-[60ch] text-muted">
             Legg inn når hytta kan lånes. Skal du bruke den selv, fjerner du perioden eller
@@ -179,7 +180,7 @@ export default async function ManageCabinPage({
 
         <Panel>
           <h2 id="deling" className="scroll-mt-6 text-2xl font-bold">
-            Velg hvem som får se hytta
+            Steg 3: Vis hytta til noen du kjenner
           </h2>
           <p className="mt-1 max-w-[60ch] text-muted">
             Bare du og de du velger her, ser hytta. Det gjelder også andre hytteeiere og
@@ -340,9 +341,57 @@ export default async function ManageCabinPage({
         </Panel>
 
         <Panel>
+          <h2 id="detaljer" className="scroll-mt-6 text-2xl font-bold">
+            Pris, regler og veien dit
+          </h2>
+          <p className="mt-1 mb-6 max-w-[60ch] text-muted">
+            Alt her kan endres når som helst. Adresse og nøkkel ser låneren først når
+            oppholdet er betalt.
+          </p>
           <CabinForm action={updateCabinAction} cabin={cabin} />
         </Panel>
       </div>
     </>
+  );
+}
+
+/** Ett steg i sjekklisten øverst. Ferdige steg er krysset av, og status står som tekst. */
+function Step({
+  number,
+  title,
+  done,
+  href,
+  children,
+}: {
+  number: number;
+  title: string;
+  done: boolean;
+  href?: string;
+  children: ReactNode;
+}) {
+  return (
+    <li className="flex gap-3">
+      <span
+        aria-hidden="true"
+        className={`grid size-8 shrink-0 place-items-center rounded-full font-bold ${
+          done ? "bg-pine text-white" : "border-2 border-ink bg-surface"
+        }`}
+      >
+        {done ? "✓" : number}
+      </span>
+      <span>
+        <span className="block font-semibold">
+          <span className="sr-only">{done ? "Ferdig: " : "Gjenstår: "}</span>
+          {href && !done ? (
+            <a href={href} className="underline">
+              {title}
+            </a>
+          ) : (
+            title
+          )}
+        </span>
+        <span className="block text-muted">{children}</span>
+      </span>
+    </li>
   );
 }
