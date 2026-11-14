@@ -215,6 +215,20 @@ async function addCabin(page, { name, area, cost, cleaning }) {
   return page.url().match(/mine-hytter\/([0-9a-f-]+)/)[1];
 }
 
+/**
+ * Skriver ankomst og avreise i datofeltene. Feltene styres av kalenderen, så
+ * testen venter til siden er ferdig lastet før den skriver.
+ */
+async function typeDates(page, from, to) {
+  await page.waitForLoadState("networkidle");
+  const arrival = page.getByLabel("Ankomst", { exact: true });
+  const departure = page.getByLabel("Avreise", { exact: true });
+  await arrival.fill(from);
+  await departure.fill(to);
+  assert.equal(await arrival.inputValue(), from);
+  assert.equal(await departure.inputValue(), to);
+}
+
 async function openDates(page, from, to) {
   await page.getByLabel("Ledig fra").fill(from);
   await page.getByLabel("Siste avreisedag").fill(to);
@@ -422,11 +436,9 @@ async function main() {
     await shot(per, "09-kalender-siste-maned", per.locator("section", { hasText: "Når vil du låne hytta?" }));
   });
   await check("datoene kan også skrives inn, og opptatt periode gir tydelig beskjed", async () => {
-    await per.getByLabel("Ankomst", { exact: true }).fill(d(385));
-    await per.getByLabel("Avreise", { exact: true }).fill(d(388));
+    await typeDates(per, d(385), d(388));
     await per.getByText("3 netter").waitFor();
-    await per.getByLabel("Ankomst", { exact: true }).fill(d(41));
-    await per.getByLabel("Avreise", { exact: true }).fill(d(45));
+    await typeDates(per, d(41), d(45));
     await per.getByText("Hytta er ikke ledig hele perioden").waitFor();
   });
 
@@ -458,12 +470,21 @@ async function main() {
     await shot(kari, "11-din-hyttekrets");
   });
 
-  await per.reload();
-  const invite = per.locator("section", { hasText: "Hvem ville du selv lånt bort hytta til?" });
-  await invite.getByLabel("E-postadressen til den du vil dele med").fill("ola@test.local");
-  await invite.getByRole("button", { name: "Se over før du sender" }).click();
-  await invite.getByRole("button", { name: "Send invitasjonen" }).click();
-  await per.getByText("Invitasjonen er sendt til ola@test.local.").waitFor();
+  await check("B inviterer C til sin hytte, bare med tastatur", async () => {
+    await per.reload();
+    await per.getByRole("heading", { name: "Hvem ville du selv lånt bort hytta til?" }).waitFor();
+    await tabTo(per, /E-postadressen til den du vil dele med/);
+    await per.keyboard.type("ola@test.local");
+    await tabTo(per, /Personlig hilsen/);
+    await per.keyboard.type("Bli med til Kragerø!");
+    await tabTo(per, /^Se over før du sender/);
+    await per.keyboard.press("Enter");
+    await per.getByRole("heading", { name: "Se over før du sender" }).waitFor();
+    await per.getByText("Disse ser hytta etterpå").waitFor();
+    await tabTo(per, /^Send invitasjonen/);
+    await per.keyboard.press("Enter");
+    await per.getByText("Invitasjonen er sendt til ola@test.local.").waitFor();
+  });
 
   const ola = await phone();
   await ola.goto(await invitationLink("ola@test.local"));
@@ -488,8 +509,7 @@ async function main() {
   });
   await check("C har ingen hytte og kan likevel sende en forespørsel", async () => {
     await ola.goto(`${BASE}/hytter/${sjobua}`);
-    await ola.getByLabel("Ankomst", { exact: true }).fill(d(22));
-    await ola.getByLabel("Avreise", { exact: true }).fill(d(24));
+    await typeDates(ola, d(22), d(24));
     await ola.getByText("600 kr").first().waitFor();
     await ola.getByRole("button", { name: "Send forespørsel" }).click();
     await ola.getByText("Forespørselen er sendt.").waitFor();
