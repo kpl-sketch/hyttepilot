@@ -10,6 +10,15 @@ export type Mail = { to: string; subject: string; text: string };
  * innloggingskoder og varsler kan leses lokalt. En e-post som feiler, logges,
  * men stopper ikke handlingen som utløste den.
  */
+/**
+ * Sant når tjenesten kan levere e-post: enten er Resend satt opp, eller så
+ * skrives e-posten til den lokale utboksen i utvikling.
+ */
+export function canSendEmail(): boolean {
+  if (process.env.RESEND_API_KEY && process.env.EMAIL_FROM) return true;
+  return process.env.NODE_ENV !== "production" || process.env.EMAIL_DEV_OUTBOX === "1";
+}
+
 export async function sendEmail(mail: Mail): Promise<void> {
   const key = process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM;

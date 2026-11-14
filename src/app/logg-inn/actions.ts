@@ -7,6 +7,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { canSendEmail } from "@/lib/email";
 import { profile } from "@/lib/db/schema";
 import { normalizeEmail } from "@/lib/errors";
 import { claimInvitations } from "@/lib/services/invitations";
@@ -35,6 +36,16 @@ export async function requestCode(
     return { step: "email", email: "", error: "Skriv en gyldig e-postadresse." };
   }
   const email = parsed.data;
+
+  // Uten e-post kan ingen få kode. Si det rett ut i stedet for å la folk vente.
+  if (!canSendEmail()) {
+    return {
+      step: "email",
+      email,
+      error:
+        "E-post er ikke koblet til ennå, så vi kan ikke sende innloggingskoder. Prøv igjen senere.",
+    };
+  }
 
   const limited =
     (await isThrottled(`ip:${await clientIp()}`, 30)) ||
