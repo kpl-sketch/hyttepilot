@@ -336,7 +336,7 @@ export async function inviteToCabin(
         .where(and(eq(invitation.email, email), eq(invitation.cabinId, target.id), spent()));
       await tx.insert(invitation).values({
         email,
-        kind: "cabin",
+        kind: "friend", // navnet fra første versjon, se schema.ts
         cabinId: target.id,
         invitedBy: actor.id,
         message,
@@ -561,6 +561,14 @@ function statusOf(inv: {
   return inv.expiresAt > new Date() ? "valid" : "expired";
 }
 
+/**
+ * cabin: invitasjonen deler én hytte. account: den slipper bare mottakeren
+ * inn i tjenesten. Avgjøres av om invitasjonen har en hytte.
+ */
+function kindOf(inv: { cabinId: string | null }): "cabin" | "account" {
+  return inv.cabinId ? "cabin" : "account";
+}
+
 async function loadInvitation(token: unknown) {
   if (!isInvitationToken(token)) return null;
   const [row] = await db
@@ -588,7 +596,7 @@ export async function getPublicInvitation(token: unknown) {
   if (!row) return null;
   return {
     status: statusOf(row.invitation),
-    kind: row.invitation.kind,
+    kind: kindOf(row.invitation),
     inviterName: row.inviterName,
     maskedEmail: maskEmail(row.invitation.email),
   };
@@ -614,7 +622,7 @@ export async function getInvitationForViewer(actor: Actor, token: unknown) {
   return {
     mine: true as const,
     status,
-    kind: row.invitation.kind,
+    kind: kindOf(row.invitation),
     inviterName: row.inviterName,
     message: row.invitation.message,
     cabin:
@@ -769,7 +777,7 @@ export async function inviteAccount(
         .where(and(eq(invitation.email, email), isNull(invitation.cabinId), spent()));
       await tx.insert(invitation).values({
         email,
-        kind: "account",
+        kind: "owner", // navnet fra første versjon, se schema.ts
         invitedBy: actor.id,
         message,
         token: fresh.token,

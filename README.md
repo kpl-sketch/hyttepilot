@@ -75,6 +75,12 @@ delinger eller reservasjoner:
 - Forespørsler og opphold står som før. Låneren ser dem under Forespørsler, men
   kan ikke åpne hyttesiden før eieren deler hytta.
 
+Migreringen legger bare til kolonner, og de har standardverdier. Forrige
+kodeversjon virker derfor mot den nye databasen, både i sekundene mens ny versjon
+legges ut, og hvis koden rulles tilbake. Rulles koden tilbake, gjelder de gamle
+reglene igjen: alle hytteeiere ser alle hytter, og en invitasjon som er trukket
+tilbake i ny versjon, virker igjen. En tilbakerulling er derfor en egen beslutning.
+
 `npm run overgang:rapport` viser hvor mange tilganger som faller bort, per hytte,
 og hvilke forespørsler som gjelder en låner uten eksplisitt deling. Rapporten
 leser bare, og bruker interne ID-er i stedet for navn. Den skrives også i

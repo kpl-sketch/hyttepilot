@@ -237,12 +237,19 @@ export const availability = pgTable(
   (t) => [index("availability_cabin_idx").on(t.cabinId)],
 );
 
-export const invitationKind = pgEnum("invitation_kind", ["account", "cabin"]);
+/**
+ * Verdiene har navn fra første versjon og er beholdt, slik at forrige
+ * kodeversjon fortsatt virker mot databasen:
+ *   friend = invitasjon til én bestemt hytte (cabin_id er satt)
+ *   owner  = invitasjon uten hytte, fra en administrator (cabin_id er tom)
+ * Koden skiller de to på om cabin_id er satt, ikke på denne verdien.
+ */
+export const invitationKind = pgEnum("invitation_kind", ["owner", "friend"]);
 
 /**
  * Invitasjon til en e-postadresse.
- * cabin: eieren deler én bestemt hytte med mottakeren.
- * account: en administrator slipper mottakeren inn i tjenesten, slik at
+ * Med hytte: eieren deler én bestemt hytte med mottakeren.
+ * Uten hytte: en administrator slipper mottakeren inn i tjenesten, slik at
  *   vedkommende kan legge inn egen hytte. Gir ikke innsyn i noen hytter.
  *
  * Invitasjonen er personlig: bare den som logger inn med `email`, får
@@ -261,13 +268,22 @@ export const invitation = pgTable(
     invitedBy: text("invited_by")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    /** Tilfeldig nøkkel i invitasjonslenken. */
-    token: text("token").notNull().unique(),
+    /**
+     * Tilfeldig nøkkel i invitasjonslenken. Koden lager den selv. Standarden
+     * i databasen finnes for rader som fantes fra før, og for forrige
+     * kodeversjon.
+     */
+    token: text("token")
+      .notNull()
+      .unique()
+      .default(sql`replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')`),
     /** Personlig hilsen fra den som inviterer. */
     message: text("message").notNull().default(""),
     createdAt: createdAt(),
     /** Etter dette tidspunktet kan invitasjonen ikke tas i bruk. */
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now() + interval '30 days'`),
     acceptedAt: timestamp("accepted_at", { withTimezone: true }),
     /** Satt når eieren har trukket invitasjonen eller delingen tilbake. */
     revokedAt: timestamp("revoked_at", { withTimezone: true }),

@@ -1,5 +1,5 @@
 {
-  "id": "516926a9-e79c-49a4-b6db-2b2bf5b3c26c",
+  "id": "b5ab31b0-95b0-4621-882e-95d23ab9cd80",
   "prevId": "eca66a3b-32c9-41d2-b1d4-6b001afe9242",
   "version": "7",
   "dialect": "postgresql",
@@ -739,7 +739,8 @@
           "name": "token",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": "replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')"
         },
         "message": {
           "name": "message",
@@ -759,7 +760,8 @@
           "name": "expires_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": "now() + interval '30 days'"
         },
         "accepted_at": {
           "name": "accepted_at",
@@ -1242,8 +1244,8 @@
       "name": "invitation_kind",
       "schema": "public",
       "values": [
-        "account",
-        "cabin"
+        "owner",
+        "friend"
       ]
     }
   },
