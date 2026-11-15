@@ -38,3 +38,21 @@ body {
     animation: none !important;
   }
 }
+
+/* Nålen i kartet over hytta (src/components/location-map.tsx). */
+.hytte-nal {
+  background: none;
+  border: none;
+}
+.hytte-nal span {
+  position: absolute;
+  left: 4px;
+  top: 2px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50% 50% 50% 0;
+  background: var(--color-barn);
+  border: 3px solid #fff;
+  transform: rotate(-45deg);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.35);
+}

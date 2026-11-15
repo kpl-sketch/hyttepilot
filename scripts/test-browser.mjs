@@ -202,7 +202,9 @@ async function addCabin(page, { name, area, cost, cleaning }) {
   // Det korte skjemaet: navn, sted, sengeplasser, pris og bilder.
   const field = (key) => page.locator(`form [name="${key}"]`);
   await field("name").fill(name);
-  await field("area").fill(area);
+  // Uten adressesøk i testen blir teksten i «Hvor ligger hytta?» området.
+  await page.getByLabel("Hvor ligger hytta?").fill(area);
+  await page.getByText(`Andre ser bare «${area}».`).waitFor();
   await field("costPerNight").fill(String(cost));
   if (name === "Fjellro") await shot(page, "04a-legg-inn-hytte");
   await page.getByRole("button", { name: "Legg inn hytta" }).click();
@@ -217,7 +219,9 @@ async function addCabin(page, { name, area, cost, cleaning }) {
   await detail("description").fill("Tømmerhytte med peis og badstue. Fem minutter til skiløypa.");
   await detail("cleaningFee").fill(String(cleaning));
   await detail("rules").fill("Ingen fest. Hund er velkommen.");
-  await detail("address").fill("Fjellvegen 12, 2636 Øyer");
+  // En adresse skrevet for hånd blir ikke det alle ser: området står fortsatt.
+  await details.getByLabel("Hvor ligger hytta?").fill("Fjellvegen 12, 2636 Øyer");
+  await details.getByText(`Andre ser bare «${area}».`).waitFor();
   await detail("arrivalInfo").fill("Nøkkelboks ved døra, kode 1234.");
   await details.getByRole("button", { name: "Lagre endringene" }).click();
   await page.waitForLoadState("networkidle");

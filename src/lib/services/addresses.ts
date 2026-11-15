@@ -1,8 +1,23 @@
 import "server-only";
 import { type Actor, UserError } from "../errors";
 
-/** Et forslag til adresse, med plasseringen fra det offisielle adresseregisteret. */
-export type AddressSuggestion = { label: string; latitude: number; longitude: number };
+/**
+ * Et forslag i feltet «Hvor ligger hytta?». Plasseringen kommer fra Kartverket.
+ *
+ * - `label`: det eieren ser i listen, og det som står i feltet etter valget.
+ * - `detail`: linjen under, for eksempel «Fjell i Øyer».
+ * - `area`: det andre ser før lånet er betalt, for eksempel «Hafjell».
+ * - `address`: adressen låneren får når lånet er betalt. Tom for stedsnavn.
+ */
+export type AddressSuggestion = {
+  kind: "adresse" | "sted";
+  label: string;
+  detail: string;
+  area: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+};
 
 /**
  * Kartverkets åpne adressesøk (matrikkelen). Gratis og uten nøkkel. Adressen
@@ -33,6 +48,8 @@ const FETCHED = 20;
 
 type Found = AddressSuggestion & { street: string };
 
+const round = (value: number) => Math.round(value * 1e6) / 1e6;
+
 /**
  * Kartverket søker i nesten alle felt, så «Storgata 1» kan gi Storgata 61 før
  * Storgata 1. Her kommer adresser som står i søket først, deretter adresser
@@ -50,7 +67,11 @@ function rank(found: Found[], search: string): AddressSuggestion[] {
     .map((item, index) => ({ item, index, score: score(item.street) }))
     .sort((a, b) => a.score - b.score || a.index - b.index)
     .slice(0, SHOWN)
-    .map(({ item }) => ({ label: item.label, latitude: item.latitude, longitude: item.longitude }));
+    .map(({ item }) => {
+      const { street, ...suggestion } = item;
+      void street;
+      return suggestion;
+    });
 }
 
 /** Plukker ut det vi trenger av svaret, og tåler at felt mangler. */
@@ -69,14 +90,27 @@ function toSuggestions(data: unknown): Found[] {
 
     const zip = typeof item.postnummer === "string" ? item.postnummer : "";
     const town = typeof item.poststed === "string" ? placeName(item.poststed) : "";
-    const label = [street, [zip, town].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+    const municipality = typeof item.kommunenavn === "string" ? placeName(item.kommunenavn) : "";
+    // En hytte uten gateadresse har ofte bare gårds- og bruksnummer, «107/1».
+    const property =
+      item.objtype === "Matrikkeladresse" && Number.isInteger(item.gardsnummer)
+        ? `Gnr. ${item.gardsnummer}${Number.isInteger(item.bruksnummer) ? `, bnr. ${item.bruksnummer}` : ""}`
+        : "";
+    const label = [property || street, [zip, town].filter(Boolean).join(" ")]
+      .filter(Boolean)
+      .join(", ");
     if (seen.has(label)) continue;
     seen.add(label);
+    const kind = property ? "Eiendom" : "Adresse";
     suggestions.push({
+      kind: "adresse",
       street,
       label,
-      latitude: Math.round(latitude * 1e6) / 1e6,
-      longitude: Math.round(longitude * 1e6) / 1e6,
+      detail: municipality ? `${kind} i ${municipality}` : kind,
+      area: town || municipality,
+      address: label,
+      latitude: round(latitude),
+      longitude: round(longitude),
     });
   }
   return suggestions;
@@ -107,11 +141,20 @@ export async function searchAddresses(
   query: unknown,
 ): Promise<AddressSuggestion[]> {
   if (!actor) throw new UserError("Logg inn for å søke etter adresser.");
-  if (typeof query !== "string") return [];
+  const text = searchText(query);
+  if (!text) return [];
+  return addressesFor(text);
+}
+
+/** Søketeksten uten jokertegn, eller null hvis den er for kort. */
+function searchText(query: unknown): string | null {
+  if (typeof query !== "string") return null;
   // Stjerne og spørsmålstegn er jokertegn i søket. Komma skiller bare deler av adressen.
   const text = query.replace(/[*?]/g, "").replace(/[,\s]+/g, " ").trim().slice(0, 100);
-  if (text.length < 3) return [];
+  return text.length < 3 ? null : text;
+}
 
+async function addressesFor(text: string): Promise<AddressSuggestion[]> {
   try {
     // Stjernen gjør at «Fjellvegen 1» også finner Fjellvegen 12 mens eieren skriver.
     const started = await lookUp(`${text}*`);
@@ -120,4 +163,88 @@ export async function searchAddresses(
     console.warn("Adressesøket svarte ikke:", error instanceof Error ? error.message : error);
     return [];
   }
+}
+
+/* -------------------------------- Stedsnavn -------------------------------- */
+
+/**
+ * Kartverkets åpne stedsnavnsøk. Gir treff på steder uten adresse, som
+ * «Hafjell» eller «Tisleia». Adressen kan byttes med PLACE_SEARCH_URL.
+ */
+const PLACE_URL = "https://ws.geonorge.no/stedsnavn/v1/navn";
+
+/** Gatenavn kommer allerede fra adressesøket. */
+const SKIPPED_TYPES = new Set(["adressenavn"]);
+
+/** Så mange stedsnavn vises på det meste. */
+const PLACES_SHOWN = 4;
+
+function toPlaces(data: unknown): Found[] {
+  const list = (data as { navn?: unknown } | null)?.navn;
+  if (!Array.isArray(list)) return [];
+  const places: Found[] = [];
+  const seen = new Set<string>();
+  for (const item of list as Record<string, unknown>[]) {
+    const name = typeof item?.["skrivemåte"] === "string" ? (item["skrivemåte"] as string).trim() : "";
+    const type = typeof item?.navneobjekttype === "string" ? item.navneobjekttype.trim() : "";
+    if (!name || SKIPPED_TYPES.has(type.toLowerCase())) continue;
+    const point = item?.representasjonspunkt as Record<string, unknown> | undefined;
+    const latitude = Number(point?.nord ?? point?.lat);
+    const longitude = Number(point?.["øst"] ?? point?.lon);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
+    const municipalities = Array.isArray(item.kommuner) ? (item.kommuner as Record<string, unknown>[]) : [];
+    const municipality =
+      typeof municipalities[0]?.kommunenavn === "string" ? placeName(municipalities[0].kommunenavn) : "";
+    const detail = [type, municipality && `i ${municipality}`].filter(Boolean).join(" ") || "Sted";
+    const key = `${name}|${detail}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    places.push({
+      kind: "sted",
+      street: name,
+      label: name,
+      detail: detail.charAt(0).toUpperCase() + detail.slice(1),
+      area: name,
+      address: "",
+      latitude: round(latitude),
+      longitude: round(longitude),
+    });
+  }
+  return places;
+}
+
+async function placesFor(text: string): Promise<AddressSuggestion[]> {
+  try {
+    const url = new URL(process.env.PLACE_SEARCH_URL || PLACE_URL);
+    url.searchParams.set("sok", `${text}*`);
+    url.searchParams.set("treffPerSide", String(FETCHED));
+    url.searchParams.set("side", "1");
+    url.searchParams.set("utkoordsys", "4258");
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(2500),
+    });
+    if (!response.ok) throw new Error(`Stedsnavnsøket svarte ${response.status}.`);
+    return rank(toPlaces(await response.json()), text).slice(0, PLACES_SHOWN);
+  } catch (error) {
+    console.warn("Stedsnavnsøket svarte ikke:", error instanceof Error ? error.message : error);
+    return [];
+  }
+}
+
+/**
+ * Forslag i feltet «Hvor ligger hytta?»: adresser og stedsnavn i samme liste.
+ * Med tall i søket leter eieren nok etter en adresse, og da kommer adressene
+ * først. Ellers kommer stedsnavnene først. Bare for innloggede medlemmer.
+ */
+export async function searchLocations(
+  actor: Actor | null,
+  query: unknown,
+): Promise<AddressSuggestion[]> {
+  if (!actor) throw new UserError("Logg inn for å søke etter adresser.");
+  const text = searchText(query);
+  if (!text) return [];
+  const [addresses, places] = await Promise.all([addressesFor(text), placesFor(text)]);
+  const ordered = /\d/.test(text) ? [...addresses, ...places] : [...places, ...addresses];
+  return ordered.slice(0, SHOWN);
 }

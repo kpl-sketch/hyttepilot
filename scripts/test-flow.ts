@@ -38,7 +38,7 @@ import { type Actor, UserError } from "../src/lib/errors";
 import { PLEDGE_VERSION } from "../src/lib/pledge";
 import { directionLinks, isShortMapLink, parsePosition } from "../src/lib/position";
 import { positionInMapPage, resolveShortMapLink } from "../src/lib/services/map-links";
-import { searchAddresses } from "../src/lib/services/addresses";
+import { searchAddresses, searchLocations } from "../src/lib/services/addresses";
 import {
   cancelBooking,
   createBooking,
@@ -193,8 +193,38 @@ const cabinData = (name: string) => ({
 async function fakeAddressSearch() {
   const seen: string[] = [];
   const server = createServer((request, response) => {
-    const search = new URL(request.url ?? "", "http://x").searchParams.get("sok") ?? "";
+    const requested = new URL(request.url ?? "", "http://x");
+    const search = requested.searchParams.get("sok") ?? "";
+    if (requested.pathname === "/navn") {
+      // Slik Kartverkets stedsnavnsøk svarer.
+      const point = (nord: number, øst: number) => ({ nord, øst, koordsys: 4258 });
+      const navn = search.toLowerCase().startsWith("hafjell")
+        ? [
+            { skrivemåte: "Hafjell alpinsenter", navneobjekttype: "Alpinanlegg", kommuner: [{ kommunenavn: "Øyer" }], representasjonspunkt: point(61.24, 10.45) },
+            { skrivemåte: "Hafjell", navneobjekttype: "Fjell", kommuner: [{ kommunenavn: "Øyer" }], representasjonspunkt: point(61.229684, 10.526971) },
+            { skrivemåte: "Hafjellvegen", navneobjekttype: "Adressenavn", kommuner: [{ kommunenavn: "Øyer" }], representasjonspunkt: point(61.2, 10.4) },
+            { skrivemåte: "Uten punkt", navneobjekttype: "Fjell" },
+          ]
+        : search.toLowerCase().startsWith("fjellvegen")
+          ? [{ skrivemåte: "Fjellvegen", navneobjekttype: "Adressenavn", representasjonspunkt: point(61, 10) }]
+          : [];
+      if (search.startsWith("nede")) {
+        response.writeHead(503).end();
+        return;
+      }
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ metadata: { totaltAntallTreff: navn.length }, navn }));
+      return;
+    }
     seen.push(search);
+    if (search.toLowerCase().startsWith("tisleidalen")) {
+      const adresser = [
+        { adressetekst: "107/1", objtype: "Matrikkeladresse", gardsnummer: 107, bruksnummer: 1, postnummer: "2923", poststed: "TISLEIDALEN", kommunenavn: "NORD-AURDAL", representasjonspunkt: { lat: 60.79371063, lon: 9.2487827 } },
+      ];
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ adresser }));
+      return;
+    }
     if (search.startsWith("nede")) {
       response.writeHead(503).end();
       return;
@@ -239,6 +269,7 @@ async function fakeAddressSearch() {
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("fikk ingen port");
   process.env.ADDRESS_SEARCH_URL = `http://127.0.0.1:${address.port}/sok`;
+  process.env.PLACE_SEARCH_URL = `http://127.0.0.1:${address.port}/navn`;
   return { seen, close: () => new Promise((resolve) => server.close(resolve)) };
 }
 
@@ -759,8 +790,24 @@ async function main() {
   await check("adressesøket gir forslag med plassering", async () => {
     const found = await searchAddresses(kari, "Fjellvegen 1");
     assert.deepEqual(found, [
-      { label: "Fjellvegen 12, 2636 Øyer", latitude: 61.234568, longitude: 10.456789 },
-      { label: "Fjellvegen 12, 8610 Mo i Rana", latitude: 66.3, longitude: 14.1 },
+      {
+        kind: "adresse",
+        label: "Fjellvegen 12, 2636 Øyer",
+        detail: "Adresse i Øyer",
+        area: "Øyer",
+        address: "Fjellvegen 12, 2636 Øyer",
+        latitude: 61.234568,
+        longitude: 10.456789,
+      },
+      {
+        kind: "adresse",
+        label: "Fjellvegen 12, 8610 Mo i Rana",
+        detail: "Adresse",
+        area: "Mo i Rana",
+        address: "Fjellvegen 12, 8610 Mo i Rana",
+        latitude: 66.3,
+        longitude: 14.1,
+      },
     ]);
     assert.equal(lookup.seen.at(-1), "Fjellvegen 1*", "søket skal treffe mens eieren skriver");
   });
@@ -791,6 +838,34 @@ async function main() {
     assert.equal((await searchAddresses(kari, "bare uten stjerne")).length, 2);
     assert.deepEqual(await searchAddresses(kari, "nede for vedlikehold"), []);
     assert.deepEqual(await searchAddresses(kari, "finnes ikke"), []);
+  });
+  await check("stedsnavn kommer først uten tall i søket, og gatenavn hoppes over", async () => {
+    const found = await searchLocations(kari, "Hafjell");
+    assert.deepEqual(
+      found.map((item) => [item.kind, item.label, item.detail, item.area, item.address]),
+      [
+        ["sted", "Hafjell", "Fjell i Øyer", "Hafjell", ""],
+        ["sted", "Hafjell alpinsenter", "Alpinanlegg i Øyer", "Hafjell alpinsenter", ""],
+      ],
+    );
+    assert.deepEqual([found[0].latitude, found[0].longitude], [61.229684, 10.526971]);
+  });
+  await check("adresser kommer først med tall i søket", async () => {
+    const found = await searchLocations(kari, "Fjellvegen 1");
+    assert.deepEqual(found.map((item) => item.label), ["Fjellvegen 12, 2636 Øyer", "Fjellvegen 12, 8610 Mo i Rana"]);
+  });
+  await check("hytte uten gateadresse finnes med gårds- og bruksnummer", async () => {
+    const [found] = await searchLocations(kari, "Tisleidalen");
+    assert.deepEqual([found.label, found.detail, found.area], [
+      "Gnr. 107, bnr. 1, 2923 Tisleidalen",
+      "Eiendom i Nord-Aurdal",
+      "Tisleidalen",
+    ]);
+  });
+  await check("søket etter steder krever innlogging og tåler at tjenesten er nede", async () => {
+    await refused(() => searchLocations(null, "Hafjell"), /Logg inn/);
+    assert.deepEqual(await searchLocations(kari, "nede for vedlikehold"), []);
+    assert.deepEqual(await searchLocations(kari, "Ha"), []);
   });
   await lookup.close();
 

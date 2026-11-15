@@ -3,7 +3,7 @@ import type { FormState } from "@/lib/errors";
 import { MAX_PHOTOS } from "@/lib/photo-limits";
 import { formatPosition } from "@/lib/position";
 import { ActionForm, SubmitButton } from "./action-form";
-import { AddressFields } from "./address-fields";
+import { LocationFields } from "./location-fields";
 import { PhotoPicker } from "./photo-picker";
 import { Field, Input, Textarea } from "./ui";
 
@@ -11,8 +11,8 @@ import { Field, Input, Textarea } from "./ui";
  * Skjema for å legge inn eller endre en hytte.
  *
  * En ny hytte legges inn med det som trengs for at noen kan spørre om å låne
- * den: navn, sted, sengeplasser, bilder og pris per døgn. Vask, påslag,
- * regler, adresse og nøkkel fylles ut senere i det fulle skjemaet på siden
+ * den: navn, hvor den ligger, sengeplasser, bilder og pris per døgn. Vask,
+ * påslag, regler og nøkkel fylles ut senere i det fulle skjemaet på siden
  * for hytta. Vipps-nummeret settes til eierens mobilnummer og kan endres der.
  */
 export function CabinForm({
@@ -32,11 +32,8 @@ export function CabinForm({
 
       <fieldset className="grid gap-4 sm:grid-cols-2">
         <legend className="mb-3 text-xl font-bold">Hytta</legend>
-        <Field label="Navn på hytta">
+        <Field label="Navn på hytta" className="sm:col-span-2">
           <Input name="name" required maxLength={80} defaultValue={cabin?.name} />
-        </Field>
-        <Field label="Sted" hint="For eksempel Hafjell eller Kragerø.">
-          <Input name="area" required maxLength={80} defaultValue={cabin?.area} />
         </Field>
         <Field label="Beskrivelse" className="sm:col-span-2">
           <Textarea name="description" maxLength={2000} defaultValue={cabin?.description} />
@@ -119,25 +116,22 @@ export function CabinForm({
       </fieldset>
 
       <fieldset>
-        <legend className="mb-1 text-xl font-bold">Adresse og veien dit</legend>
-        <p className="mb-4 max-w-[60ch] text-muted">
-          Vises til låneren først når lånet er betalt. Da får låneren også en lenke som
-          viser veien i kartet.
-        </p>
-        <AddressFields
-          defaultAddress={cabin?.address}
+        <legend className="mb-3 text-xl font-bold">Hvor hytta ligger</legend>
+        <LocationFields
+          defaultArea={cabin.area}
+          defaultAddress={cabin.address}
           defaultPosition={
-            cabin && cabin.latitude !== null && cabin.longitude !== null
+            cabin.latitude !== null && cabin.longitude !== null
               ? formatPosition({ latitude: cabin.latitude, longitude: cabin.longitude })
               : ""
           }
         />
         <Field
           label="Nøkkel og veibeskrivelse"
-          hint="Hvor nøkkelen ligger, parkering og det siste stykket fram."
-          className="mt-4"
+          hint="Hvor nøkkelen ligger, parkering og det siste stykket fram. Vises til låneren når lånet er betalt."
+          className="mt-6"
         >
-          <Textarea name="arrivalInfo" maxLength={2000} defaultValue={cabin?.arrivalInfo} />
+          <Textarea name="arrivalInfo" maxLength={2000} defaultValue={cabin.arrivalInfo} />
         </Field>
       </fieldset>
 
@@ -160,13 +154,14 @@ function NewCabinForm({
       <input type="hidden" name="cleaningFee" value="0" />
       <input type="hidden" name="vippsNumber" value={defaultVipps ?? ""} />
 
-      <div className="grid max-w-xl gap-4 sm:grid-cols-2">
+      <div className="grid max-w-xl gap-4">
         <Field label="Navn på hytta">
           <Input name="name" required maxLength={80} />
         </Field>
-        <Field label="Sted" hint="For eksempel Hafjell eller Kragerø.">
-          <Input name="area" required maxLength={80} />
-        </Field>
+        <LocationFields />
+      </div>
+
+      <div className="grid max-w-xl gap-4 sm:grid-cols-2">
         <Field label="Sengeplasser">
           <Input name="beds" type="number" min={1} max={40} required defaultValue={6} />
         </Field>
