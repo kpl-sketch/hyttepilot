@@ -55,6 +55,8 @@ export function LocationFields({
     return found ? { ...found, zoom: ZOOM.adresse } : null;
   });
   const [editingArea, setEditingArea] = useState(false);
+  // Sant når området bare er det eieren holder på å skrive i søkefeltet.
+  const areaFromTyping = useRef(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -78,6 +80,16 @@ export function LocationFields({
   useEffect(() => stopSearch, []);
   useEffect(() => () => linkRequest.current?.abort(), []);
 
+  // Skrev eieren før siden var ferdig lastet, står teksten i feltet uten at
+  // skjemaet vet om den. Da tar vi den med nå.
+  const queryInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const typed = queryInput.current?.value ?? "";
+    if (typed !== (defaultAddress || defaultArea)) onQueryChange(typed);
+    // Skal bare skje én gang, når siden er lastet.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   /** Setter nålen et nytt sted og flytter kartet dit. */
   function place(found: Position, zoom: number) {
     setPosition(formatPosition(found));
@@ -97,10 +109,12 @@ export function LocationFields({
     if (/\d/.test(text)) {
       // Ser ut som en adresse. Den skal ikke bli det alle ser.
       setAddress(text.slice(0, 200));
-      if (area === "" || area === query.trim()) setArea("");
+      if (areaFromTyping.current) setArea("");
+      areaFromTyping.current = false;
     } else {
       setArea(text.slice(0, 80));
       setAddress("");
+      areaFromTyping.current = true;
     }
     setEditingArea(false);
 
@@ -136,6 +150,7 @@ export function LocationFields({
     stopSearch();
     setQuery(suggestion.label);
     setArea(suggestion.area);
+    areaFromTyping.current = false;
     setAddress(suggestion.address);
     setEditingArea(suggestion.area === "");
     place(suggestion, ZOOM[suggestion.kind]);
@@ -247,6 +262,7 @@ export function LocationFields({
           Skriv stedet eller adressen, og velg fra listen.
         </span>
         <input
+          ref={queryInput}
           id={queryId}
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
@@ -304,7 +320,10 @@ export function LocationFields({
             id={areaId}
             name="area"
             value={area}
-            onChange={(event) => setArea(event.target.value)}
+            onChange={(event) => {
+              areaFromTyping.current = false;
+              setArea(event.target.value);
+            }}
             required
             maxLength={80}
             className={`${inputClass} sm:max-w-sm`}

@@ -47,6 +47,7 @@ export function LocationMap({
         // Siden skal kunne rulles forbi kartet uten at kartet zoomer.
         scrollWheelZoom: false,
       });
+      created.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>');
       L.tileLayer(TILES, {
         maxZoom: 18,
         attribution: '© <a href="https://www.kartverket.no/">Kartverket</a>',
