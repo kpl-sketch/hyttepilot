@@ -20,6 +20,9 @@ export function PublicShell({ children, after }: { children: ReactNode; after?: 
           <Link href="/personvern" className="underline">
             Personvern
           </Link>
+          <Link href="/om" className="underline">
+            Om oss
+          </Link>
         </nav>
       </footer>
       {after}

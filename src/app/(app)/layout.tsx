@@ -32,6 +32,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <Link href="/personvern" className="underline">
             Personvern
           </Link>
+          <Link href="/om" className="underline">
+            Om oss
+          </Link>
         </nav>
       </footer>
     </>

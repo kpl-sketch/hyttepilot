@@ -1,7 +1,7 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { type NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/", "/logg-inn", "/hytteloftet", "/personvern"];
+const PUBLIC_PATHS = ["/", "/logg-inn", "/hytteloftet", "/personvern", "/om"];
 
 /** Sidene som forklarer tjenesten for hver sin målgruppe: /v1 til /v10, og oversikten på /v. */
 const AUDIENCE_PATH = /^\/v([1-9]|10)?$/;
