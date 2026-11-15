@@ -7,5 +7,5 @@ const { name, audience } = AUDIENCES.v1;
 export const metadata: Metadata = { title: name };
 
 export default function Page() {
-  return <AudiencePage audience={audience} />;
+  return <AudiencePage audience={audience} number={1} />;
 }

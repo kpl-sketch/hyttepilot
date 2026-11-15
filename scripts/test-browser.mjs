@@ -296,6 +296,23 @@ async function main() {
       await shot(anne, `01-v${i}`);
     }
   });
+  await check("man kan bla mellom versjonene med piler, tall og tastatur", async () => {
+    await anne.goto(`${BASE}/v10`);
+    const nav = anne.getByRole("navigation", { name: "Bla mellom versjonene" });
+    await nav.getByRole("link", { name: /Neste versjon/ }).click();
+    await anne.waitForURL(/\/v1$/);
+    // Utviklingsmerket til Next ligger over venstre pil i dev, så den trykkes med tastaturet.
+    await nav.getByRole("link", { name: /Forrige versjon/ }).press("Enter");
+    await anne.waitForURL(/\/v10$/);
+    await anne.keyboard.press("ArrowRight");
+    await anne.waitForURL(/\/v1$/);
+    await anne.keyboard.press("ArrowLeft");
+    await anne.waitForURL(/\/v10$/);
+    await nav.getByRole("link", { name: /Versjon 10 av 10/ }).click();
+    await anne.waitForURL(/\/v$/);
+    assert.equal(await anne.getByRole("main").getByRole("listitem").count(), 10);
+    await shot(anne, "01-v-oversikt");
+  });
   await anne.goto(`${BASE}/logg-inn`);
   await logIn(anne, "admin@test.local");
   await onboard(anne, "Anne Admin");

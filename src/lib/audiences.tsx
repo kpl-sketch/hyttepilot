@@ -83,8 +83,8 @@ export const AUDIENCES: Record<string, { name: string; audience: Audience }> = {
       title: "Slutt på «er hytta ledig i påsken?» i gruppechatten.",
       lead: (
         <>
-          Dere låner allerede hytter av hverandre. Her {WHAT_IT_IS}, med ledige datoer, svar og
-          pris samlet ett sted.
+          Dere låner allerede hytter av hverandre. Her {WHAT_IT_IS}. Datoer, svar og pris står
+          samlet ett sted.
         </>
       ),
       stepsTitle: "Slik får dere orden på det",
@@ -234,3 +234,9 @@ export const AUDIENCES: Record<string, { name: string; audience: Audience }> = {
     },
   },
 };
+
+/** Versjonene i rekkefølge, med nummer og kortnavn, til navigasjonen. */
+export const VERSIONS = Object.entries(AUDIENCES).map(([key, { name }]) => ({
+  number: Number(key.slice(1)),
+  name,
+}));

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Logo } from "./logo";
 
 /** Ramme for sidene man ser uten å være logget inn. */
-export function PublicShell({ children }: { children: ReactNode }) {
+export function PublicShell({ children, after }: { children: ReactNode; after?: ReactNode }) {
   return (
     <>
       <header className="border-b border-line bg-surface">
@@ -22,6 +22,7 @@ export function PublicShell({ children }: { children: ReactNode }) {
           </Link>
         </nav>
       </footer>
+      {after}
     </>
   );
 }

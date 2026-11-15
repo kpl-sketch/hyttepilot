@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { VERSIONS } from "@/lib/audiences";
+import { AudienceNav } from "./audience-nav";
 import { CabinScene } from "./cabin-scene";
 import { PublicShell } from "./public-shell";
 import { ButtonLink, Panel } from "./ui";
@@ -22,10 +24,10 @@ export type Audience = {
  * målgruppe, men følger samme regler som forsiden: «Bare for inviterte» først,
  * ideen før reglene, og ingen løfter om vekst eller mange hytter.
  */
-export function AudiencePage({ audience }: { audience: Audience }) {
+export function AudiencePage({ audience, number }: { audience: Audience; number: number }) {
   const { forWhom, title, lead, stepsTitle, steps, extra, invited } = audience;
   return (
-    <PublicShell>
+    <PublicShell after={<AudienceNav current={number} versions={VERSIONS} />}>
       {/* Tjenesten er lukket. Det skal stå først, før noen leser resten. */}
       <p className="mb-5 inline-block rounded-full bg-pine px-4 py-1.5 text-sm font-bold uppercase tracking-wider text-white">
         Bare for inviterte

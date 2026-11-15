@@ -3,8 +3,8 @@ import { type NextRequest, NextResponse } from "next/server";
 
 const PUBLIC_PATHS = ["/", "/logg-inn", "/hytteloftet", "/personvern"];
 
-/** Sidene som forklarer tjenesten for hver sin målgruppe: /v1 til /v10. */
-const AUDIENCE_PATH = /^\/v([1-9]|10)$/;
+/** Sidene som forklarer tjenesten for hver sin målgruppe: /v1 til /v10, og oversikten på /v. */
+const AUDIENCE_PATH = /^\/v([1-9]|10)?$/;
 
 /**
  * Rask førstesjekk før siden bygges: uten innloggingskake sendes man til
