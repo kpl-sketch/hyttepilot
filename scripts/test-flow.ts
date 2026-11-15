@@ -63,10 +63,14 @@ import {
   getInvitationForViewer,
   getPublicInvitation,
   inviteAccount,
+  inviteManyToCabin,
   inviteToCabin,
   isEmailAllowed,
   listAccountInvitations,
   listCabinSharing,
+  MAX_INVITATIONS_PER_ROUND,
+  parseEmailList,
+  previewInvitations,
   previewShare,
   revokeAccess,
   revokeAccountInvitation,
@@ -676,6 +680,109 @@ async function main() {
     // Skulle noen likevel ha rukket å opprette bruker, gir invitasjonen ingenting.
     const sen = await register("angrer@test.local", "Anders Angrer");
     assert.equal(await getVisibleCabin(sen, karisHytte), null);
+  });
+  await check("adresser hentes ut av inntastet tekst, med navn, komma og linjeskift", () => {
+    const parsed = parseEmailList(
+      "Ola Nordmann <Ola@Test.local>, kari@test.local;\nola@test.local  mailto:siri@test.local.\nikke@gyldig",
+    );
+    assert.deepEqual(parsed.emails, ["ola@test.local", "kari@test.local", "siri@test.local"]);
+    assert.deepEqual(parsed.invalid, ["ikke@gyldig"]);
+    assert.deepEqual(parseEmailList("bare navn her"), { emails: [], invalid: [] });
+  });
+  await check("forhåndsvisning av flere adresser viser status for hver, uten å lagre eller sende", async () => {
+    await register("medlem@test.local", "Mona Medlem");
+    const round = await sentDuring(() =>
+      previewInvitations(
+        kari,
+        karisHytte,
+        "per@test.local, nabo@test.local, kari@test.local, gruppe1@test.local, medlem@test.local, feil@",
+        "Hei alle",
+      ),
+    );
+    assert.equal(round.mails.length, 0);
+    const status = Object.fromEntries(round.result.recipients.map((r) => [r.email, r.status]));
+    assert.deepEqual(status, {
+      "per@test.local": "has-access",
+      "nabo@test.local": "waiting",
+      "kari@test.local": "self",
+      "gruppe1@test.local": "new",
+      // Forhåndsvisningen sier ikke at adressen tilhører et medlem.
+      "medlem@test.local": "new",
+    });
+    assert.deepEqual(round.result.invalid, ["feil@"]);
+    assert.doesNotMatch(round.result.mail.text, /gruppe1|medlem/);
+    const sharing = await listCabinSharing(kari, karisHytte);
+    assert.equal(sharing?.invitations.some((i) => i.email === "gruppe1@test.local"), false);
+  });
+  await check("en runde med ugyldig adresse stoppes før noe lagres eller sendes", async () => {
+    const round = await sentDuring(() =>
+      refused(
+        () => inviteManyToCabin(kari, karisHytte, "gruppe1@test.local, feil@", ""),
+        /Rett opp eller fjern denne adressen først: feil@/,
+      ),
+    );
+    assert.equal(round.mails.length, 0);
+    const sharing = await listCabinSharing(kari, karisHytte);
+    assert.equal(sharing?.invitations.some((i) => i.email === "gruppe1@test.local"), false);
+  });
+  await check("flere adresser gir hver sin invitasjon og e-post, og resten hoppes over", async () => {
+    const round = await sentDuring(() =>
+      inviteManyToCabin(
+        kari,
+        karisHytte,
+        "gruppe1@test.local\ngruppe2@test.local\nGruppe3@test.local\nper@test.local\nnabo@test.local\nmedlem@test.local",
+        "Hei alle",
+      ),
+    );
+    const byEmail = Object.fromEntries(round.result.map((r) => [r.email, r.status]));
+    assert.deepEqual(byEmail, {
+      "gruppe1@test.local": "invited",
+      "gruppe2@test.local": "invited",
+      "gruppe3@test.local": "invited",
+      "per@test.local": "skipped",
+      "nabo@test.local": "skipped",
+      "medlem@test.local": "shared",
+    });
+    assert.match(round.result.find((r) => r.email === "per@test.local")?.reason ?? "", /ser allerede/);
+    assert.match(round.result.find((r) => r.email === "nabo@test.local")?.reason ?? "", /allerede invitert/);
+
+    // Én e-post per mottaker, med egen lenke, og ingen ser de andre adressene.
+    assert.deepEqual(
+      round.mails.map((m) => m.to).sort(),
+      ["gruppe1@test.local", "gruppe2@test.local", "gruppe3@test.local", "medlem@test.local"],
+    );
+    const tokens = round.mails.filter((m) => m.to.startsWith("gruppe")).map(tokenIn);
+    assert.equal(new Set(tokens).size, 3);
+    for (const mail of round.mails) {
+      const others = round.mails.filter((m) => m.to !== mail.to).map((m) => m.to);
+      for (const other of others) assert.ok(!mail.text.includes(other), "e-posten nevner ikke andre mottakere");
+      assert.match(mail.text, /Hei alle/);
+    }
+    const medlem = await db.select().from(user).where(sql`${user.email} = 'medlem@test.local'`);
+    assert.equal(await accessCount(karisHytte, medlem[0].id), 1);
+
+    // Hver invitasjon kan trekkes tilbake for seg.
+    const sharing = await listCabinSharing(kari, karisHytte);
+    const second = sharing?.invitations.find((i) => i.email === "gruppe2@test.local");
+    assert.ok(second);
+    await revokeInvitation(kari, second.id);
+    assert.equal((await getPublicInvitation(tokens[1]))?.status, "revoked");
+    assert.equal((await getPublicInvitation(tokens[0]))?.status, "valid");
+    assert.equal((await getPublicInvitation(tokens[2]))?.status, "valid");
+  });
+  await check("en runde har en øvre grense, og bare eieren kan sende den", async () => {
+    const many = Array.from(
+      { length: MAX_INVITATIONS_PER_ROUND + 1 },
+      (_, i) => `mange${i}@test.local`,
+    ).join(", ");
+    const round = await sentDuring(async () => {
+      await refused(() => previewInvitations(kari, karisHytte, many, ""), /høyst 20 om gangen/);
+      await refused(() => inviteManyToCabin(kari, karisHytte, many, ""), /høyst 20 om gangen/);
+      await refused(() => inviteManyToCabin(per, karisHytte, "venn@test.local", ""), /egne hytter/);
+      await refused(() => previewInvitations(per, karisHytte, "venn@test.local", ""), /egne hytter/);
+      await refused(() => inviteManyToCabin(kari, karisHytte, "   ", ""), /minst én/);
+    });
+    assert.equal(round.mails.length, 0);
   });
   await check("ukjent eller ødelagt lenke gir ingenting", async () => {
     assert.equal(await getPublicInvitation("finnes-ikke-denne-noekkelen-her"), null);

@@ -379,7 +379,7 @@ async function main() {
   await openDates(kari, d(10), d(40));
   await openDates(kari, d(380), d(430));
 
-  await kari.getByLabel("E-postadressen til den som skal få se hytta").fill("per@test.local");
+  await kari.getByLabel("E-postadressene til dem som skal få se hytta").fill("per@test.local");
   await kari.getByLabel("Personlig hilsen").fill("Velkommen på hytta, Per!");
   await kari.getByRole("button", { name: "Se over før du sender" }).click();
   await check("eieren ser mottaker, hytte, tilgang og e-posten før noe sendes", async () => {
@@ -572,7 +572,7 @@ async function main() {
   await check("B inviterer C til sin hytte, bare med tastatur", async () => {
     await per.reload();
     await per.getByRole("heading", { name: "Hvem ville du selv lånt bort hytta til?" }).waitFor();
-    await tabTo(per, /E-postadressen til den som skal få se hytta/);
+    await tabTo(per, /E-postadressene til dem som skal få se hytta/);
     await per.keyboard.type("ola@test.local");
     await tabTo(per, /Personlig hilsen/);
     await per.keyboard.type("Bli med til Kragerø!");
@@ -667,12 +667,40 @@ async function main() {
   console.log("Utløpt, tilbaketrukket og ukjent invitasjon");
   await kari.goto(`${BASE}/mine-hytter/${fjellro}`);
   for (const email of ["angrer@test.local", "sen@test.local"]) {
-    await kari.getByLabel("E-postadressen til den som skal få se hytta").fill(email);
+    await kari.getByLabel("E-postadressene til dem som skal få se hytta").fill(email);
     await kari.getByRole("button", { name: "Se over før du sender" }).click();
     await kari.getByRole("button", { name: "Send invitasjonen" }).click();
     await kari.getByText(`Invitasjonen er sendt til ${email}.`).waitFor();
-    await kari.getByRole("button", { name: "Inviter en til" }).click();
+    await kari.getByRole("button", { name: "Inviter flere" }).click();
   }
+  await check("eieren inviterer flere på en gang og ser status for hver adresse", async () => {
+    await kari
+      .getByLabel("E-postadressene til dem som skal få se hytta")
+      .fill("Siri Venn <siri@test.local>, tor@test.local\nkari@test.local\nsen@test.local");
+    await kari.getByLabel("Personlig hilsen").fill("Hei alle sammen! Fjellro står ledig i vinter.");
+    await kari.getByRole("button", { name: "Se over før du sender" }).click();
+    const heading = kari.getByRole("heading", { name: "Se over før du sender" });
+    await heading.waitFor();
+    await kari.getByText("4 adresser").waitFor();
+    await kari.getByText("Din egen adresse. Hoppes over.").waitFor();
+    await kari.getByText("Er invitert fra før og har ikke logget inn ennå. Hoppes over.").waitFor();
+    await kari.getByText(/Hver mottaker får sin egen e-post med sin egen lenke/).waitFor();
+    assert.equal(
+      (await newMails()).filter((mail) => ["siri@test.local", "tor@test.local"].includes(mail.to)).length,
+      0,
+      "ingenting er sendt før eieren bekrefter",
+    );
+    assert.match(await focusName(kari), /Se over før du sender/, "fokus flyttes til forhåndsvisningen");
+    await shot(kari, "14a-inviter-flere-se-over", kari.locator("form", { has: heading }));
+    await kari.getByRole("button", { name: "Send 2 invitasjoner" }).click();
+    const receipt = kari.getByRole("status").filter({ hasText: "2 er invitert, 2 hoppet over." });
+    await receipt.waitFor();
+    const mails = (await newMails()).filter((mail) => ["siri@test.local", "tor@test.local"].includes(mail.to));
+    assert.equal(mails.length, 2, "én e-post til hver ny mottaker");
+    assert.notEqual(await invitationLink("siri@test.local"), await invitationLink("tor@test.local"));
+    await shot(kari, "14b-inviter-flere-kvittering", receipt);
+    await kari.getByRole("button", { name: "Inviter flere" }).click();
+  });
   kari.once("dialog", (dialog) => dialog.accept());
   await kari.getByRole("button", { name: "Trekk tilbake invitasjonen til angrer@test.local" }).click();
   await kari.getByText("Invitasjonen er trukket tilbake. Lenken i e-posten virker ikke lenger.").waitFor();
@@ -721,6 +749,8 @@ async function main() {
       "ola@test.local": 1,
       "angrer@test.local": 1,
       "sen@test.local": 1,
+      "siri@test.local": 1,
+      "tor@test.local": 1,
     });
     const accesses = await pool.query(`select count(*)::int as n from "cabin_access"`);
     assert.equal(accesses.rows[0].n, 2, "Sjøbua er delt med Kari og Ola. Fjellro er ikke delt med noen");

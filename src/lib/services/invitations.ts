@@ -4,6 +4,7 @@ import { and, asc, eq, gt, inArray, isNotNull, isNull, lte, or, sql } from "driz
 import { z } from "zod";
 import { appUrl, isAdminEmail } from "../brand";
 import { formatDate, todayInOslo } from "../dates";
+import { MAX_INVITATIONS_PER_ROUND } from "../invitation-limits";
 import { db } from "../db";
 import { booking, type Cabin, cabin, cabinAccess, invitation, profile, user } from "../db/schema";
 import { sendEmail } from "../email";
@@ -373,6 +374,201 @@ export async function inviteToCabin(
     recipient: registered?.name ?? email,
     emailAccepted,
   };
+}
+
+/* ------------------------ Invitere flere på en gang ------------------------ */
+
+export { MAX_INVITATIONS_PER_ROUND };
+
+/**
+ * Henter adressene ut av teksten eieren har limt inn. Adresser kan stå skilt
+ * med komma, semikolon, mellomrom eller linjeskift, og gjerne med navn rundt,
+ * slik de kommer fra et e-postprogram («Kari Nordmann <kari@eksempel.no>»).
+ * Ord uten @ regnes som navn og hoppes over. Like adresser telles én gang.
+ */
+export function parseEmailList(raw: unknown): { emails: string[]; invalid: string[] } {
+  const text = typeof raw === "string" ? raw : "";
+  const emails: string[] = [];
+  const invalid: string[] = [];
+  for (const part of text.split(/[\s,;<>()"']+/)) {
+    if (!part.includes("@")) continue;
+    const candidate = normalizeEmail(part.replace(/^mailto:/i, "").replace(/[.:]+$/, ""));
+    if (!emailSchema.safeParse(candidate).success) {
+      if (!invalid.includes(part)) invalid.push(part);
+    } else if (!emails.includes(candidate)) {
+      emails.push(candidate);
+    }
+  }
+  return { emails, invalid };
+}
+
+/**
+ * Hva som skjer med hver adresse i en runde:
+ * new: får invitasjon, eller tilgang med en gang hvis vedkommende er med fra før.
+ *      Forhåndsvisningen skiller ikke mellom de to, se previewShare.
+ * has-access: ser hytta allerede, hoppes over.
+ * waiting: er invitert til hytta og har ikke logget inn ennå, hoppes over.
+ * self: eierens egen adresse, hoppes over.
+ */
+export type RecipientStatus = "new" | "has-access" | "waiting" | "self";
+
+export type InvitationsPreview = {
+  cabinName: string;
+  cabinArea: string;
+  sharedWith: string[];
+  waiting: string[];
+  recipients: { email: string; status: RecipientStatus; name?: string }[];
+  /** Tekst som så ut som en adresse, men ikke er gyldig. */
+  invalid: string[];
+  /** Eksempel på e-posten, med plassholder for adressen og lenken. */
+  mail: { subject: string; text: string };
+};
+
+export type InvitationResult = {
+  email: string;
+  /** skipped: ingenting ble lagret eller sendt for denne adressen. */
+  status: "shared" | "invited" | "skipped";
+  recipient: string;
+  emailAccepted: boolean;
+  /** Hvorfor adressen ble hoppet over. */
+  reason?: string;
+};
+
+function parseEmailRound(raw: unknown): { emails: string[]; invalid: string[] } {
+  const parsed = parseEmailList(raw);
+  if (parsed.emails.length === 0 && parsed.invalid.length === 0) {
+    throw new UserError("Skriv minst én e-postadresse.");
+  }
+  if (parsed.emails.length > MAX_INVITATIONS_PER_ROUND) {
+    throw new UserError(
+      `Du kan invitere høyst ${MAX_INVITATIONS_PER_ROUND} om gangen. Du har skrevet ${parsed.emails.length} adresser.`,
+    );
+  }
+  return parsed;
+}
+
+/** Status for hver adresse, uten å avsløre hvem som er medlem fra før. */
+async function recipientStatuses(actor: Actor, target: Cabin, emails: string[]) {
+  if (emails.length === 0) return [];
+  const own = normalizeEmail(actor.email);
+  const [seeing, waiting] = await Promise.all([
+    db
+      .select({ email: user.email, name: user.name })
+      .from(cabinAccess)
+      .innerJoin(user, eq(user.id, cabinAccess.userId))
+      .where(and(eq(cabinAccess.cabinId, target.id), inArray(user.email, emails))),
+    db
+      .select({ email: invitation.email })
+      .from(invitation)
+      .where(and(eq(invitation.cabinId, target.id), inArray(invitation.email, emails), usable())),
+  ]);
+  return emails.map((email) => {
+    if (email === own) return { email, status: "self" as const };
+    const seer = seeing.find((s) => normalizeEmail(s.email) === email);
+    if (seer) return { email, status: "has-access" as const, name: seer.name };
+    if (waiting.some((w) => w.email === email)) return { email, status: "waiting" as const };
+    return { email, status: "new" as const };
+  });
+}
+
+/**
+ * Viser eieren hva som skjer med hver adresse før noe lagres eller sendes.
+ * Ugyldige adresser stopper ikke forhåndsvisningen, men de må rettes eller
+ * fjernes før runden kan sendes.
+ */
+export async function previewInvitations(
+  actor: Actor,
+  cabinId: string,
+  rawEmails: unknown,
+  rawMessage: unknown,
+): Promise<InvitationsPreview> {
+  const target = await ownCabinOrRefuse(actor, cabinId);
+  const message = parseMessage(rawMessage);
+  const { emails, invalid } = parseEmailRound(rawEmails);
+  const [recipients, sharing] = await Promise.all([
+    recipientStatuses(actor, target, emails),
+    currentSharing(target.id),
+  ]);
+
+  const placeholder = "LENKE";
+  const sample = cabinInvitationMail("ADRESSE", actor.name, {
+    cabinName: target.name,
+    cabinArea: target.area,
+    message,
+    token: placeholder,
+    expiresAt: newInvitation().expiresAt,
+  });
+  return {
+    cabinName: target.name,
+    cabinArea: target.area,
+    ...sharing,
+    recipients,
+    invalid,
+    mail: {
+      subject: sample.subject,
+      text: sample.text
+        .replace(`${appUrl()}/invitasjon/${placeholder}`, "(personlig lenke til invitasjonen)")
+        .replace("ADRESSE", "(adressen til mottakeren)"),
+    },
+  };
+}
+
+/** Pause mellom e-postene når de går til Resend, som tar imot få i sekundet. */
+const SEND_SPACING_MS = 600;
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Eieren inviterer flere adresser til én hytte i samme runde. Hver adresse
+ * får sin egen invitasjon, med egen lenke, egen frist og egen e-post, akkurat
+ * som med inviteToCabin. Eieren kan senere trekke tilbake hver enkelt.
+ *
+ * En adresse som ikke kan inviteres (ser hytta allerede, er invitert fra før,
+ * er eierens egen), hoppes over og stopper ikke resten.
+ */
+export async function inviteManyToCabin(
+  actor: Actor,
+  cabinId: string,
+  rawEmails: unknown,
+  rawMessage: unknown = "",
+): Promise<InvitationResult[]> {
+  const target = await ownCabinOrRefuse(actor, cabinId);
+  parseMessage(rawMessage);
+  const { emails, invalid } = parseEmailRound(rawEmails);
+  if (invalid.length > 0) {
+    throw new UserError(
+      `Rett opp eller fjern ${invalid.length === 1 ? "denne adressen" : "disse adressene"} først: ${invalid.join(", ")}.`,
+    );
+  }
+
+  const paced = Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
+  const results: InvitationResult[] = [];
+  let lastSend = 0;
+  for (const email of emails) {
+    if (paced && lastSend > 0) {
+      const left = SEND_SPACING_MS - (Date.now() - lastSend);
+      if (left > 0) await wait(left);
+    }
+    try {
+      const outcome = await inviteToCabin(actor, target.id, email, rawMessage);
+      lastSend = Date.now();
+      results.push({ email, ...outcome });
+    } catch (error) {
+      // En uventet feil for én adresse skal ikke skjule at de forrige er
+      // sendt. Den logges, og eieren får beskjed om å prøve adressen igjen.
+      if (!(error instanceof UserError)) console.error(error);
+      results.push({
+        email,
+        status: "skipped",
+        recipient: email,
+        emailAccepted: false,
+        reason:
+          error instanceof UserError
+            ? error.message
+            : "Noe gikk galt hos oss. Prøv denne adressen igjen om litt.",
+      });
+    }
+  }
+  return results;
 }
 
 /**

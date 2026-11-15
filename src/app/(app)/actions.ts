@@ -19,8 +19,11 @@ import {
   claimInvitations,
   INVITATION_DAYS,
   inviteAccount,
-  inviteToCabin,
+  type InvitationResult,
+  type InvitationsPreview,
+  inviteManyToCabin,
   isInvitationToken,
+  previewInvitations,
   previewShare,
   revokeAccess,
   revokeAccountInvitation,
@@ -173,8 +176,14 @@ export async function removeAvailabilityAction(
  */
 export type ShareState = {
   step: "edit" | "preview" | "sent";
+  /** I `email` står adressene slik eieren skrev dem, én eller flere. */
   values: { cabinId: string; email: string; personId: string; message: string };
+  /** Forhåndsvisning når hytta vises til én person i kretsen. */
   preview?: SharePreview;
+  /** Forhåndsvisning når eieren inviterer én eller flere adresser. */
+  invitations?: InvitationsPreview;
+  /** Hva som skjedde med hver adresse, når eieren har sendt. */
+  results?: InvitationResult[];
   error?: string;
   ok?: string;
 };
@@ -190,6 +199,25 @@ function shareMessage(outcome: ShareOutcome): string {
     : `Invitasjonen til ${outcome.recipient} er lagret, men e-posten ble ikke sendt. Mottakeren kan logge inn med adressen sin likevel. Si gjerne fra selv.`;
 }
 
+/** Oppsummeringen øverst i kvitteringen etter en runde med invitasjoner. */
+function roundSummary(results: InvitationResult[]): string {
+  if (results.length === 1) {
+    const [only] = results;
+    return only.status === "skipped"
+      ? `Ingenting ble sendt. ${only.reason ?? ""}`.trim()
+      : shareMessage({ ...only, status: only.status });
+  }
+  const invited = results.filter((r) => r.status === "invited").length;
+  const shared = results.filter((r) => r.status === "shared").length;
+  const skipped = results.filter((r) => r.status === "skipped").length;
+  const parts = [
+    invited > 0 && `${invited} er invitert`,
+    shared > 0 && `${shared} ser hytta med en gang`,
+    skipped > 0 && `${skipped} hoppet over`,
+  ].filter(Boolean);
+  return `${parts.join(", ")}.`.replace(/^./, (c) => c.toUpperCase());
+}
+
 export async function shareAction(prev: ShareState, formData: FormData): Promise<ShareState> {
   const viewer = await requireViewer();
   const values = {
@@ -198,21 +226,49 @@ export async function shareAction(prev: ShareState, formData: FormData): Promise
     personId: text(formData, "personId"),
     message: text(formData, "message"),
   };
+  const send = text(formData, "step") === "send";
   try {
-    if (text(formData, "step") === "send") {
-      const outcome = values.personId
-        ? await shareWithPerson(viewer, values.cabinId, values.personId, values.message)
-        : await inviteToCabin(viewer, values.cabinId, values.email, values.message);
+    if (values.personId) {
+      if (send) {
+        const outcome = await shareWithPerson(
+          viewer,
+          values.cabinId,
+          values.personId,
+          values.message,
+        );
+        refresh();
+        return {
+          step: "sent",
+          values: { ...values, email: "", message: "" },
+          ok: shareMessage(outcome),
+        };
+      }
+      const preview = await previewShare(
+        viewer,
+        values.cabinId,
+        { personId: values.personId },
+        values.message,
+      );
+      return { step: "preview", values, preview };
+    }
+
+    if (send) {
+      const results = await inviteManyToCabin(viewer, values.cabinId, values.email, values.message);
       refresh();
       return {
         step: "sent",
         values: { ...values, email: "", message: "" },
-        ok: shareMessage(outcome),
+        ok: roundSummary(results),
+        results: results.length > 1 ? results : undefined,
       };
     }
-    const to = values.personId ? { personId: values.personId } : { email: values.email };
-    const preview = await previewShare(viewer, values.cabinId, to, values.message);
-    return { step: "preview", values, preview };
+    const invitations = await previewInvitations(
+      viewer,
+      values.cabinId,
+      values.email,
+      values.message,
+    );
+    return { step: "preview", values, invitations };
   } catch (error) {
     return { step: "edit", values, error: toFormState(error)?.error };
   }

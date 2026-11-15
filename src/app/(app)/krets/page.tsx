@@ -273,8 +273,8 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
               Hvem ville du selv lånt bort hytta til?
             </h2>
             <p className="mt-1 mb-5 max-w-[60ch] text-muted">
-              Inviter én person du stoler på. Vedkommende får se hytta du velger her, og
-              ingenting annet. Du ser nøyaktig hva som sendes før du bekrefter.
+              Inviter én eller flere du stoler på. Hver får sin egen invitasjon og ser bare
+              hytta du velger her. Du ser nøyaktig hva som sendes før du bekrefter.
             </p>
             <ShareForm cabins={ownChoices} />
           </Panel>
