@@ -1,9 +1,10 @@
 import Link from "next/link";
 
 /** Faner øverst i administrasjonen. */
-export function AdminTabs({ active }: { active: "invitasjoner" | "tall" }) {
+export function AdminTabs({ active }: { active: "invitasjoner" | "medlemmer" | "tall" }) {
   const tabs = [
     { key: "invitasjoner", href: "/admin", label: "Invitasjoner" },
+    { key: "medlemmer", href: "/admin/medlemmer", label: "Medlemmer" },
     { key: "tall", href: "/admin/tall", label: "Tall" },
   ] as const;
   return (
