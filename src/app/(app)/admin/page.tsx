@@ -7,6 +7,7 @@ import { formatDate, todayInOslo } from "@/lib/dates";
 import { listAccountInvitations } from "@/lib/services/invitations";
 import { requireViewer } from "@/lib/session";
 import { inviteAccountAction, revokeAccountInvitationAction } from "../actions";
+import { AdminTabs } from "./tabs";
 
 export const metadata: Metadata = { title: "Administrasjon" };
 
@@ -30,6 +31,7 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
         title="Administrasjon"
         lead={`Her inviterer du folk inn i ${APP_NAME} uten å vise dem en hytte. De kan da legge inn sin egen hytte.`}
       />
+      <AdminTabs active="invitasjoner" />
 
       <p className="mb-8 max-w-[60ch] rounded-xl border border-line bg-surface p-4">
         Som administrator ser du ikke andres hytter eller forespørsler. Du ser hytter som
