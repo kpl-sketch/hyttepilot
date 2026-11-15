@@ -25,14 +25,22 @@ export function AudienceNav({
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
       const target = event.target as HTMLElement | null;
       if (target?.closest("input, textarea, select, [contenteditable]")) return;
-      if (event.key === "ArrowLeft") router.push(`/v${prev}`);
-      if (event.key === "ArrowRight") router.push(`/v${next}`);
+      // Regn ut målet fra adressen, ikke fra siden som lyttet. Next kan holde
+      // forrige side i live et øyeblikk, og da ville ett trykk hoppet to sider.
+      const here = Number(window.location.pathname.match(/^\/v(\d+)$/)?.[1]);
+      if (!here) return;
+      const step = event.key === "ArrowLeft" ? -1 : 1;
+      const to = ((here - 1 + step + count) % count) + 1;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      router.push(`/v${to}`);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [router, prev, next]);
+  }, [router, count]);
 
   const current_ = versions.find((v) => v.number === current);
   // 44 punkter: stor nok til å treffe med tommelen.

@@ -1,5 +1,5 @@
 import { PublicShell } from "@/components/public-shell";
-import { ButtonLink, Panel } from "@/components/ui";
+import { ButtonLink, InviteOnlyBadge, Panel, StepNumber } from "@/components/ui";
 import { CabinScene } from "@/components/cabin-scene";
 import { APP_NAME, TAGLINE, WHAT_IT_IS } from "@/lib/brand";
 
@@ -20,11 +20,9 @@ export default function LandingPage() {
   return (
     <PublicShell>
       {/* Tjenesten er lukket. Det skal stå først, før noen leser resten. */}
-      <p className="mb-5 inline-block rounded-full bg-pine px-4 py-1.5 text-sm font-bold uppercase tracking-wider text-white">
-        Bare for inviterte
-      </p>
+      <InviteOnlyBadge />
       {/* Overskriften selger ideen. Reglene kommer etterpå, som trygghet. */}
-      <h1 className="max-w-[17ch] text-5xl font-extrabold leading-[1.05] tracking-tight sm:text-6xl">
+      <h1 className="max-w-[17ch] text-5xl font-semibold leading-[1.05] sm:text-6xl">
         {TAGLINE}
       </h1>
       <p className="mt-6 max-w-[52ch] text-xl text-muted">
@@ -38,18 +36,13 @@ export default function LandingPage() {
       {/* Fjell, fjord og en rød hytte med lys i vinduet. */}
       <CabinScene className="mt-12" />
 
-      <h2 className="mt-10 text-2xl font-bold tracking-tight">Slik låner du bort hytta di</h2>
+      <h2 className="mt-10 text-2xl font-semibold">Slik låner du bort hytta di</h2>
       {/* role="list": Safari dropper listen for skjermlesere når punktene er skjult. */}
       <ol role="list" className="mt-5 space-y-5">
         {steps.map((step, index) => (
           <li key={step.title} className="flex gap-4">
-            <span
-              aria-hidden="true"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-pine font-bold text-white"
-            >
-              {index + 1}
-            </span>
-            <p className="max-w-[48ch] pt-0.5 text-lg">
+            <StepNumber n={index + 1} />
+            <p className="max-w-[48ch] pt-1 text-lg">
               <strong className="font-semibold">{step.title}</strong> {step.text}
             </p>
           </li>
@@ -59,26 +52,26 @@ export default function LandingPage() {
         Den som låner, betaler et bidrag til strøm og faste kostnader med Vipps. Du setter prisen.
       </p>
 
-      <h2 className="mt-10 text-2xl font-bold tracking-tight">Har du ikke hytte?</h2>
+      <h2 className="mt-10 text-2xl font-semibold">Har du ikke hytte?</h2>
       <p className="mt-2 max-w-[52ch] text-lg">
         Da kan du likevel låne. Det eneste du trenger, er en invitasjon fra en hytteeier som kjenner
         deg.
       </p>
 
       {/* Å låne bort tilbake er frivillig. Derfor «kan du velge», ikke et løfte. */}
-      <h2 className="mt-10 text-2xl font-bold tracking-tight">Har du hytte og låner hos andre?</h2>
+      <h2 className="mt-10 text-2xl font-semibold">Har du hytte og låner hos andre?</h2>
       <p className="mt-2 max-w-[52ch] text-lg">
         Da kan du velge å vise dem din. Det er et tilbud, ikke en plikt.
       </p>
 
-      <h2 className="mt-10 text-2xl font-bold tracking-tight">Bare folk du kjenner</h2>
+      <h2 className="mt-10 text-2xl font-semibold">Bare folk du kjenner</h2>
       <p className="mt-2 max-w-[52ch] text-lg">
         Ingen annonser, ingen fremmede, og ingen ser hytta di uten at du har valgt dem. Venner av
         vennene dine får ikke tilgang av seg selv.
       </p>
 
       <Panel className="mt-10">
-        <h2 className="max-w-[26ch] text-2xl font-bold tracking-tight">
+        <h2 className="max-w-[26ch] text-2xl font-semibold">
           Du må bli invitert av noen som allerede er med
         </h2>
         {/* Bare eiere og administratorer kan invitere. Teksten lover ikke mer. */}

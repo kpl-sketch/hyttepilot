@@ -3,7 +3,7 @@ import { VERSIONS } from "@/lib/audiences";
 import { AudienceNav } from "./audience-nav";
 import { CabinScene } from "./cabin-scene";
 import { PublicShell } from "./public-shell";
-import { ButtonLink, Panel } from "./ui";
+import { ButtonLink, InviteOnlyBadge, Panel, StepNumber } from "./ui";
 
 export type Audience = {
   /** Hvem siden snakker til, kort. Står rett under merket. */
@@ -29,36 +29,29 @@ export function AudiencePage({ audience, number }: { audience: Audience; number:
   return (
     <PublicShell belowHeader={<AudienceNav current={number} versions={VERSIONS} />}>
       {/* Tjenesten er lukket. Det skal stå først, før noen leser resten. */}
-      <p className="mb-5 inline-block rounded-full bg-pine px-4 py-1.5 text-sm font-bold uppercase tracking-wider text-white">
-        Bare for inviterte
-      </p>
-      <p className="mb-3 text-lg font-semibold text-barn">{forWhom}</p>
-      <h1 className="max-w-[20ch] text-4xl font-extrabold leading-[1.08] tracking-tight sm:text-5xl">
+      <InviteOnlyBadge />
+      <p className="mb-3 font-display text-xl italic text-barn">{forWhom}</p>
+      <h1 className="max-w-[20ch] text-4xl font-semibold leading-[1.08] sm:text-5xl">
         {title}
       </h1>
       <p className="mt-6 max-w-[52ch] text-xl text-muted">{lead}</p>
 
       <CabinScene className="mt-10" />
 
-      <h2 className="mt-10 text-2xl font-bold tracking-tight">{stepsTitle}</h2>
+      <h2 className="mt-10 text-2xl font-semibold">{stepsTitle}</h2>
       {/* role="list": Safari dropper listen for skjermlesere når punktene er skjult. */}
       <ol role="list" className="mt-5 space-y-5">
         {steps.map((step, index) => (
           <li key={step} className="flex gap-4">
-            <span
-              aria-hidden="true"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-pine font-bold text-white"
-            >
-              {index + 1}
-            </span>
-            <p className="max-w-[48ch] pt-0.5 text-lg">{step}</p>
+            <StepNumber n={index + 1} />
+            <p className="max-w-[48ch] pt-1 text-lg">{step}</p>
           </li>
         ))}
       </ol>
 
       {extra && (
         <>
-          <h2 className="mt-10 text-2xl font-bold tracking-tight">{extra.title}</h2>
+          <h2 className="mt-10 text-2xl font-semibold">{extra.title}</h2>
           <p className="mt-2 max-w-[52ch] text-lg">{extra.body}</p>
         </>
       )}
@@ -66,7 +59,7 @@ export function AudiencePage({ audience, number }: { audience: Audience; number:
       <Panel className="mt-10">
         {invited ? (
           <>
-            <h2 className="max-w-[26ch] text-2xl font-bold tracking-tight">
+            <h2 className="max-w-[26ch] text-2xl font-semibold">
               Logg inn med adressen invitasjonen ble sendt til
             </h2>
             <p className="mt-2 max-w-[48ch] text-lg">
@@ -75,7 +68,7 @@ export function AudiencePage({ audience, number }: { audience: Audience; number:
           </>
         ) : (
           <>
-            <h2 className="max-w-[26ch] text-2xl font-bold tracking-tight">
+            <h2 className="max-w-[26ch] text-2xl font-semibold">
               Du må bli invitert av noen som allerede er med
             </h2>
             <p className="mt-2 max-w-[48ch] text-lg">
@@ -96,7 +89,7 @@ export function AudiencePage({ audience, number }: { audience: Audience; number:
 
       <p className="mt-10 max-w-[52ch] border-t border-line pt-6 text-lg text-muted">
         Alle lover det samme før de blir med:{" "}
-        <span className="font-semibold text-ink">Jeg behandler hytta som min egen.</span>
+        <span className="font-display text-xl italic text-ink">Jeg behandler hytta som min egen.</span>
       </p>
     </PublicShell>
   );

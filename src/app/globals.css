@@ -1,30 +1,40 @@
 @import "tailwindcss";
 
 /*
- * Lyst og luftig, med runde kort og myke skygger. Det norske ligger i
- * fargene: låverødt for handlinger, fjordblått for navn og valgt tilstand,
- * og vindusgult for «ledig», et opplyst hyttevindu.
+ * Varmt og rolig, som en hytte i kveldslys. Kremhvit bakgrunn, overskrifter
+ * med seriff, og fargene fra hytta: låverødt for handlinger, mørk granskog
+ * for navn og valgt tilstand, og vindusgull for «ledig», et opplyst vindu.
  */
 @theme {
   --font-sans: "Schibsted Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces Variable", ui-serif, Georgia, serif;
 
-  --color-paper: #f6f7f7;
-  --color-surface: #ffffff;
-  --color-ink: #1d2327;
-  --color-pine: #173f57;
-  --color-barn: #b8312a;
-  --color-barn-dark: #962620;
-  --color-window: #f4c04e;
-  --color-line: #e2e5e6;
-  --color-muted: #5f686d;
-  --color-fjord-soft: #e8f0f4;
+  --color-paper: #f4ede3;
+  --color-surface: #fffbf5;
+  --color-ink: #2a221d;
+  --color-pine: #2c4536;
+  --color-barn: #a13a26;
+  --color-barn-dark: #822c1b;
+  --color-window: #e3ad45;
+  --color-line: #e6dacb;
+  --color-muted: #6f6257;
+  --color-fjord-soft: #efe4d3;
 
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.06), 0 6px 20px rgb(0 0 0 / 0.08);
+  --shadow-card: 0 1px 2px rgb(70 45 20 / 0.05), 0 10px 30px rgb(70 45 20 / 0.08);
 }
 
 body {
-  background: var(--color-surface);
+  background: var(--color-paper);
   color: var(--color-ink);
+}
+
+/* Overskriftene har seriff. Det gir ro og et personlig preg. */
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  letter-spacing: -0.01em;
 }
 
 :focus-visible {

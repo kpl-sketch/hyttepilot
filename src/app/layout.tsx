@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import "@fontsource-variable/schibsted-grotesk";
+import "@fontsource-variable/fraunces";
+import "@fontsource-variable/fraunces/wght-italic.css";
 import "./globals.css";
 import { APP_NAME, TAGLINE } from "@/lib/brand";
 

@@ -16,7 +16,7 @@ export function PublicShell({
 }) {
   return (
     <>
-      <header className="border-b border-line bg-surface">
+      <header className="border-b border-line">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between px-5 py-4">
           <Logo href="/" />
         </div>

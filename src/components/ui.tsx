@@ -26,7 +26,7 @@ export function ButtonLink({
 }
 
 export const inputClass =
-  "mt-1 block w-full rounded-xl border border-[#c9cfd2] bg-surface px-4 py-3 text-base text-ink placeholder:text-muted/70";
+  "mt-1 block w-full rounded-xl border border-[#d9ccbb] bg-surface px-4 py-3 text-base text-ink placeholder:text-muted/70";
 
 export function Field({
   label,
@@ -66,7 +66,7 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={`rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-7 ${className}`}>
+    <section className={`rounded-3xl border border-line bg-surface p-6 shadow-card sm:p-8 ${className}`}>
       {children}
     </section>
   );
@@ -75,7 +75,7 @@ export function Panel({
 export function PageTitle({ title, lead }: { title: string; lead?: ReactNode }) {
   return (
     <header className="mb-8">
-      <h1 className="text-3xl font-bold tracking-tight sm:text-[2.5rem] sm:leading-tight">{title}</h1>
+      <h1 className="text-3xl font-semibold sm:text-[2.5rem] sm:leading-tight">{title}</h1>
       {lead && <p className="mt-3 max-w-[60ch] text-lg text-muted">{lead}</p>}
     </header>
   );
@@ -112,5 +112,32 @@ export function Loading() {
     <p className="py-12 text-muted" role="status">
       Henter …
     </p>
+  );
+}
+
+/**
+ * Merket «Bare for inviterte». Ser ut som en liten invitasjon: tynn gullkant
+ * og en stjerne. Stjernen er pynt, så teksten står først for skjermlesere.
+ */
+export function InviteOnlyBadge() {
+  return (
+    <p className="mb-6 inline-flex items-center gap-2 rounded-full border border-window/70 bg-surface px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-pine">
+      Bare for inviterte
+      <svg viewBox="0 0 12 12" className="size-3 text-window" aria-hidden="true">
+        <path d="M6 0l1.6 4.4L12 6 7.6 7.6 6 12 4.4 7.6 0 6l4.4-1.6z" fill="currentColor" />
+      </svg>
+    </p>
+  );
+}
+
+/** Nummer foran et steg: seriff i en gullkant, som på et kort. */
+export function StepNumber({ n }: { n: number }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-window bg-surface font-display text-lg font-semibold text-pine"
+    >
+      {n}
+    </span>
   );
 }
