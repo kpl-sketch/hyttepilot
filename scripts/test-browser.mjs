@@ -256,25 +256,26 @@ async function main() {
   await anne.goto(`${BASE}/`);
   await check("forsiden sier hva tjenesten er, uten å love for mye", async () => {
     await anne
-      .getByRole("heading", { name: "Lån bort hytta til folk du kjenner. Lån deres." })
+      .getByRole("heading", { name: "Hyttene i vennekretsen din, samlet ett sted" })
       .waitFor();
-    // Å låne bort tilbake er et valg, ikke et løfte.
-    await anne.getByText("kan de velge å låne bort sin til deg").waitFor();
     // Tjenesten er lukket. Det står først på siden og ved innloggingen.
     assert.match(
       (await anne.getByRole("main").innerText()).trimStart(),
       /^Bare for inviterte/i,
       "at tjenesten er lukket, skal stå først",
     );
+    await anne.getByRole("heading", { name: "Slik låner du bort hytta di" }).waitFor();
+    assert.equal(await anne.getByRole("main").getByRole("listitem").count(), 3);
+    await anne.getByRole("heading", { name: "Har du ikke hytte?" }).waitFor();
+    // Å låne bort tilbake er et valg, ikke et løfte.
+    await anne.getByText("Det er et tilbud, ikke en plikt.").waitFor();
+    await anne.getByRole("heading", { name: "Bare folk du kjenner" }).waitFor();
     await anne
       .getByRole("heading", { name: "Du må bli invitert av noen som allerede er med" })
       .waitFor();
     await anne.getByText("Du kan ikke registrere deg selv.").waitFor();
     // Den som ikke er invitert, får vite hva som er neste steg.
-    await anne.getByText("Kjenner du noen som har hytte her? Be dem invitere deg.").waitFor();
-    await anne.getByRole("heading", { name: "Slik virker det" }).waitFor();
-    assert.equal(await anne.getByRole("main").getByRole("listitem").count(), 3);
-    await anne.getByRole("heading", { name: "Har du ikke hytte?" }).waitFor();
+    await anne.getByText(/^Kjenner du noen som har hytte i .+\? Be dem invitere deg\.$/).waitFor();
     assert.equal(
       /selvkost|forespørsel|Hytteløftet/.test(await anne.getByRole("main").innerText()),
       false,
