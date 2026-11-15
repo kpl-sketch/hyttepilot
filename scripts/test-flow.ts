@@ -77,6 +77,7 @@ import {
   revokeInvitation,
   shareWithPerson,
 } from "../src/lib/services/invitations";
+import { getPilotMetrics, getWeeklyMetrics, WEEKS } from "../src/lib/services/metrics";
 import { isThrottled } from "../src/lib/services/login";
 import {
   addCabinPhotos,
@@ -1409,6 +1410,80 @@ async function main() {
     // 1. november 2026 er en søndag: seks tomme ruter først.
     assert.deepEqual(monthGrid("2026-11").slice(0, 7), [null, null, null, null, null, null, "2026-11-01"]);
     assert.deepEqual(monthsBetween("2026-11-14", "2027-02-01"), ["2026-11", "2026-12", "2027-01", "2027-02"]);
+  });
+
+  console.log("Tall for administratorene");
+  await check("bare administratorer får tallene", async () => {
+    await refused(() => getPilotMetrics(kari), /administratorer/);
+    await refused(() => getWeeklyMetrics(ola), /administratorer/);
+  });
+  await check("tallene inneholder bare antall, aldri navn eller adresser", async () => {
+    const m = await getPilotMetrics(admin);
+    for (const [key, value] of Object.entries(m)) {
+      assert.ok(value === null || typeof value === "number", `${key} er ikke et tall`);
+    }
+    const weeks = await getWeeklyMetrics(admin);
+    assert.equal(weeks.length, WEEKS);
+    for (const week of weeks) {
+      assert.match(week.week, /^\d{4}-\d{2}-\d{2}$/);
+      for (const key of ["newMembers", "invitesSent", "requests"] as const) assert.equal(typeof week[key], "number");
+    }
+  });
+  await check("medlemmer, K-faktor og generasjoner stemmer med en uavhengig opptelling", async () => {
+    const m = await getPilotMetrics(admin);
+    const users = (await db.execute(sql`select u.id, u.email, p.user_id is not null as has_profile
+      from "user" u left join profile p on p.user_id = u.id`)).rows as { id: string; email: string; has_profile: boolean }[];
+    const admins = new Set(users.filter((u) => u.email === "admin@test.local").map((u) => u.id));
+    const members = users.filter((u) => u.has_profile && !admins.has(u.id));
+    const invites = (await db.execute(sql`select email, invited_by, accepted_at from invitation
+      where accepted_at is not null order by accepted_at`)).rows as { email: string; invited_by: string }[];
+    const firstInviter = new Map<string, string>();
+    for (const u of members) {
+      const first = invites.find((i) => i.email.toLowerCase() === u.email.toLowerCase());
+      if (first) firstInviter.set(u.id, first.invited_by);
+    }
+    const memberIds = new Set(members.map((u) => u.id));
+    const brought = [...firstInviter.values()].filter((by) => memberIds.has(by)).length;
+    assert.equal(m.admins, 1);
+    assert.equal(m.members, members.length);
+    assert.equal(m.broughtIn, brought);
+    assert.ok(Math.abs(m.k - brought / members.length) < 1e-9);
+    assert.ok(Math.abs(m.i * m.c - m.k) < 1e-9, "K skal være i × c");
+
+    const gen = (id: string, depth = 0): number => {
+      const by = firstInviter.get(id);
+      if (!by || depth > 20) return 0;
+      if (admins.has(by)) return 1;
+      const g = gen(by, depth + 1);
+      return g === 0 ? 0 : g + 1;
+    };
+    const gens = members.map((u) => gen(u.id));
+    assert.equal(m.gen1, gens.filter((g) => g === 1).length);
+    assert.equal(m.gen2, gens.filter((g) => g === 2).length);
+    assert.equal(m.gen3plus, gens.filter((g) => g >= 3).length);
+    assert.ok(m.maxGen >= 3, "Kari, Per og Ola gir minst tre generasjoner");
+  });
+  await check("et nytt medlem som ikke inviterer noen, senker K-faktoren", async () => {
+    const before = await getPilotMetrics(admin);
+    await inviteAccount(admin, "stille@test.local", "");
+    await register("stille@test.local", "Stille Medlem");
+    const after = await getPilotMetrics(admin);
+    assert.equal(after.members, before.members + 1);
+    assert.equal(after.broughtIn, before.broughtIn);
+    assert.equal(after.gen1, before.gen1 + 1);
+    assert.ok(after.k < before.k);
+    assert.equal(after.membersLast7, before.membersLast7 + 1);
+  });
+  await check("lån telles riktig", async () => {
+    const m = await getPilotMetrics(admin);
+    const [row] = (await db.execute(sql`select
+      count(*) filter (where status = 'paid') as paid,
+      coalesce(sum(end_date - start_date) filter (where status = 'paid'), 0) as nights,
+      count(*) as total from booking`)).rows as Record<string, unknown>[];
+    assert.equal(m.requests, Number(row.total));
+    assert.equal(m.staysPaid, Number(row.paid));
+    assert.equal(m.nightsPaid, Number(row.nights));
+    assert.ok(m.requestsApproved >= m.staysPaid);
   });
 
   console.log("Brems på innlogging");
