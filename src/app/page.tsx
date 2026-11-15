@@ -1,7 +1,7 @@
 import { PublicShell } from "@/components/public-shell";
 import { ButtonLink, Panel } from "@/components/ui";
 import { CabinScene } from "@/components/cabin-scene";
-import { APP_NAME } from "@/lib/brand";
+import { APP_NAME, TAGLINE, WHAT_IT_IS } from "@/lib/brand";
 
 /**
  * Eierens tre steg. Eieren er den som gjør at tjenesten sprer seg, så hvert
@@ -25,12 +25,11 @@ export default function LandingPage() {
       </p>
       {/* Overskriften selger ideen. Reglene kommer etterpå, som trygghet. */}
       <h1 className="max-w-[17ch] text-5xl font-extrabold leading-[1.05] tracking-tight sm:text-6xl">
-        Hyttene i vennekretsen din, samlet ett sted
+        {TAGLINE}
       </h1>
       <p className="mt-6 max-w-[52ch] text-xl text-muted">
         Mange hytter står tomme store deler av året, og få av oss liker å spørre om å låne. Med{" "}
-        {APP_NAME} ser du når hyttene til folk du kjenner er ledige, og du kan spørre uten at det
-        blir rart. Eieren bestemmer alltid.
+        {APP_NAME} {WHAT_IT_IS}. Eieren bestemmer alltid.
       </p>
       <ButtonLink href="/logg-inn" className="mt-6">
         Logg inn
@@ -56,6 +55,9 @@ export default function LandingPage() {
           </li>
         ))}
       </ol>
+      <p className="mt-5 max-w-[52ch] text-lg text-muted">
+        Den som låner, betaler et bidrag til strøm og faste kostnader med Vipps. Du setter prisen.
+      </p>
 
       <h2 className="mt-10 text-2xl font-bold tracking-tight">Har du ikke hytte?</h2>
       <p className="mt-2 max-w-[52ch] text-lg">

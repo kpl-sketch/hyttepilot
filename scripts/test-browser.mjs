@@ -266,6 +266,7 @@ async function main() {
     );
     await anne.getByRole("heading", { name: "Slik låner du bort hytta di" }).waitFor();
     assert.equal(await anne.getByRole("main").getByRole("listitem").count(), 3);
+    await anne.getByText("Du setter prisen.", { exact: false }).waitFor();
     await anne.getByRole("heading", { name: "Har du ikke hytte?" }).waitFor();
     // Å låne bort tilbake er et valg, ikke et løfte.
     await anne.getByText("Det er et tilbud, ikke en plikt.").waitFor();
@@ -289,7 +290,7 @@ async function main() {
       assert.equal(response.status(), 200, `/v${i} skal åpnes uten innlogging`);
       const text = (await anne.getByRole("main").innerText()).trimStart();
       assert.match(text, /^Bare for inviterte/i, `/v${i}: at tjenesten er lukket, skal stå først`);
-      assert.match(text, /låner folk som kjenner hverandre, bort hyttene sine til hverandre/);
+      assert.match(text, /ser du når hyttene til folk du kjenner er ledige, og du kan spørre uten at det blir rart/);
       assert.equal(/\bdel(e|er|t)\b|selvkost|forespørsel|Hytteløftet/i.test(text), false, `/v${i} bruker et ord forsiden ikke bruker`);
       await anne.getByRole("link", { name: "Logg inn" }).waitFor();
       await shot(anne, `01-v${i}`);
@@ -368,7 +369,7 @@ async function main() {
   await check("åpen invitasjonslenke viser avsender, men ingenting om hytta", async () => {
     await per.getByRole("heading", { name: /Kari Eier inviterer deg til/ }).waitFor();
     const text = await per.getByRole("main").innerText();
-    assert.match(text, /låner folk som kjenner hverandre, bort hyttene sine til hverandre/);
+    assert.match(text, /ser du når hyttene til folk du kjenner er ledige, og du kan spørre uten at det blir rart/);
     assert.match(text, /p•••@test\.local/);
     assert.equal(/Fjellro|Hafjell|Fjellvegen/.test(text), false, "hytta skal ikke vises før innlogging");
     assert.equal(text.includes("per@test.local"), false, "hele adressen skal ikke vises");

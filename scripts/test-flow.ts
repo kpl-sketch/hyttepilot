@@ -356,7 +356,7 @@ async function main() {
     assert.equal(mail.to, "per@test.local");
     assert.match(mail.subject, /^Kari Eier inviterer deg til /);
     assert.match(mail.text, /vise deg hytta Karis hytte \(Hafjell\)/);
-    assert.match(mail.text, /låner folk som kjenner hverandre, bort hyttene sine til hverandre/);
+    assert.match(mail.text, /ser du når hyttene til folk du kjenner er ledige, og du kan spørre uten at det blir rart/);
     assert.match(mail.text, /«Velkommen på hytta, Per!»/);
     assert.match(mail.text, /Invitasjonen gjelder bare denne hytta/);
     assert.match(mail.text, /gjelder for per@test\.local til /);

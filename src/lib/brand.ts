@@ -4,11 +4,14 @@
  */
 export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "Hyttepilot";
 
+/** Overskriften: ideen i ett bilde. Står på forsiden og i sidebeskrivelsen. */
+export const TAGLINE = "Hyttene i vennekretsen din, samlet ett sted";
+
 /**
  * Kjernesetningen: hva tjenesten er. Den skal stå likt på forsiden, på
  * invitasjonssiden og i e-post. Sett «Her» eller «I <navn>» foran.
  */
-export const WHAT_IT_IS = "låner folk som kjenner hverandre, bort hyttene sine til hverandre";
+export const WHAT_IT_IS = "ser du når hyttene til folk du kjenner er ledige, og du kan spørre uten at det blir rart";
 
 export const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL || "";
 
