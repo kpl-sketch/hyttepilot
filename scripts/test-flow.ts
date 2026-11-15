@@ -204,6 +204,7 @@ async function fakeAddressSearch() {
             { type: "Feature", geometry: { type: "Point", coordinates: [11.9581234, 57.3521234] }, properties: { street: "Krokviksvägen", housenumber: "17", postcode: "439 54", city: "Åsa", country: "Sweden", countrycode: "SE" } },
             { type: "Feature", geometry: { type: "Point", coordinates: [10.1, 59.1] }, properties: { street: "Krokvikveien", housenumber: "1", postcode: "3200", city: "Sandefjord", countrycode: "NO" } },
             { type: "Feature", geometry: { type: "Point", coordinates: [11.95, 57.35] }, properties: { name: "Åsa", city: "Åsa", countrycode: "SE", country: "Sweden" } },
+            { type: "Feature", geometry: { type: "Point", coordinates: [12.127998, 57.343407] }, properties: { name: "Krokviksvägen", osm_key: "highway", type: "street", city: "Åsa", countrycode: "SE" } },
           ]
         : [];
       response.writeHead(200, { "content-type": "application/json" });
@@ -890,7 +891,9 @@ async function main() {
       longitude: 11.958123,
       abroad: true,
     });
-    assert.deepEqual(found.map((item) => item.label), ["Krokviksvägen 17, 439 54 Åsa, Sverige", "Åsa, Sverige"], "norske treff fra utlandssøket hoppes over");
+    assert.deepEqual(found.map((item) => item.label), ["Krokviksvägen 17, 439 54 Åsa, Sverige", "Åsa, Sverige", "Krokviksvägen, Åsa, Sverige"], "norske treff fra utlandssøket hoppes over");
+    const gate = found[2];
+    assert.deepEqual([gate.kind, gate.detail, gate.area, gate.address], ["adresse", "Gate i Sverige", "Åsa", "Krokviksvägen, Åsa, Sverige"], "gatenavnet blir aldri området");
   });
   await check("norske treff kommer først, og treff fra resten av verden fyller på", async () => {
     const [found] = await searchLocations(kari, "Krokviksvägen 17");
