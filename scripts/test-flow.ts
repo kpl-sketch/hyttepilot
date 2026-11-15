@@ -78,6 +78,7 @@ import {
   shareWithPerson,
 } from "../src/lib/services/invitations";
 import { getPilotMetrics, getWeeklyMetrics, WEEKS } from "../src/lib/services/metrics";
+import { listMembers, membersToCsv } from "../src/lib/services/members";
 import { isThrottled } from "../src/lib/services/login";
 import {
   addCabinPhotos,
@@ -1484,6 +1485,31 @@ async function main() {
     assert.equal(m.staysPaid, Number(row.paid));
     assert.equal(m.nightsPaid, Number(row.nights));
     assert.ok(m.requestsApproved >= m.staysPaid);
+  });
+
+  console.log("Medlemsliste for administratorene");
+  await check("bare administratorer får medlemslisten", async () => {
+    await refused(() => listMembers(kari), /administratorer/);
+  });
+  await check("listen har alle som har registrert seg, med navn, e-post og hvem som inviterte", async () => {
+    const members = await listMembers(admin);
+    const [row] = (await db.execute(sql`select count(*) as n from profile`)).rows as { n: string }[];
+    assert.equal(members.length, Number(row.n));
+    const perRow = members.find((m) => m.email === "per@test.local");
+    assert.equal(perRow?.name, "Per Eier");
+    assert.equal(perRow?.invitedBy, "Kari Eier");
+    assert.equal(members.find((m) => m.email === "admin@test.local")?.isAdmin, true);
+    assert.equal(members.find((m) => m.email === "kari@test.local")?.invitedBy, "Anne Admin");
+    for (const m of members) assert.deepEqual(Object.keys(m).sort(), ["email", "invitedBy", "isAdmin", "joinedAt", "name"]);
+  });
+  await check("CSV-filen leses riktig i Excel og kan ikke lure inn formler", () => {
+    const csv = membersToCsv([
+      { name: 'Ærlig "Øystein"', email: "a@test.local", joinedAt: new Date("2026-11-14T23:30:00Z"), invitedBy: null, isAdmin: false },
+      { name: "=HYPERLINK(1)", email: "b@test.local", joinedAt: new Date("2026-11-14T10:00:00Z"), invitedBy: "Kari", isAdmin: true },
+    ]);
+    assert.ok(csv.startsWith("\uFEFF\"Navn\";\"E-post\""));
+    assert.match(csv, /"Ærlig ""Øystein""";"a@test.local";"2026-11-15";"";"Nei"/);
+    assert.match(csv, /"'=HYPERLINK\(1\)";"b@test.local";"2026-11-14";"Kari";"Ja"/);
   });
 
   console.log("Brems på innlogging");
