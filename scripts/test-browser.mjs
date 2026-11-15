@@ -299,6 +299,17 @@ async function main() {
   await check("man kan bla mellom versjonene med piler, tall og tastatur", async () => {
     await anne.goto(`${BASE}/v10`);
     const nav = anne.getByRole("navigation", { name: "Bla mellom versjonene" });
+    // Pilene står øverst, før selve siden, og følger med når man blar nedover.
+    const top = await nav.boundingBox();
+    const main = await anne.getByRole("main").boundingBox();
+    assert.ok(top.y + top.height <= main.y, "navigasjonen skal stå over innholdet");
+    assert.ok(top.y < 120, `navigasjonen skal stå øverst på siden, sto på ${top.y}`);
+    await anne.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await anne.waitForFunction(() => window.scrollY > 300);
+    const stuck = await nav.boundingBox();
+    assert.ok(Math.abs(stuck.y) < 1, `navigasjonen skal følge med øverst, sto på ${stuck.y}`);
+    await shot(anne, "01-v10-bladd-ned");
+    await anne.evaluate(() => window.scrollTo(0, 0));
     await nav.getByRole("link", { name: /Neste versjon/ }).click();
     await anne.waitForURL(/\/v1$/);
     // Utviklingsmerket til Next ligger over venstre pil i dev, så den trykkes med tastaturet.

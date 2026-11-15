@@ -27,7 +27,7 @@ export type Audience = {
 export function AudiencePage({ audience, number }: { audience: Audience; number: number }) {
   const { forWhom, title, lead, stepsTitle, steps, extra, invited } = audience;
   return (
-    <PublicShell after={<AudienceNav current={number} versions={VERSIONS} />}>
+    <PublicShell belowHeader={<AudienceNav current={number} versions={VERSIONS} />}>
       {/* Tjenesten er lukket. Det skal stå først, før noen leser resten. */}
       <p className="mb-5 inline-block rounded-full bg-pine px-4 py-1.5 text-sm font-bold uppercase tracking-wider text-white">
         Bare for inviterte

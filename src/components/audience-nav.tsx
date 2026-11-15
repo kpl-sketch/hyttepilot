@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 /**
- * Linje nederst på /v1 til /v10 for å bla mellom versjonene: forrige, neste,
- * et nummer per versjon og piltastene på tastaturet. Ligger utenfor <main>,
- * så «Bare for inviterte» fortsatt står først i selve siden.
+ * Linje øverst på /v1 til /v10 for å bla mellom versjonene: forrige, neste,
+ * et nummer per versjon og piltastene på tastaturet. Linjen følger med når
+ * man blar nedover, så pilene alltid er innen rekkevidde på mobil. Den ligger
+ * utenfor <main>, så «Bare for inviterte» fortsatt står først i selve siden.
  */
 export function AudienceNav({
   current,
@@ -34,15 +35,16 @@ export function AudienceNav({
   }, [router, prev, next]);
 
   const current_ = versions.find((v) => v.number === current);
+  // 44 punkter: stor nok til å treffe med tommelen.
   const arrow =
-    "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-line bg-surface text-lg font-bold hover:bg-paper";
+    "flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-line bg-surface text-lg font-bold hover:bg-paper";
 
   return (
     <nav
       aria-label="Bla mellom versjonene"
-      className="sticky bottom-0 z-10 border-t border-line bg-surface/95 backdrop-blur"
+      className="sticky top-0 z-10 border-b border-line bg-surface/95 backdrop-blur"
     >
-      <div className="mx-auto flex w-full max-w-3xl items-center gap-3 px-5 py-3">
+      <div className="mx-auto flex w-full max-w-3xl items-center gap-3 px-5 py-2">
         <Link href={`/v${prev}`} className={arrow} aria-label={`Forrige versjon: ${prev}`}>
           ←
         </Link>
