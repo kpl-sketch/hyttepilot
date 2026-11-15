@@ -307,9 +307,13 @@ function toAbroad(data: unknown): AddressSuggestion[] {
     const text = (key: string) => (typeof p[key] === "string" ? (p[key] as string).trim() : "");
     const country = countryName(code) || text("country");
     const town = text("city") || text("locality") || text("district") || text("county");
-    const isAddress = text("street") !== "" && text("housenumber") !== "";
+    const isHouse = text("street") !== "" && text("housenumber") !== "";
+    // En gate uten husnummer er også en adresse. Gatenavnet skal aldri bli
+    // det andre ser, så da blir området stedet gata ligger i.
+    const isStreet = !isHouse && (p.osm_key === "highway" || p.type === "street");
+    const isAddress = isHouse || isStreet;
     let label: string;
-    if (isAddress) {
+    if (isHouse) {
       const street = `${text("street")} ${text("housenumber")}`;
       label = [street, [text("postcode"), town].filter(Boolean).join(" "), country]
         .filter(Boolean)
@@ -324,7 +328,9 @@ function toAbroad(data: unknown): AddressSuggestion[] {
     found.push({
       kind: isAddress ? "adresse" : "sted",
       label,
-      detail: [isAddress ? "Adresse" : "Sted", country && `i ${country}`].filter(Boolean).join(" "),
+      detail: [isHouse ? "Adresse" : isStreet ? "Gate" : "Sted", country && `i ${country}`]
+        .filter(Boolean)
+        .join(" "),
       area: isAddress ? town || country : text("name"),
       address: isAddress ? label : "",
       latitude: round(latitude),
