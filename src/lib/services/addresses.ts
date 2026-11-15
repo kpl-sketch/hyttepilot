@@ -237,25 +237,57 @@ async function placesFor(text: string): Promise<AddressSuggestion[]> {
 /* ---------------------------- Utenfor Norge ------------------------------ */
 
 /**
- * Photon er et åpent søk i OpenStreetMap, gratis ved moderat bruk. Det brukes
- * bare når Kartverket ikke finner noe, eller eieren skriver et annet land, for
- * eksempel en hytte i Sverige. Adressen kan byttes med ABROAD_SEARCH_URL.
+ * Photon er et åpent søk i OpenStreetMap for hele verden, gratis ved moderat
+ * bruk. Det gir hytter utenfor Norge. Adressen kan byttes med ABROAD_SEARCH_URL.
  */
 const ABROAD_URL = "https://photon.komoot.io/api/";
 
-const COUNTRIES: Record<string, string> = {
-  SE: "Sverige",
-  DK: "Danmark",
-  FI: "Finland",
-  DE: "Tyskland",
-  ES: "Spania",
-  FR: "Frankrike",
-  IT: "Italia",
-};
+/** Landnavn på norsk, for eksempel «Sverige» for SE. */
+const NORWEGIAN_NAMES = new Intl.DisplayNames(["nb"], { type: "region" });
+const ENGLISH_NAMES = new Intl.DisplayNames(["en"], { type: "region" });
 
-/** Ord som viser at eieren leter utenfor Norge. */
-const ABROAD_WORDS =
-  /\b(sverige|sweden|danmark|denmark|finland|suomi|tyskland|germany|spania|spain|frankrike|france|italia|italy)\b/i;
+function countryName(code: string): string {
+  if (!/^[A-Z]{2}$/.test(code)) return "";
+  try {
+    const name = NORWEGIAN_NAMES.of(code);
+    return name && name !== code ? name : "";
+  } catch {
+    return "";
+  }
+}
+
+/** Alle landnavn på norsk og engelsk, unntatt Norge, med små bokstaver. */
+const FOREIGN_COUNTRY_NAMES: Set<string> = (() => {
+  const names = new Set<string>();
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  for (const first of letters) {
+    for (const second of letters) {
+      const code = first + second;
+      if (code === "NO") continue;
+      for (const list of [NORWEGIAN_NAMES, ENGLISH_NAMES]) {
+        try {
+          const name = list.of(code);
+          if (name && name !== code) names.add(name.toLowerCase());
+        } catch {
+          // Ukjent kode.
+        }
+      }
+    }
+  }
+  return names;
+})();
+
+/** Sant når søket nevner et annet land, for eksempel «…, Sweden» eller «Spania». */
+function namesForeignCountry(text: string): boolean {
+  const words = text.toLowerCase().split(/\s+/);
+  // Landnavn kan ha opptil tre ord, som «Forente arabiske emirater».
+  for (let size = 1; size <= 3; size += 1) {
+    for (let start = 0; start + size <= words.length; start += 1) {
+      if (FOREIGN_COUNTRY_NAMES.has(words.slice(start, start + size).join(" "))) return true;
+    }
+  }
+  return false;
+}
 
 function toAbroad(data: unknown): AddressSuggestion[] {
   const list = (data as { features?: unknown } | null)?.features;
@@ -273,7 +305,7 @@ function toAbroad(data: unknown): AddressSuggestion[] {
     // Norske treff kommer fra Kartverket, som er mer nøyaktig.
     if (code === "NO") continue;
     const text = (key: string) => (typeof p[key] === "string" ? (p[key] as string).trim() : "");
-    const country = COUNTRIES[code] || text("country");
+    const country = countryName(code) || text("country");
     const town = text("city") || text("locality") || text("district") || text("county");
     const isAddress = text("street") !== "" && text("housenumber") !== "";
     let label: string;
@@ -325,11 +357,10 @@ async function abroadFor(text: string): Promise<AddressSuggestion[]> {
 }
 
 /**
- * Forslag i feltet «Hvor ligger hytta?»: adresser og stedsnavn i samme liste.
- * Med tall i søket leter eieren nok etter en adresse, og da kommer adressene
- * først. Ellers kommer stedsnavnene først. Finner Kartverket ingenting, eller
- * nevner eieren et annet land, søker vi også utenfor Norge. Bare for
- * innloggede medlemmer.
+ * Forslag i feltet «Hvor ligger hytta?»: adresser og steder i hele verden.
+ * Kartverket gir Norge og OpenStreetMap resten. Norske treff kommer først,
+ * med adresser først når søket har tall. Nevner eieren et annet land, kommer
+ * treffene derfra først. Bare for innloggede medlemmer.
  */
 export async function searchLocations(
   actor: Actor | null,
@@ -338,13 +369,12 @@ export async function searchLocations(
   if (!actor) throw new UserError("Logg inn for å søke etter adresser.");
   const text = searchText(query);
   if (!text) return [];
-  const abroadFirst = ABROAD_WORDS.test(text);
-  if (abroadFirst) {
-    const abroad = await abroadFor(text);
-    if (abroad.length > 0) return abroad.slice(0, SHOWN);
-  }
-  const [addresses, places] = await Promise.all([addressesFor(text), placesFor(text)]);
-  const ordered = /\d/.test(text) ? [...addresses, ...places] : [...places, ...addresses];
-  if (ordered.length > 0 || abroadFirst) return ordered.slice(0, SHOWN);
-  return (await abroadFor(text)).slice(0, SHOWN);
+  const [addresses, places, abroad] = await Promise.all([
+    addressesFor(text),
+    placesFor(text),
+    abroadFor(text),
+  ]);
+  const norway = /\d/.test(text) ? [...addresses, ...places] : [...places, ...addresses];
+  const ordered = namesForeignCountry(text) ? [...abroad, ...norway] : [...norway, ...abroad];
+  return ordered.slice(0, SHOWN);
 }

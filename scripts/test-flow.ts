@@ -892,13 +892,15 @@ async function main() {
     });
     assert.deepEqual(found.map((item) => item.label), ["Krokviksvägen 17, 439 54 Åsa, Sverige", "Åsa, Sverige"], "norske treff fra utlandssøket hoppes over");
   });
-  await check("utlandet søkes bare når Kartverket ikke finner noe", async () => {
-    const before = lookup.seen.filter((item) => item.startsWith("utland:")).length;
-    await searchLocations(kari, "Hafjell");
-    await searchLocations(kari, "Fjellvegen 1");
-    assert.equal(lookup.seen.filter((item) => item.startsWith("utland:")).length, before);
+  await check("norske treff kommer først, og treff fra resten av verden fyller på", async () => {
     const [found] = await searchLocations(kari, "Krokviksvägen 17");
-    assert.equal(found.label, "Krokviksvägen 17, 439 54 Åsa, Sverige");
+    assert.equal(found.label, "Krokviksvägen 17, 439 54 Åsa, Sverige", "uten norske treff vises utlandet");
+    assert.equal((await searchLocations(kari, "Hafjell"))[0].label, "Hafjell");
+  });
+  await check("landnavn på norsk og engelsk gjenkjennes for alle land", async () => {
+    const first = async (query: string) => (await searchLocations(kari, query))[0]?.label;
+    assert.equal(await first("Krokviksvägen Sverige"), "Krokviksvägen 17, 439 54 Åsa, Sverige");
+    assert.equal(await first("Krokviksvägen 17 Sweden"), "Krokviksvägen 17, 439 54 Åsa, Sverige");
   });
   await check("søket etter steder krever innlogging og tåler at tjenesten er nede", async () => {
     await refused(() => searchLocations(null, "Hafjell"), /Logg inn/);

@@ -31,15 +31,26 @@ function guessArea(text: string): string {
   const parts = text.split(",").slice(1);
   for (const part of parts) {
     const name = part.replace(/[\d]+/g, "").replace(/\s+/g, " ").trim();
-    if (name.length >= 2 && !ABROAD_ADDRESS.test(`, ${name}`) && !/^(norge|norway)$/i.test(name)) {
+    if (name.length >= 2 && !/^(norge|norway)$/i.test(name)) {
       return name.slice(0, 80);
     }
   }
   return "";
 }
 
-/** En adresse som slutter på et annet land, for eksempel «…, Sverige». */
-const ABROAD_ADDRESS = /,\s*(Sverige|Danmark|Finland|Tyskland|Spania|Frankrike|Italia|Sweden|Denmark)\s*$/i;
+/**
+ * Om en lagret hytte ligger utenfor Norge, der Kartverkets kart er tomt.
+ * Adresser utenfor Norge slutter på landet («…, Sverige»), uten tall. Norske
+ * adresser slutter på postnummer og sted. Uten adresse ser vi på posisjonen.
+ */
+function looksAbroad(address: string, position: string): boolean {
+  const parts = address.split(",").map((part) => part.trim()).filter(Boolean);
+  if (parts.length >= 2 && !/\d/.test(parts[parts.length - 1])) return true;
+  const point = parsePosition(position);
+  if (!point) return false;
+  const { latitude, longitude } = point;
+  return latitude < 57.8 || latitude > 71.5 || longitude < 4 || longitude > 31.5;
+}
 
 /** Hvor nært kartet viser en adresse og et sted. */
 const ZOOM = { adresse: 16, sted: 13, her: 16 } as const;
@@ -75,7 +86,7 @@ export function LocationFields({
     return found ? { ...found, zoom: ZOOM.adresse } : null;
   });
   const [editingArea, setEditingArea] = useState(false);
-  const [abroad, setAbroad] = useState(ABROAD_ADDRESS.test(defaultAddress));
+  const [abroad, setAbroad] = useState(() => looksAbroad(defaultAddress, defaultPosition));
   // Sant når området bare er det eieren holder på å skrive i søkefeltet.
   const areaFromTyping = useRef(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -130,7 +141,6 @@ export function LocationFields({
     if (/\d/.test(text)) {
       // Ser ut som en adresse. Den skal ikke bli det alle ser.
       setAddress(text.slice(0, 200));
-      setAbroad(ABROAD_ADDRESS.test(text));
       // Området gjettes bare når det ikke er valgt eller skrevet fra før.
       if (areaFromTyping.current || area === "") {
         const guess = guessArea(text);
@@ -140,7 +150,6 @@ export function LocationFields({
     } else {
       setArea(text.slice(0, 80));
       setAddress("");
-      setAbroad(false);
       areaFromTyping.current = true;
     }
     setEditingArea(false);
@@ -214,7 +223,10 @@ export function LocationFields({
     navigator.geolocation.getCurrentPosition(
       (found) => {
         const here = parsePosition(`${found.coords.latitude}, ${found.coords.longitude}`);
-        if (here) place(here, ZOOM.her);
+        if (here) {
+          setAbroad(looksAbroad("", formatPosition(here)));
+          place(here, ZOOM.her);
+        }
         setLocating(false);
       },
       () => {
@@ -238,6 +250,7 @@ export function LocationFields({
     setResolving(false);
     const found = parsePosition(value);
     if (found) {
+      setAbroad(looksAbroad("", formatPosition(found)));
       place(found, ZOOM.adresse);
       return;
     }
@@ -257,7 +270,10 @@ export function LocationFields({
       const data = response.ok
         ? ((await response.json()) as { position?: Position | null })
         : null;
-      if (data?.position) place(data.position, ZOOM.adresse);
+      if (data?.position) {
+        setAbroad(looksAbroad("", formatPosition(data.position)));
+        place(data.position, ZOOM.adresse);
+      }
       else
         setNotice(
           "Vi fikk ikke lest posisjonen fra lenken. Åpne den i Google Maps, trykk lenge på hytta og kopier tallene som kommer opp.",
