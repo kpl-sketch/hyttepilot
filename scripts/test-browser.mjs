@@ -282,6 +282,18 @@ async function main() {
     );
     await shot(anne, "01-forside");
   });
+  await check("målgruppesidene /v1 til /v10 åpnes uten innlogging og følger forsidens regler", async () => {
+    for (let i = 1; i <= 10; i++) {
+      const response = await anne.goto(`${BASE}/v${i}`);
+      assert.equal(response.status(), 200, `/v${i} skal åpnes uten innlogging`);
+      const text = (await anne.getByRole("main").innerText()).trimStart();
+      assert.match(text, /^Bare for inviterte/i, `/v${i}: at tjenesten er lukket, skal stå først`);
+      assert.match(text, /låner folk som kjenner hverandre, bort hyttene sine til hverandre/);
+      assert.equal(/\bdel(e|er|t)\b|selvkost|forespørsel|Hytteløftet/i.test(text), false, `/v${i} bruker et ord forsiden ikke bruker`);
+      await anne.getByRole("link", { name: "Logg inn" }).waitFor();
+      await shot(anne, `01-v${i}`);
+    }
+  });
   await anne.goto(`${BASE}/logg-inn`);
   await logIn(anne, "admin@test.local");
   await onboard(anne, "Anne Admin");

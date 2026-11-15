@@ -3,6 +3,9 @@ import { type NextRequest, NextResponse } from "next/server";
 
 const PUBLIC_PATHS = ["/", "/logg-inn", "/hytteloftet", "/personvern"];
 
+/** Sidene som forklarer tjenesten for hver sin målgruppe: /v1 til /v10. */
+const AUDIENCE_PATH = /^\/v([1-9]|10)$/;
+
 /**
  * Rask førstesjekk før siden bygges: uten innloggingskake sendes man til
  * innlogging. Dette er bare en snarvei. Den egentlige tilgangskontrollen
@@ -14,7 +17,9 @@ export function proxy(request: NextRequest) {
 
   // Invitasjonslenken må kunne åpnes uten innlogging. Siden viser da bare
   // hvem som inviterer, og ingenting om hytta.
-  const isPublic = PUBLIC_PATHS.includes(pathname) || pathname.startsWith("/invitasjon/");
+  const isPublic = PUBLIC_PATHS.includes(pathname) ||
+    AUDIENCE_PATH.test(pathname) ||
+    pathname.startsWith("/invitasjon/");
 
   if (!hasSessionCookie && !isPublic) {
     return NextResponse.redirect(new URL("/logg-inn", request.url));
