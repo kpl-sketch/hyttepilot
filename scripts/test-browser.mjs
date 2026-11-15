@@ -198,6 +198,15 @@ async function onboard(page, name) {
 }
 
 async function addCabin(page, { name, area, cost, cleaning }) {
+  if (name === "Sjøbua") {
+    // Uten forslag gjettes området fra adressen, aldri fra gatenavnet.
+    await page.goto(`${BASE}/mine-hytter/ny`);
+    await page.waitForLoadState("networkidle");
+    await page.getByLabel("Hvor ligger hytta?").pressSequentially("Krokviksvägen 17, 439 54 Åsa, Sverige");
+    await page.getByText("Andre ser bare «Åsa».").waitFor();
+    await page.getByLabel("Hvor ligger hytta?").fill("Fjellvegen 12");
+    await page.getByLabel("Området andre ser").waitFor();
+  }
   await page.goto(`${BASE}/mine-hytter/ny`);
   // Det korte skjemaet: navn, sted, sengeplasser, pris og bilder.
   const field = (key) => page.locator(`form [name="${key}"]`);
@@ -222,6 +231,7 @@ async function addCabin(page, { name, area, cost, cleaning }) {
   // En adresse skrevet for hånd blir ikke det alle ser: området står fortsatt.
   await details.getByLabel("Hvor ligger hytta?").fill("Fjellvegen 12, 2636 Øyer");
   await details.getByText(`Andre ser bare «${area}».`).waitFor();
+
   await detail("arrivalInfo").fill("Nøkkelboks ved døra, kode 1234.");
   await details.getByRole("button", { name: "Lagre endringene" }).click();
   await page.waitForLoadState("networkidle");

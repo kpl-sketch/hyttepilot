@@ -17,6 +17,8 @@ export type AddressSuggestion = {
   address: string;
   latitude: number;
   longitude: number;
+  /** Satt for treff utenfor Norge. Da viser kartet OpenStreetMap. */
+  abroad?: true;
 };
 
 /**
@@ -232,10 +234,102 @@ async function placesFor(text: string): Promise<AddressSuggestion[]> {
   }
 }
 
+/* ---------------------------- Utenfor Norge ------------------------------ */
+
+/**
+ * Photon er et åpent søk i OpenStreetMap, gratis ved moderat bruk. Det brukes
+ * bare når Kartverket ikke finner noe, eller eieren skriver et annet land, for
+ * eksempel en hytte i Sverige. Adressen kan byttes med ABROAD_SEARCH_URL.
+ */
+const ABROAD_URL = "https://photon.komoot.io/api/";
+
+const COUNTRIES: Record<string, string> = {
+  SE: "Sverige",
+  DK: "Danmark",
+  FI: "Finland",
+  DE: "Tyskland",
+  ES: "Spania",
+  FR: "Frankrike",
+  IT: "Italia",
+};
+
+/** Ord som viser at eieren leter utenfor Norge. */
+const ABROAD_WORDS =
+  /\b(sverige|sweden|danmark|denmark|finland|suomi|tyskland|germany|spania|spain|frankrike|france|italia|italy)\b/i;
+
+function toAbroad(data: unknown): AddressSuggestion[] {
+  const list = (data as { features?: unknown } | null)?.features;
+  if (!Array.isArray(list)) return [];
+  const found: AddressSuggestion[] = [];
+  const seen = new Set<string>();
+  for (const feature of list as Record<string, unknown>[]) {
+    const p = (feature?.properties ?? {}) as Record<string, unknown>;
+    const coordinates = (feature?.geometry as { coordinates?: unknown } | undefined)?.coordinates;
+    if (!Array.isArray(coordinates)) continue;
+    const longitude = Number(coordinates[0]);
+    const latitude = Number(coordinates[1]);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
+    const code = typeof p.countrycode === "string" ? p.countrycode.toUpperCase() : "";
+    // Norske treff kommer fra Kartverket, som er mer nøyaktig.
+    if (code === "NO") continue;
+    const text = (key: string) => (typeof p[key] === "string" ? (p[key] as string).trim() : "");
+    const country = COUNTRIES[code] || text("country");
+    const town = text("city") || text("locality") || text("district") || text("county");
+    const isAddress = text("street") !== "" && text("housenumber") !== "";
+    let label: string;
+    if (isAddress) {
+      const street = `${text("street")} ${text("housenumber")}`;
+      label = [street, [text("postcode"), town].filter(Boolean).join(" "), country]
+        .filter(Boolean)
+        .join(", ");
+    } else {
+      const name = text("name");
+      if (!name) continue;
+      label = [name, name === town ? "" : town, country].filter(Boolean).join(", ");
+    }
+    if (seen.has(label)) continue;
+    seen.add(label);
+    found.push({
+      kind: isAddress ? "adresse" : "sted",
+      label,
+      detail: [isAddress ? "Adresse" : "Sted", country && `i ${country}`].filter(Boolean).join(" "),
+      area: isAddress ? town || country : text("name"),
+      address: isAddress ? label : "",
+      latitude: round(latitude),
+      longitude: round(longitude),
+      abroad: true,
+    });
+  }
+  return found;
+}
+
+async function abroadFor(text: string): Promise<AddressSuggestion[]> {
+  try {
+    const url = new URL(process.env.ABROAD_SEARCH_URL || ABROAD_URL);
+    url.searchParams.set("q", text);
+    url.searchParams.set("limit", "6");
+    const response = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+        "Accept-Language": "nb,sv,da,en",
+        "User-Agent": "Hyttepilot (hyttepilot.no)",
+      },
+      signal: AbortSignal.timeout(2500),
+    });
+    if (!response.ok) throw new Error(`Søket utenfor Norge svarte ${response.status}.`);
+    return toAbroad(await response.json());
+  } catch (error) {
+    console.warn("Søket utenfor Norge svarte ikke:", error instanceof Error ? error.message : error);
+    return [];
+  }
+}
+
 /**
  * Forslag i feltet «Hvor ligger hytta?»: adresser og stedsnavn i samme liste.
  * Med tall i søket leter eieren nok etter en adresse, og da kommer adressene
- * først. Ellers kommer stedsnavnene først. Bare for innloggede medlemmer.
+ * først. Ellers kommer stedsnavnene først. Finner Kartverket ingenting, eller
+ * nevner eieren et annet land, søker vi også utenfor Norge. Bare for
+ * innloggede medlemmer.
  */
 export async function searchLocations(
   actor: Actor | null,
@@ -244,7 +338,13 @@ export async function searchLocations(
   if (!actor) throw new UserError("Logg inn for å søke etter adresser.");
   const text = searchText(query);
   if (!text) return [];
+  const abroadFirst = ABROAD_WORDS.test(text);
+  if (abroadFirst) {
+    const abroad = await abroadFor(text);
+    if (abroad.length > 0) return abroad.slice(0, SHOWN);
+  }
   const [addresses, places] = await Promise.all([addressesFor(text), placesFor(text)]);
   const ordered = /\d/.test(text) ? [...addresses, ...places] : [...places, ...addresses];
-  return ordered.slice(0, SHOWN);
+  if (ordered.length > 0 || abroadFirst) return ordered.slice(0, SHOWN);
+  return (await abroadFor(text)).slice(0, SHOWN);
 }

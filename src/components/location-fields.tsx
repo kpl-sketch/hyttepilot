@@ -19,7 +19,27 @@ type Suggestion = {
   address: string;
   latitude: number;
   longitude: number;
+  abroad?: true;
 };
+
+/**
+ * Gjetter området fra en adresse eieren skrev selv: delen etter første komma,
+ * uten postnummer og land. «Krokviksvägen 17, 439 54 Åsa, Sverige» gir «Åsa».
+ * Gatenavnet blir aldri området. Gir tom tekst hvis det ikke går.
+ */
+function guessArea(text: string): string {
+  const parts = text.split(",").slice(1);
+  for (const part of parts) {
+    const name = part.replace(/[\d]+/g, "").replace(/\s+/g, " ").trim();
+    if (name.length >= 2 && !ABROAD_ADDRESS.test(`, ${name}`) && !/^(norge|norway)$/i.test(name)) {
+      return name.slice(0, 80);
+    }
+  }
+  return "";
+}
+
+/** En adresse som slutter på et annet land, for eksempel «…, Sverige». */
+const ABROAD_ADDRESS = /,\s*(Sverige|Danmark|Finland|Tyskland|Spania|Frankrike|Italia|Sweden|Denmark)\s*$/i;
 
 /** Hvor nært kartet viser en adresse og et sted. */
 const ZOOM = { adresse: 16, sted: 13, her: 16 } as const;
@@ -55,6 +75,7 @@ export function LocationFields({
     return found ? { ...found, zoom: ZOOM.adresse } : null;
   });
   const [editingArea, setEditingArea] = useState(false);
+  const [abroad, setAbroad] = useState(ABROAD_ADDRESS.test(defaultAddress));
   // Sant når området bare er det eieren holder på å skrive i søkefeltet.
   const areaFromTyping = useRef(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -109,11 +130,17 @@ export function LocationFields({
     if (/\d/.test(text)) {
       // Ser ut som en adresse. Den skal ikke bli det alle ser.
       setAddress(text.slice(0, 200));
-      if (areaFromTyping.current) setArea("");
-      areaFromTyping.current = false;
+      setAbroad(ABROAD_ADDRESS.test(text));
+      // Området gjettes bare når det ikke er valgt eller skrevet fra før.
+      if (areaFromTyping.current || area === "") {
+        const guess = guessArea(text);
+        setArea(guess);
+        areaFromTyping.current = guess !== "";
+      }
     } else {
       setArea(text.slice(0, 80));
       setAddress("");
+      setAbroad(false);
       areaFromTyping.current = true;
     }
     setEditingArea(false);
@@ -152,6 +179,7 @@ export function LocationFields({
     setArea(suggestion.area);
     areaFromTyping.current = false;
     setAddress(suggestion.address);
+    setAbroad(suggestion.abroad === true);
     setEditingArea(suggestion.area === "");
     place(suggestion, ZOOM[suggestion.kind]);
     setOpen(false);
@@ -351,7 +379,7 @@ export function LocationFields({
       {pin && focus && (
         <div>
           <p className="font-medium">Dra nålen til hytta, eller trykk der den ligger.</p>
-          <LocationMap focus={focus} onMove={onMove} />
+          <LocationMap focus={focus} onMove={onMove} abroad={abroad} />
           <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm">
             <a href={mapLink(pin)} target="_blank" rel="noopener noreferrer" className="text-pine underline">
               Åpne i Google Maps

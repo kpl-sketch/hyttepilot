@@ -1,15 +1,26 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
-import type { Map as LeafletMap, Marker } from "leaflet";
+import type { Map as LeafletMap, Marker, TileLayer } from "leaflet";
 import { useEffect, useRef } from "react";
 import type { Position } from "@/lib/position";
 
 /** Et punkt kartet skal flytte seg til, og hvor nært det skal vise det. */
 export type MapFocus = Position & { zoom: number };
 
-/** Kartverkets åpne topografiske kart. Gratis, uten nøkkel, CC BY 4.0. */
-const TILES = "https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png";
+/** Kartverkets åpne topografiske kart. Gratis, uten nøkkel, CC BY 4.0. Bare Norge. */
+const NORWAY = {
+  url: "https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png",
+  maxZoom: 18,
+  attribution: '© <a href="https://www.kartverket.no/">Kartverket</a>',
+};
+
+/** OpenStreetMap for hytter utenfor Norge. Gratis ved moderat bruk. */
+const ABROAD = {
+  url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+  maxZoom: 19,
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+};
 
 /**
  * Lite kart med en nål eieren kan dra til hytta, eller flytte ved å trykke i
@@ -22,13 +33,19 @@ const TILES = "https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercato
 export function LocationMap({
   focus,
   onMove,
+  abroad = false,
 }: {
   focus: MapFocus;
   onMove: (position: Position) => void;
+  /** Hytta ligger utenfor Norge, der Kartverkets kart er tomt. */
+  abroad?: boolean;
 }) {
   const element = useRef<HTMLDivElement>(null);
   const map = useRef<LeafletMap | null>(null);
   const marker = useRef<Marker | null>(null);
+  const tiles = useRef<TileLayer | null>(null);
+  const leaflet = useRef<typeof import("leaflet") | null>(null);
+  const abroadNow = useRef(abroad);
   const moved = useRef(onMove);
   const latest = useRef(focus);
 
@@ -48,10 +65,9 @@ export function LocationMap({
         scrollWheelZoom: false,
       });
       created.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>');
-      L.tileLayer(TILES, {
-        maxZoom: 18,
-        attribution: '© <a href="https://www.kartverket.no/">Kartverket</a>',
-      }).addTo(created);
+      const layer = abroadNow.current ? ABROAD : NORWAY;
+      tiles.current = L.tileLayer(layer.url, layer).addTo(created);
+      leaflet.current = L;
       const pin = L.marker([start.latitude, start.longitude], {
         draggable: true,
         autoPan: true,
@@ -81,8 +97,19 @@ export function LocationMap({
       map.current?.remove();
       map.current = null;
       marker.current = null;
+      tiles.current = null;
     };
   }, []);
+
+  // Bytter kart når eieren velger et sted i et annet land.
+  useEffect(() => {
+    abroadNow.current = abroad;
+    const L = leaflet.current;
+    if (!L || !map.current) return;
+    tiles.current?.remove();
+    const layer = abroad ? ABROAD : NORWAY;
+    tiles.current = L.tileLayer(layer.url, layer).addTo(map.current);
+  }, [abroad]);
 
   useEffect(() => {
     latest.current = focus;

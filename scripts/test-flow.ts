@@ -195,6 +195,21 @@ async function fakeAddressSearch() {
   const server = createServer((request, response) => {
     const requested = new URL(request.url ?? "", "http://x");
     const search = requested.searchParams.get("sok") ?? "";
+    if (requested.pathname === "/api") {
+      // Slik Photon (OpenStreetMap) svarer.
+      const q = (requested.searchParams.get("q") ?? "").toLowerCase();
+      seen.push(`utland:${q}`);
+      const features = q.startsWith("krokviks")
+        ? [
+            { type: "Feature", geometry: { type: "Point", coordinates: [11.9581234, 57.3521234] }, properties: { street: "Krokviksvägen", housenumber: "17", postcode: "439 54", city: "Åsa", country: "Sweden", countrycode: "SE" } },
+            { type: "Feature", geometry: { type: "Point", coordinates: [10.1, 59.1] }, properties: { street: "Krokvikveien", housenumber: "1", postcode: "3200", city: "Sandefjord", countrycode: "NO" } },
+            { type: "Feature", geometry: { type: "Point", coordinates: [11.95, 57.35] }, properties: { name: "Åsa", city: "Åsa", countrycode: "SE", country: "Sweden" } },
+          ]
+        : [];
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ type: "FeatureCollection", features }));
+      return;
+    }
     if (requested.pathname === "/navn") {
       // Slik Kartverkets stedsnavnsøk svarer.
       const point = (nord: number, øst: number) => ({ nord, øst, koordsys: 4258 });
@@ -270,6 +285,7 @@ async function fakeAddressSearch() {
   if (!address || typeof address === "string") throw new Error("fikk ingen port");
   process.env.ADDRESS_SEARCH_URL = `http://127.0.0.1:${address.port}/sok`;
   process.env.PLACE_SEARCH_URL = `http://127.0.0.1:${address.port}/navn`;
+  process.env.ABROAD_SEARCH_URL = `http://127.0.0.1:${address.port}/api`;
   return { seen, close: () => new Promise((resolve) => server.close(resolve)) };
 }
 
@@ -861,6 +877,28 @@ async function main() {
       "Eiendom i Nord-Aurdal",
       "Tisleidalen",
     ]);
+  });
+  await check("hytte i Sverige finnes, med området som det andre ser", async () => {
+    const found = await searchLocations(kari, "Krokviksvägen 17, 439 54 Åsa, Sweden");
+    assert.deepEqual(found[0], {
+      kind: "adresse",
+      label: "Krokviksvägen 17, 439 54 Åsa, Sverige",
+      detail: "Adresse i Sverige",
+      area: "Åsa",
+      address: "Krokviksvägen 17, 439 54 Åsa, Sverige",
+      latitude: 57.352123,
+      longitude: 11.958123,
+      abroad: true,
+    });
+    assert.deepEqual(found.map((item) => item.label), ["Krokviksvägen 17, 439 54 Åsa, Sverige", "Åsa, Sverige"], "norske treff fra utlandssøket hoppes over");
+  });
+  await check("utlandet søkes bare når Kartverket ikke finner noe", async () => {
+    const before = lookup.seen.filter((item) => item.startsWith("utland:")).length;
+    await searchLocations(kari, "Hafjell");
+    await searchLocations(kari, "Fjellvegen 1");
+    assert.equal(lookup.seen.filter((item) => item.startsWith("utland:")).length, before);
+    const [found] = await searchLocations(kari, "Krokviksvägen 17");
+    assert.equal(found.label, "Krokviksvägen 17, 439 54 Åsa, Sverige");
   });
   await check("søket etter steder krever innlogging og tåler at tjenesten er nede", async () => {
     await refused(() => searchLocations(null, "Hafjell"), /Logg inn/);
