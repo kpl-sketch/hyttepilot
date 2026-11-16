@@ -339,6 +339,32 @@ export const booking = pgTable(
   ],
 );
 
+/**
+ * Noen åpnet en hytteinvitasjon og vil logge inn med en annen adresse enn den
+ * invitasjonen ble sendt til, for eksempel fordi e-posten ble videresendt.
+ * Personen ser ikke hytta før eieren har godkjent. Raden lages når koden
+ * bestilles, og `userId` settes når personen har bekreftet adressen og
+ * fullført velkomstsiden. Først da får eieren se forespørselen.
+ */
+export const invitationRequest = pgTable(
+  "invitation_request",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    invitationId: uuid("invitation_id")
+      .notNull()
+      .references(() => invitation.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    declinedAt: timestamp("declined_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("invitation_request_email_idx").on(t.invitationId, t.email),
+    index("invitation_request_lookup_idx").on(t.email),
+  ],
+);
+
 export type Cabin = typeof cabin.$inferSelect;
 export type Booking = typeof booking.$inferSelect;
 export type BookingStatus = (typeof bookingStatus.enumValues)[number];

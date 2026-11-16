@@ -15,6 +15,8 @@ import { requireViewer } from "@/lib/session";
 import {
   addAvailabilityAction,
   addCabinPhotosAction,
+  approveAccessRequestAction,
+  declineAccessRequestAction,
   makeCoverPhotoAction,
   removeAvailabilityAction,
   removeCabinPhotoAction,
@@ -74,6 +76,7 @@ export default async function ManageCabinPage({
   ]);
   const people = sharing?.people ?? [];
   const invitations = sharing?.invitations ?? [];
+  const requests = sharing?.requests ?? [];
   const free = freePeriods(calendar.available, calendar.taken, calendar.today);
   const isShared = people.length > 0;
   const hasDates = free.length > 0;
@@ -115,6 +118,8 @@ export default async function ManageCabinPage({
               : "Bare du ser hytta."}
             {invitations.length > 0 &&
               ` ${invitations.length === 1 ? "Én invitasjon" : `${invitations.length} invitasjoner`} venter.`}
+            {requests.length > 0 &&
+              ` ${requests.length === 1 ? "Én person" : `${requests.length} personer`} venter på at du godkjenner.`}
           </Step>
         </ol>
         {missingPractical && (
@@ -198,6 +203,63 @@ export default async function ManageCabinPage({
             <p role="status" className="mt-4 max-w-[60ch] rounded-xl bg-window p-4 font-semibold">
               Invitasjonen er trukket tilbake. Lenken i e-posten virker ikke lenger.
             </p>
+          )}
+
+          {endret === "godkjent" && (
+            <p role="status" className="mt-4 max-w-[60ch] rounded-xl bg-window p-4 font-semibold">
+              Personen ser nå hytta og har fått beskjed på e-post.
+            </p>
+          )}
+          {endret === "avslatt" && (
+            <p role="status" className="mt-4 max-w-[60ch] rounded-xl bg-window p-4 font-semibold">
+              Du har sagt nei. Personen ser ikke hytta.
+            </p>
+          )}
+
+          {requests.length > 0 && (
+            <section aria-labelledby="godkjenn" className="mt-5 rounded-xl border-2 border-window p-4">
+              <h3 id="godkjenn" className="font-bold">
+                Venter på at du godkjenner
+              </h3>
+              <p className="mt-1 max-w-[60ch] text-sm text-muted">
+                Disse åpnet en invitasjon du sendte, og logget inn med en annen adresse. De ser
+                ikke hytta før du sier ja.
+              </p>
+              <ul className="mt-2 divide-y divide-line border-y border-line">
+                {requests.map((request) => (
+                  <li
+                    key={request.id}
+                    className="flex flex-wrap items-center justify-between gap-3 py-3"
+                  >
+                    <span className="min-w-0">
+                      <span className="font-semibold">{request.name}</span>
+                      <span className="block text-sm break-words text-muted">
+                        {request.email}. Invitasjonen ble sendt til {request.invitedEmail}.
+                      </span>
+                    </span>
+                    <span className="flex flex-wrap gap-4">
+                      <ActionForm action={approveAccessRequestAction}>
+                        <input type="hidden" name="requestId" value={request.id} />
+                        <SubmitButton>Godkjenn {request.name}</SubmitButton>
+                      </ActionForm>
+                      <ActionForm
+                        action={declineAccessRequestAction}
+                        confirm={`Si nei til ${request.name}? Personen ser ikke hytta.`}
+                      >
+                        <input type="hidden" name="requestId" value={request.id} />
+                        <button
+                          type="submit"
+                          className="cursor-pointer py-2.5 text-barn underline"
+                          aria-label={`Si nei til ${request.name}`}
+                        >
+                          Si nei
+                        </button>
+                      </ActionForm>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
 
           {people.length > 0 && (

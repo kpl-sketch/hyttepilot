@@ -1,6 +1,10 @@
-/** Adressen til et bilde. `small` gir det lille bildet som brukes i lister. */
-export function photoSrc(photoId: string, small = false) {
-  return small ? `/bilder/${photoId}?s=liten` : `/bilder/${photoId}`;
+/**
+ * Adressen til et bilde. `small` gir det lille bildet som brukes i lister.
+ * `base` er stedet bildene hentes fra: `/bilder` for innloggede, og
+ * `/invitasjon/<nøkkel>/bilder` på invitasjonssiden.
+ */
+export function photoSrc(photoId: string, small = false, base = "/bilder") {
+  return small ? `${base}/${photoId}?s=liten` : `${base}/${photoId}`;
 }
 
 /**

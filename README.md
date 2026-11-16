@@ -49,8 +49,18 @@ kan låne, eie og dele. Forskjellen ligger i hva som er delt med hvem.
   `src/lib/services/cabins.ts`, og sider, bilder og forespørsler går gjennom den.
 - En invitasjon (`invitation`) er personlig. Tilgangen gis til den som logger inn
   med adressen invitasjonen ble sendt til. Lenken i e-posten
-  (`/invitasjon/<nøkkel>`) viser bare riktig velkomst og gir ingen tilgang alene.
-  Uten innlogging viser siden bare hvem som inviterer og en maskert adresse.
+  (`/invitasjon/<nøkkel>`) gir ingen tilgang alene.
+- **Invitasjon med ett klikk.** Uten innlogging viser lenken hvem som låner bort
+  hytta, bildene, området på kart og ideen, så lenge invitasjonen gjelder (30
+  dager, ikke trukket tilbake). Lenken kan åpnes flere ganger. Navn, pris,
+  datoer, adresse og nøyaktig posisjon vises ikke før innlogging. Bildene
+  hentes gjennom `/invitasjon/<nøkkel>/bilder/<id>`.
+- Ved innlogging fra lenken er den inviterte adressen fylt ut på forhånd, vist
+  maskert. Mottakeren trenger bare å skrive koden fra e-posten.
+- Logger noen inn fra lenken med en annen adresse, for eksempel fordi e-posten
+  er videresendt, lagres det i `invitation_request`. Personen ser ingenting før
+  eieren har godkjent under «Vis hytta til noen du kjenner». Eieren får e-post.
+  Høyst fem andre adresser kan prøve seg på én invitasjon.
 - Gjensidig deling er to valg. Deler Kari med Per, får Per et forslag om å dele
   tilbake. Ingenting deles før Per har sett over og bekreftet.
 - Den som har fått en hytte delt med seg, kan ikke dele den videre. Venners
@@ -137,7 +147,7 @@ skrives i stedet til filen `.dev-outbox.jsonl` og til terminalen.
 ```
 src/lib/db/schema.ts      Datamodellen. Én fil, alle tabeller.
 src/lib/services/         Alle regler og tilgangssjekker. Start her.
-  invitations.ts            hvem slipper inn, deling, invitasjoner, hyttekretsen
+  invitations.ts            hvem slipper inn, deling, invitasjoner, invitasjonssiden, godkjenning av andre adresser, hyttekretsen
   cabins.ts                 hytter, hvem som ser hva, ledige perioder
   bookings.ts               forespørsel, ja/nei, betalt, avlysning
   photos.ts                 bilder: hvem får legge til, fjerne og se dem

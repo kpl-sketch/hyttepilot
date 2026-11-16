@@ -42,7 +42,7 @@ export function cabinInvitationMail(
   return {
     to,
     subject: `${inviterName} inviterer deg til ${APP_NAME}`,
-    text: `${inviterName} inviterer deg til ${APP_NAME} og vil vise deg hytta ${info.cabinName} (${info.cabinArea}).${greeting(inviterName, info.message)}\n\nI ${APP_NAME} ${WHAT_IT_IS}.\n\nDette får du tilgang til:\n- Du ser hytta, bildene, prisen og når den er ledig.\n- Du kan sende ${first} en forespørsel om å låne den.\n\n${first} bestemmer når hytta er ledig, og svarer ja eller nei på hver forespørsel. Invitasjonen gjelder bare denne hytta.\n\nSe invitasjonen:\n${appUrl()}/invitasjon/${info.token}\n\nInvitasjonen er personlig. Den gjelder for ${to} til ${lastDay(info.expiresAt)}. Lenken gir ingen tilgang til andre enn deg.${sign}`,
+    text: `${inviterName} inviterer deg til ${APP_NAME} og vil vise deg hytta ${info.cabinName} (${info.cabinArea}).${greeting(inviterName, info.message)}\n\nI ${APP_NAME} ${WHAT_IT_IS}.\n\nDette får du tilgang til:\n- Du ser hytta, bildene, prisen og når den er ledig.\n- Du kan sende ${first} en forespørsel om å låne den.\n\n${first} bestemmer når hytta er ledig, og svarer ja eller nei på hver forespørsel. Invitasjonen gjelder bare denne hytta.\n\nSe hytta:\n${appUrl()}/invitasjon/${info.token}\n\nInvitasjonen er personlig. Den gjelder for ${to} til ${lastDay(info.expiresAt)}. Lenken viser bilder og området, men bare du kan låne hytta med den.${sign}`,
   };
 }
 
@@ -57,6 +57,27 @@ export function cabinSharedMail(
     to,
     subject: `${inviterName} viser deg ${info.cabinName}`,
     text: `${inviterName} viser deg hytta ${info.cabinName} (${info.cabinArea}) i ${APP_NAME}.${greeting(inviterName, info.message)}\n\nDu ser nå hytta, bildene, prisen og når den er ledig, og du kan sende ${first} en forespørsel om å låne den. ${first} svarer ja eller nei på hver forespørsel.\n\nSe hytta:\n${info.link}${sign}`,
+  };
+}
+
+/**
+ * Til eieren: noen har åpnet en invitasjon og logget inn med en annen adresse
+ * enn den invitasjonen ble sendt til. Personen ser ingenting før eieren godkjenner.
+ */
+export function accessRequestMail(
+  to: string,
+  info: {
+    requesterName: string;
+    requesterEmail: string;
+    invitedEmail: string;
+    cabinName: string;
+    link: string;
+  },
+): Mail {
+  return {
+    to,
+    subject: `${info.requesterName} vil se ${info.cabinName}`,
+    text: `${info.requesterName} (${info.requesterEmail}) åpnet invitasjonen du sendte til ${info.invitedEmail}, og logget inn med en annen adresse.\n\n${firstName(info.requesterName)} ser ikke ${info.cabinName} før du godkjenner. Kjenner du ikke personen, eller er du usikker, kan du si nei.\n\nGodkjenn eller si nei her:\n${info.link}${sign}`,
   };
 }
 

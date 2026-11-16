@@ -16,7 +16,9 @@ import {
   updateCabin,
 } from "@/lib/services/cabins";
 import {
+  approveAccessRequest,
   claimInvitations,
+  declineAccessRequest,
   INVITATION_DAYS,
   inviteAccount,
   type InvitationResult,
@@ -25,6 +27,7 @@ import {
   isInvitationToken,
   previewInvitations,
   previewShare,
+  requestAccessViaInvitation,
   revokeAccess,
   revokeAccountInvitation,
   revokeInvitation,
@@ -325,6 +328,54 @@ export async function acceptInvitationAction(
   }
   // Invitasjonssiden sender videre til hytta når invitasjonen er tatt imot.
   redirect(isInvitationToken(token) ? `/invitasjon/${token}` : "/krets");
+}
+
+/**
+ * Innlogget med en annen adresse enn invitasjonen ble sendt til: personen ber
+ * eieren om å få se hytta. Eieren må godkjenne.
+ */
+export async function requestAccessAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const viewer = await requireViewer();
+  const token = text(formData, "invitasjon");
+  try {
+    await requestAccessViaInvitation(viewer, token);
+  } catch (error) {
+    return toFormState(error);
+  }
+  redirect(isInvitationToken(token) ? `/invitasjon/${token}` : "/krets");
+}
+
+/** Eieren godkjenner en som logget inn fra invitasjonen med en annen adresse. */
+export async function approveAccessRequestAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const viewer = await requireViewer();
+  let cabinId: string;
+  try {
+    ({ cabinId } = await approveAccessRequest(viewer, text(formData, "requestId")));
+  } catch (error) {
+    return toFormState(error);
+  }
+  redirect(`/mine-hytter/${cabinId}?endret=godkjent#deling`);
+}
+
+/** Eieren sier nei til en som logget inn fra invitasjonen med en annen adresse. */
+export async function declineAccessRequestAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const viewer = await requireViewer();
+  let cabinId: string;
+  try {
+    ({ cabinId } = await declineAccessRequest(viewer, text(formData, "requestId")));
+  } catch (error) {
+    return toFormState(error);
+  }
+  redirect(`/mine-hytter/${cabinId}?endret=avslatt#deling`);
 }
 
 /* ------------------------------ Administrasjon ------------------------------ */

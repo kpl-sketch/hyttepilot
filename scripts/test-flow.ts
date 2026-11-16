@@ -58,8 +58,16 @@ import {
   updateCabin,
 } from "../src/lib/services/cabins";
 import {
+  approveAccessRequest,
   claimInvitations,
+  declineAccessRequest,
+  getAccessRequestState,
   getCircle,
+  getInvitationPreview,
+  getInvitedEmail,
+  MAX_ACCESS_REQUESTS,
+  registerAccessRequest,
+  requestAccessViaInvitation,
   getInvitationForViewer,
   getPublicInvitation,
   inviteAccount,
@@ -1485,6 +1493,159 @@ async function main() {
     assert.equal(m.staysPaid, Number(row.paid));
     assert.equal(m.nightsPaid, Number(row.nights));
     assert.ok(m.requestsApproved >= m.staysPaid);
+  });
+
+  console.log("Invitasjon med ett klikk: hytta vises før innlogging");
+  const ettKlikk = await sentDuring(() => inviteToCabin(kari, karisHytte, "ettklikk@test.local"));
+  const ettToken = tokenIn(ettKlikk.mails[0]);
+  await check("lenken viser bilder, området og grovt kart, men ikke navn, pris eller adresse", async () => {
+    const preview = await getInvitationPreview(ettToken);
+    assert.ok(preview?.cabin, "hytta skal vises uten innlogging");
+    assert.equal(preview.status, "valid");
+    assert.equal(preview.inviterName, "Kari Eier");
+    assert.equal(preview.cabin.area, "Hafjell");
+    assert.deepEqual(preview.cabin.photos, await listCabinPhotos(karisHytte));
+    assert.ok(preview.cabin.photos.length > 0);
+    assert.ok(preview.cabin.areaPosition);
+    assert.notDeepEqual(preview.cabin.areaPosition, { latitude: 61.2345, longitude: 10.4567 });
+    const json = JSON.stringify(preview);
+    for (const secret of ["Karis hytte", "Fjellvegen", "61.2345", "10.4567", "91234567", "Nøkkelboks", "ettklikk@"]) {
+      assert.equal(json.includes(secret), false, `${secret} skal ikke vises uten innlogging`);
+    }
+    assert.match(ettKlikk.mails[0].text, /Se hytta:\n.*\/invitasjon\//);
+  });
+  await check("lenken viser bare bilder av hytta den gjelder", async () => {
+    const [karis] = await listCabinPhotos(karisHytte);
+    const [annes] = await listCabinPhotos(annesHytte);
+    assert.ok(await getPhotoForViewer({ invitationToken: ettToken }, karis.id, "full"));
+    assert.ok(await getPhotoForViewer({ invitationToken: ettToken }, karis.id, "thumb"));
+    assert.equal(await getPhotoForViewer({ invitationToken: ettToken }, annes.id, "full"), null);
+    assert.equal(await getPhotoForViewer({ invitationToken: "x".repeat(32) }, karis.id, "full"), null);
+    assert.equal(await getPhotoForViewer({ invitationToken: "ikke gyldig" }, karis.id, "full"), null);
+  });
+  await check("lenken kan åpnes flere ganger, også etter at den er tatt i bruk", async () => {
+    for (let i = 0; i < 3; i++) assert.ok((await getInvitationPreview(ettToken))?.cabin);
+    const ett = await register("ettklikk@test.local", "Eva Ettklikk");
+    assert.ok(await getVisibleCabin(ett, karisHytte));
+    const after = await getInvitationPreview(ettToken);
+    assert.equal(after?.status, "accepted");
+    assert.ok(after?.cabin, "lenken viser fortsatt hytta innenfor fristen");
+  });
+  await check("innloggingen fylles ut med adressen invitasjonen ble sendt til", async () => {
+    assert.equal(await getInvitedEmail(ettToken), "ettklikk@test.local");
+    assert.equal(await getInvitedEmail("ikke gyldig"), null);
+    assert.equal(await getInvitedEmail("y".repeat(32)), null);
+  });
+
+  console.log("Innlogging fra invitasjonen med en annen adresse");
+  const delt = await sentDuring(() => inviteToCabin(kari, karisHytte, "mottaker@test.local"));
+  const deltToken = tokenIn(delt.mails[0]);
+  await check("en videresendt e-post slipper ingen inn med lenken alene", async () => {
+    assert.equal(await isEmailAllowed("partner@test.local"), false);
+    // Den inviterte adressen selv lager ingen forespørsel.
+    await registerAccessRequest(deltToken, "Mottaker@test.local");
+    const rows = await db.execute(sql`select count(*)::int as n from "invitation_request"`);
+    assert.equal((rows.rows[0] as { n: number }).n, 0);
+  });
+  await check("en annen adresse slipper inn, men ser ingenting før eieren godkjenner", async () => {
+    await registerAccessRequest(deltToken, " Partner@Test.Local ");
+    assert.equal(await isEmailAllowed("partner@test.local"), true);
+    const { result: partner, mails } = await sentDuring(() =>
+      register("partner@test.local", "Pia Partner"),
+    );
+    assert.equal(await getVisibleCabin(partner, karisHytte), null);
+    assert.deepEqual(await listSharedCabins(partner), []);
+    const [karis] = await listCabinPhotos(karisHytte);
+    assert.equal(await getPhotoForViewer(partner, karis.id, "full"), null);
+    assert.deepEqual(await getAccessRequestState(partner, deltToken), { state: "pending" });
+    // Eieren får beskjed med begge adressene, og ingen andre får e-post.
+    assert.deepEqual(mails.map((m) => m.to), ["kari@test.local"]);
+    assert.match(mails[0].subject, /Pia Partner vil se Karis hytte/);
+    assert.match(mails[0].text, /partner@test\.local/);
+    assert.match(mails[0].text, /mottaker@test\.local/);
+    const sharing = await listCabinSharing(kari, karisHytte);
+    assert.deepEqual(
+      sharing?.requests.map((r) => [r.name, r.email, r.invitedEmail]),
+      [["Pia Partner", "partner@test.local", "mottaker@test.local"]],
+    );
+  });
+  await check("bare eieren kan godkjenne, og da ser personen hytta", async () => {
+    const partner = await actor(
+      ((await db.execute(sql`select id from "user" where email = 'partner@test.local'`)).rows[0] as { id: string }).id,
+    );
+    const [request] = (await listCabinSharing(kari, karisHytte))?.requests ?? [];
+    await refused(() => approveAccessRequest(per, request.id), /Fant ikke forespørselen/);
+    await refused(() => approveAccessRequest(admin, request.id), /Fant ikke forespørselen/);
+    await refused(() => approveAccessRequest(kari, "ikke-en-id"), /Fant ikke forespørselen/);
+    assert.equal(await getVisibleCabin(partner, karisHytte), null);
+    const { mails } = await sentDuring(() => approveAccessRequest(kari, request.id));
+    assert.ok(await getVisibleCabin(partner, karisHytte));
+    assert.deepEqual(mails.map((m) => m.to), ["partner@test.local"]);
+    assert.deepEqual(await getAccessRequestState(partner, deltToken), {
+      state: "has-access",
+      cabinId: karisHytte,
+    });
+    assert.deepEqual((await listCabinSharing(kari, karisHytte))?.requests, []);
+    await refused(() => approveAccessRequest(kari, request.id), /allerede besvart/);
+    // Den inviterte kan fortsatt bruke invitasjonen sin.
+    assert.equal(await isEmailAllowed("mottaker@test.local"), true);
+  });
+  await check("eieren kan si nei, og da ser personen fortsatt ingenting", async () => {
+    await registerAccessRequest(deltToken, "fremmed@test.local");
+    const fremmed = await register("fremmed@test.local", "Frank Fremmed");
+    const [request] = (await listCabinSharing(kari, karisHytte))?.requests ?? [];
+    assert.equal(request?.email, "fremmed@test.local");
+    await declineAccessRequest(kari, request.id);
+    assert.equal(await getVisibleCabin(fremmed, karisHytte), null);
+    assert.deepEqual(await getAccessRequestState(fremmed, deltToken), { state: "declined" });
+    await requestAccessViaInvitation(fremmed, deltToken);
+    assert.deepEqual((await listCabinSharing(kari, karisHytte))?.requests, []);
+  });
+  await check("et innlogget medlem kan be eieren om å se hytta fra lenken", async () => {
+    const medlem = await register("mona@test.local", "Mona Lenke");
+    assert.deepEqual(await getAccessRequestState(medlem, deltToken), { state: "none" });
+    const { mails } = await sentDuring(() => requestAccessViaInvitation(medlem, deltToken));
+    assert.deepEqual(mails.map((m) => m.to), ["kari@test.local"]);
+    assert.deepEqual(await getAccessRequestState(medlem, deltToken), { state: "pending" });
+    assert.equal(await getVisibleCabin(medlem, karisHytte), null);
+    const again = await sentDuring(() => requestAccessViaInvitation(medlem, deltToken));
+    assert.equal(again.mails.length, 0, "ingen ny e-post ved gjentatt trykk");
+  });
+  await check("en spredt lenke slipper inn høyst noen få andre adresser", async () => {
+    const spredt = await sentDuring(() => inviteToCabin(kari, karisHytte, "spredt@test.local"));
+    const token = tokenIn(spredt.mails[0]);
+    for (let i = 0; i < MAX_ACCESS_REQUESTS + 2; i++) {
+      await registerAccessRequest(token, `spredt${i}@test.local`);
+    }
+    assert.equal(await isEmailAllowed(`spredt${MAX_ACCESS_REQUESTS - 1}@test.local`), true);
+    assert.equal(await isEmailAllowed(`spredt${MAX_ACCESS_REQUESTS}@test.local`), false);
+    const sen = await register("sen-medlem@test.local", "Sigurd Sen");
+    assert.deepEqual(await getAccessRequestState(sen, token), { state: "full" });
+    await refused(() => requestAccessViaInvitation(sen, token), /For mange/);
+  });
+  await check("tilbaketrukket invitasjon viser ingen hytte, og forespørslene faller bort", async () => {
+    const sharing = await listCabinSharing(kari, karisHytte);
+    const waiting = sharing?.invitations.find((i) => i.email === "mottaker@test.local");
+    assert.ok(waiting);
+    assert.equal(sharing?.requests.length, 1, "Mona venter");
+    await revokeInvitation(kari, waiting.id);
+    const preview = await getInvitationPreview(deltToken);
+    assert.equal(preview?.status, "revoked");
+    assert.equal(preview?.cabin, null);
+    const [karis] = await listCabinPhotos(karisHytte);
+    assert.equal(await getPhotoForViewer({ invitationToken: deltToken }, karis.id, "full"), null);
+    assert.deepEqual((await listCabinSharing(kari, karisHytte))?.requests, []);
+    assert.equal(await getInvitedEmail(deltToken), null);
+    await registerAccessRequest(deltToken, "for-sent@test.local");
+    assert.equal(await isEmailAllowed("for-sent@test.local"), false);
+  });
+  await check("utløpt invitasjon viser ingen hytte", async () => {
+    const sent = await sentDuring(() => inviteToCabin(kari, karisHytte, "gammel@test.local"));
+    const token = tokenIn(sent.mails[0]);
+    await expire("gammel@test.local");
+    const preview = await getInvitationPreview(token);
+    assert.equal(preview?.status, "expired");
+    assert.equal(preview?.cabin, null);
   });
 
   console.log("Medlemsliste for administratorene");

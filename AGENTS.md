@@ -19,7 +19,9 @@ Pilot for en lukket tjeneste der hytteeiere låner ut hytta til folk de kjenner.
 - Forsiden sier først og tydelig at tjenesten bare er for inviterte, og at ingen kan registrere seg selv. Den som ikke er invitert, får ett neste steg: be noen som har hytte her, om en invitasjon. Bare eiere og administratorer kan invitere, så teksten skal ikke love mer. Lov aldri rask vekst eller mange hytter.
 - Regler og tilgangssjekker ligger i `src/lib/services/`. Sider og skjemaer kaller tjenestelaget og sjekker ikke tilgang selv.
 - En hytte er privat til eieren deler den. Innsyn i en annens hytte følger bare av en rad i `cabin_access`, som bare eieren kan lage. Legg aldri inn en regel som gir innsyn til «alle hytteeiere», administratorer eller venners venner.
-- En invitasjon gir tilgang til den som logger inn med adressen den ble sendt til. Nøkkelen i lenken gir ingenting alene. Sider som kan åpnes uten innlogging, viser ikke noe om hytta.
+- En invitasjon gir tilgang til den som logger inn med adressen den ble sendt til. Nøkkelen i lenken gir ingen tilgang alene.
+- Unntaket fra «ingenting om hytta uten innlogging» er invitasjonssiden (`/invitasjon/[nøkkel]`): så lenge invitasjonen gjelder, viser den bildene, området på kart (grovt punkt) og ideen. Aldri navn, pris, datoer, adresse eller nøyaktig posisjon. Regelen ligger i `getInvitationPreview` og `getPhotoForViewer`. Alle andre sider uten innlogging viser ingenting om hytta.
+- Logger noen inn fra en invitasjon med en annen adresse enn den inviterte, lages en rad i `invitation_request`. Personen ser ingenting før eieren godkjenner. Godkjenning er den eneste andre veien til en rad i `cabin_access`, og bare eieren kan gjøre det.
 - Å fjerne en deling skal aldri endre en forespørsel eller et opphold.
 - Brukeren hentes alltid fra innloggingen med `requireViewer()`, aldri fra skjemafelt.
 - Vipps-nummer, adresse, kartposisjon (`address`, `latitude`, `longitude`) og `arrivalInfo` skal ikke sendes til andre enn eieren før reglene i `bookings.ts` tillater det.

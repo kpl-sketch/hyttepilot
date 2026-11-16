@@ -7,6 +7,7 @@ import { type Actor, UserError } from "../errors";
 import { MAX_PHOTOS } from "../photo-limits";
 import { photoRows, processPhotos } from "../photo-processing";
 import { getOwnCabin, getVisibleCabin } from "./cabins";
+import { getPreviewCabinId } from "./invitations";
 
 /** Bildene uten innhold: det sidene trenger for å vise dem. */
 export type PhotoInfo = { id: string; width: number; height: number };
@@ -85,11 +86,26 @@ export async function listCabinPhotos(cabinId: string): Promise<PhotoInfo[]> {
 }
 
 /**
- * Selve bildet, eller null hvis brukeren ikke får se hytta det hører til.
- * Reglene er de samme som for hytta: eieren, andre hytteeiere og inviterte venner.
+ * Den som ser på bildet: en innlogget bruker, eller den som har åpnet
+ * lenken til en hytteinvitasjon uten å være logget inn.
+ */
+export type PhotoViewer = Actor | { invitationToken: string };
+
+/** Får den som ser på, se hytta bildet hører til? */
+async function maySeeCabin(viewer: PhotoViewer, cabinId: string): Promise<boolean> {
+  if ("invitationToken" in viewer) {
+    return (await getPreviewCabinId(viewer.invitationToken)) === cabinId;
+  }
+  return Boolean(await getVisibleCabin(viewer, cabinId));
+}
+
+/**
+ * Selve bildet, eller null hvis den som ser på, ikke får se hytta det hører
+ * til. Reglene er de samme som for hytta: eieren og dem eieren har vist hytta
+ * til. Lenken til en hytteinvitasjon som gjelder, viser bildene av den hytta.
  */
 export async function getPhotoForViewer(
-  actor: Actor,
+  viewer: PhotoViewer,
   photoId: string,
   size: "full" | "thumb",
 ): Promise<Buffer | null> {
@@ -100,7 +116,7 @@ export async function getPhotoForViewer(
     .where(eq(cabinPhoto.id, photoId))
     .limit(1);
   if (!photo) return null;
-  if (!(await getVisibleCabin(actor, photo.cabinId))) return null;
+  if (!(await maySeeCabin(viewer, photo.cabinId))) return null;
 
   const [row] = await db
     .select({ data: size === "thumb" ? cabinPhoto.thumb : cabinPhoto.full })
