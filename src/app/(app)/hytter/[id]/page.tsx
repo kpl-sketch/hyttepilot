@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
 import { ActionForm, SubmitButton } from "@/components/action-form";
+import { AreaMap } from "@/components/area-map";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { PhotoGallery } from "@/components/photo-gallery";
 import { ButtonLink, Field, Input, PageTitle, Panel, Textarea } from "@/components/ui";
 import { firstName } from "@/lib/emails";
+import { areaLink } from "@/lib/position";
 import { formatKroner } from "@/lib/pricing";
 import { getCalendar, getVisibleCabin } from "@/lib/services/cabins";
 import { getInvitationForViewer } from "@/lib/services/invitations";
@@ -16,7 +18,8 @@ export default async function CabinPage({ params, searchParams }: PageProps<"/hy
   const [{ id }, { invitasjon }] = await Promise.all([params, searchParams]);
   const found = await getVisibleCabin(viewer, id);
   if (!found) notFound();
-  const { cabin, ownerName } = found;
+  const { cabin, ownerName, areaPosition } = found;
+  const areaSearch = areaLink(cabin.area);
   const isOwn = cabin.ownerId === viewer.id;
   const [calendar, photos] = await Promise.all([
     getCalendar(cabin.id),
@@ -69,6 +72,28 @@ export default async function CabinPage({ params, searchParams }: PageProps<"/hy
 
       <div className="grid gap-10 md:grid-cols-[2fr_1fr]">
         <div className="space-y-6">
+          <section aria-labelledby="hvor">
+            <h2 id="hvor" className="text-xl font-bold">
+              Hvor ligger hytta?
+            </h2>
+            <p className="mt-2 max-w-[60ch]">
+              <span className="font-semibold">{cabin.area}</span>
+              {areaSearch && (
+                <>
+                  {" · "}
+                  <a href={areaSearch} target="_blank" rel="noopener noreferrer" className="underline">
+                    Se området i Google Maps
+                  </a>
+                </>
+              )}
+            </p>
+            {areaPosition && <AreaMap position={areaPosition} area={cabin.area} />}
+            <p className="mt-2 max-w-[60ch] text-sm text-muted">
+              {isOwn
+                ? "Lånerne ser området og et kart over området. Adressen og veien til hytta får de når lånet er betalt."
+                : `Kartet viser området, ikke selve hytta. Adressen og veibeskrivelsen får du når lånet er betalt.`}
+            </p>
+          </section>
           {cabin.description && (
             <p className="max-w-[60ch] whitespace-pre-line text-lg">{cabin.description}</p>
           )}
