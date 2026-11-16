@@ -20,6 +20,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import pg from "pg";
 import { chromium } from "playwright-core";
+import sharp from "sharp";
 
 const BASE = process.env.TEST_BASE_URL ?? "http://localhost:3000";
 const SHOTS = process.env.SCREENSHOT_DIR ?? "skjermbilder";
@@ -361,7 +362,12 @@ async function main() {
   await kari.goto(await invitationLink("kari@test.local"));
   await kari.getByRole("heading", { name: /Anne Admin inviterer deg til/ }).waitFor();
   await kari.getByRole("link", { name: "Logg inn" }).click();
-  await logIn(kari, "kari@test.local");
+  {
+    // Adressen invitasjonen ble sendt til, er fylt ut på forhånd.
+    const before = (await newMails()).length;
+    await kari.getByRole("button", { name: "Send kode til k•••@test.local" }).click();
+    await enterCode(kari, "kari@test.local", before);
+  }
   await onboard(kari, "Kari Eier");
   await check("invitasjon uten hytte gir adgang, og sier at ingen hytter er delt ennå", async () => {
     await kari.getByRole("heading", { name: "Velkommen. Anne Admin har invitert deg." }).waitFor();
@@ -404,26 +410,62 @@ async function main() {
     await kari.getByText("Én invitasjon venter.").waitFor();
   });
 
-  console.log("Invitasjon og første innlogging, bare med tastatur");
+  console.log("Invitasjon med ett klikk, og første innlogging bare med tastatur");
+  // Fjellro får et bilde og en kartposisjon, slik at invitasjonssiden har noe å vise.
+  const picture = await sharp({
+    create: { width: 1200, height: 800, channels: 3, background: "#2f5d50" },
+  })
+    .webp()
+    .toBuffer();
+  await pool.query(
+    `insert into "cabin_photo" ("cabin_id", "position", "width", "height", "full", "thumb")
+     values ($1, 0, 1200, 800, $2, $2)`,
+    [fjellro, picture],
+  );
+  await pool.query(
+    `update "cabin" set "latitude" = 61.2345, "longitude" = 10.4567 where "id" = $1`,
+    [fjellro],
+  );
   const perLink = await invitationLink("per@test.local");
   const per = await phone();
   await per.goto(perLink);
-  await check("åpen invitasjonslenke viser avsender, men ingenting om hytta", async () => {
-    await per.getByRole("heading", { name: /Kari Eier inviterer deg til/ }).waitFor();
+  await check("ett klikk viser hytta: bilder, området på kart og ideen, uten innlogging", async () => {
+    await per.getByRole("heading", { name: "Kari låner deg hytta si" }).waitFor();
+    await per.getByText("Har du hytte, kan du velge å låne bort din også.").waitFor();
+    await per.getByRole("heading", { name: "Hytta ligger i Hafjell" }).waitFor();
+    await per.getByRole("img", { name: /Kart over området rundt Hafjell/ }).waitFor();
+    const photo = per.getByRole("img", { name: /Hytta i Hafjell, bilde 1 av 1/ });
+    await photo.waitFor();
+    assert.ok(
+      await photo.evaluate((img) => img.complete && img.naturalWidth > 0),
+      "bildet skal lastes uten innlogging",
+    );
     const text = await per.getByRole("main").innerText();
     assert.match(text, /ser du når hyttene til folk du kjenner er ledige, og du kan spørre uten at det blir rart/);
-    assert.match(text, /p•••@test\.local/);
-    assert.equal(/Fjellro|Hafjell|Fjellvegen/.test(text), false, "hytta skal ikke vises før innlogging");
-    assert.equal(text.includes("per@test.local"), false, "hele adressen skal ikke vises");
+    for (const secret of [/Fjellro/, /Fjellvegen/, /Nøkkelboks/, /per@test\.local/, /61\.2345/, /252/]) {
+      assert.equal(secret.test(text), false, `${secret} skal ikke vises før innlogging`);
+    }
+    const html = await (await per.request.get(perLink)).text();
+    assert.equal(/Fjellro|Fjellvegen|61\.2345|10\.4567|Nøkkelboks/.test(html), false, "svaret fra serveren røper ingenting");
     await shot(per, "06-invitasjon-for-innlogging");
   });
+  await check("lenken kan åpnes flere ganger", async () => {
+    await per.goto(perLink);
+    await per.getByRole("heading", { name: "Kari låner deg hytta si" }).waitFor();
+  });
   await check("invitasjon, innlogging og løfte kan gjøres med tastatur", async () => {
-    await tabTo(per, /Logg inn og se hytta/);
+    await tabTo(per, /Bli med og se ledige datoer/);
     await per.keyboard.press("Enter");
-    await per.getByText("Du logger inn for å ta imot invitasjonen fra").waitFor();
+    // Adressen er fylt ut på forhånd: bare koden gjenstår.
+    await per.getByText(/inviterte p•••@test\.local/).waitFor();
+    assert.equal(
+      (await per.getByRole("main").innerText()).includes("per@test.local"),
+      false,
+      "hele adressen skal ikke vises",
+    );
+    await shot(per, "06a-innlogging-fylt-ut");
     const before = (await newMails()).length;
-    await tabTo(per, /E-postadresse/);
-    await per.keyboard.type("per@test.local");
+    await tabTo(per, /Send kode til p•••@test\.local/);
     await per.keyboard.press("Enter");
     await enterCode(per, "per@test.local", before, { keyboard: true });
 
@@ -603,8 +645,12 @@ async function main() {
 
   const ola = await phone();
   await ola.goto(await invitationLink("ola@test.local"));
-  await ola.getByRole("link", { name: "Logg inn og se hytta" }).click();
-  await logIn(ola, "ola@test.local");
+  await ola.getByRole("link", { name: "Bli med og se ledige datoer" }).click();
+  {
+    const before = (await newMails()).length;
+    await ola.getByRole("button", { name: "Send kode til o•••@test.local" }).click();
+    await enterCode(ola, "ola@test.local", before);
+  }
   await onboard(ola, "Ola Venn");
   await ola.getByRole("heading", { name: "Per Eier viser deg Sjøbua" }).waitFor();
   await check("C ser bare hytta til B, ikke hytta til A", async () => {
@@ -615,7 +661,8 @@ async function main() {
   });
   await check("en annen innlogget person får ingenting ut av en videresendt invitasjon", async () => {
     await ola.goto(perLink);
-    await ola.getByRole("heading", { name: "Invitasjonen gjelder en annen adresse" }).waitFor();
+    await ola.getByRole("heading", { name: "Vil du se hytta til Kari?" }).waitFor();
+    await ola.getByRole("button", { name: "Be Kari om å se hytta" }).waitFor();
     const text = await ola.getByRole("main").innerText();
     assert.equal(/Fjellro|Hafjell/.test(text), false);
     await shot(ola, "12-feil-konto");
@@ -747,6 +794,50 @@ async function main() {
     assert.notEqual(image.status(), 200);
   });
 
+  console.log("Videresendt invitasjon: annen adresse må godkjennes av eieren");
+  await kari.goto(`${BASE}/mine-hytter/${fjellro}`);
+  await kari.getByLabel("E-postadressene til dem som skal få se hytta").fill("mottaker@test.local");
+  await kari.getByRole("button", { name: "Se over før du sender" }).click();
+  await kari.getByRole("button", { name: "Send invitasjonen" }).click();
+  await kari.getByText("Invitasjonen er sendt til mottaker@test.local.").waitFor();
+  const partner = await phone();
+  const forwarded = await invitationLink("mottaker@test.local");
+  await partner.goto(forwarded);
+  await partner.getByRole("link", { name: "Bli med og se ledige datoer" }).click();
+  await check("den videresendte lenken sier at eieren må godkjenne en annen adresse", async () => {
+    await partner.getByRole("button", { name: "Bruk en annen adresse" }).click();
+    await partner.getByText(/må Kari Eier godkjenne deg før du ser hytta/).waitFor();
+    await shot(partner, "16a-annen-adresse");
+  });
+  {
+    const before = (await newMails()).length;
+    await partner.getByLabel("E-postadresse").fill("partner@test.local");
+    await partner.getByRole("button", { name: "Send meg en kode" }).click();
+    await enterCode(partner, "partner@test.local", before);
+  }
+  const ownerMailsBefore = (await newMails()).length;
+  await onboard(partner, "Pia Partner");
+  await check("med en annen adresse ser personen ingenting før eieren godkjenner", async () => {
+    await partner.getByRole("heading", { name: "Venter på svar fra Kari" }).waitFor();
+    await shot(partner, "16b-venter-pa-godkjenning");
+    await nothingAt(partner, `${BASE}/hytter/${fjellro}`, /Fjellro|Tømmerhytte|Fjellvegen/);
+    await partner.goto(`${BASE}/krets`);
+    assert.equal((await partner.getByRole("main").innerText()).includes("Fjellro"), false);
+    await mailTo("kari@test.local", /Pia Partner vil se Fjellro/, ownerMailsBefore);
+  });
+  await check("eieren godkjenner, og personen ser hytta", async () => {
+    await kari.goto(`${BASE}/mine-hytter/${fjellro}`);
+    await kari.getByRole("heading", { name: "Venter på at du godkjenner" }).waitFor();
+    await kari.getByText("Invitasjonen ble sendt til mottaker@test.local.").waitFor();
+    await kari.getByText("Én person venter på at du godkjenner.", { exact: false }).waitFor();
+    await shot(kari, "16c-godkjenn", kari.getByRole("region", { name: "Venter på at du godkjenner" }));
+    await kari.getByRole("button", { name: "Godkjenn Pia Partner" }).click();
+    await kari.getByText("Personen ser nå hytta og har fått beskjed på e-post.").waitFor();
+    await partner.goto(forwarded);
+    await partner.waitForURL(new RegExp(`/hytter/${fjellro}$`));
+    await partner.getByRole("heading", { name: "Fjellro" }).first().waitFor();
+  });
+
   console.log("Varsler");
   await check("lenken til en deling som er fjernet, gir ingenting", async () => {
     await per.goto(perLink);
@@ -767,9 +858,10 @@ async function main() {
       "sen@test.local": 1,
       "siri@test.local": 1,
       "tor@test.local": 1,
+      "mottaker@test.local": 1,
     });
     const accesses = await pool.query(`select count(*)::int as n from "cabin_access"`);
-    assert.equal(accesses.rows[0].n, 2, "Sjøbua er delt med Kari og Ola. Fjellro er ikke delt med noen");
+    assert.equal(accesses.rows[0].n, 3, "Sjøbua er delt med Kari og Ola. Fjellro bare med Pia, som eieren godkjente");
   });
 
   console.log(`\n${passed} sjekker bestått i nettleser (390 × 844).`);

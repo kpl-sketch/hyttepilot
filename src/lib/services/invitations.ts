@@ -6,11 +6,27 @@ import { appUrl, isAdminEmail } from "../brand";
 import { formatDate, todayInOslo } from "../dates";
 import { MAX_INVITATIONS_PER_ROUND } from "../invitation-limits";
 import { db } from "../db";
-import { booking, type Cabin, cabin, cabinAccess, invitation, profile, user } from "../db/schema";
+import {
+  booking,
+  type Cabin,
+  cabin,
+  cabinAccess,
+  invitation,
+  invitationRequest,
+  profile,
+  user,
+} from "../db/schema";
 import { sendEmail } from "../email";
-import { accountInvitationMail, cabinInvitationMail, cabinSharedMail } from "../emails";
+import {
+  accessRequestMail,
+  accountInvitationMail,
+  cabinInvitationMail,
+  cabinSharedMail,
+} from "../emails";
+import { approximatePosition } from "../position";
 import { type Actor, normalizeEmail, UserError } from "../errors";
 import { getOwnCabin } from "./cabins";
+import { listCabinPhotos } from "./photos";
 
 /*
  * Deling og invitasjoner.
@@ -20,7 +36,11 @@ import { getOwnCabin } from "./cabins";
  *  - En deling gjelder én hytte og én person. Den gir ingen rett til å dele
  *    videre, og ingen tilgang til andre hytter.
  *  - En invitasjon er personlig. Tilgangen gis til den som logger inn med
- *    adressen invitasjonen ble sendt til. Lenken alene gir ingenting.
+ *    adressen invitasjonen ble sendt til. Lenken alene gir ingen tilgang.
+ *  - Lenken til en hytteinvitasjon viser hytta uten innlogging, men bare
+ *    bilder, området og ideen, og bare så lenge invitasjonen gjelder.
+ *  - Logger noen inn fra lenken med en annen adresse, må eieren godkjenne
+ *    personen før hytta blir synlig og kan lånes.
  *  - Å trekke tilbake en deling endrer aldri en forespørsel eller et opphold.
  */
 
@@ -75,6 +95,18 @@ const usable = () =>
   );
 
 /**
+ * Lenken til invitasjonen viser hytta: invitasjonen gjelder en hytte, er ikke
+ * trukket tilbake og er innenfor fristen. Det gjelder også etter at den er
+ * tatt i bruk, slik at lenken kan åpnes flere ganger.
+ */
+const previewable = () =>
+  and(
+    isNotNull(invitation.cabinId),
+    isNull(invitation.revokedAt),
+    gt(invitation.expiresAt, new Date()),
+  );
+
+/**
  * Invitasjonen gjelder fortsatt i databasen, men kan ikke tas i bruk: den er
  * utløpt, eller den er brukt uten at tilgangen finnes lenger. Slike ryddes
  * bort når eieren inviterer samme adresse på nytt. En invitasjon som venter,
@@ -106,7 +138,22 @@ export async function isEmailAllowed(rawEmail: string): Promise<boolean> {
     .from(invitation)
     .where(and(eq(invitation.email, email), usable()))
     .limit(1);
-  return Boolean(invited);
+  if (invited) return true;
+  // Kom fra en invitasjonslenke med en annen adresse. Personen slipper inn,
+  // men ser ingenting før eieren har godkjent.
+  const [requested] = await db
+    .select({ id: invitationRequest.id })
+    .from(invitationRequest)
+    .innerJoin(invitation, eq(invitation.id, invitationRequest.invitationId))
+    .where(
+      and(
+        eq(invitationRequest.email, email),
+        isNull(invitationRequest.declinedAt),
+        previewable(),
+      ),
+    )
+    .limit(1);
+  return Boolean(requested);
 }
 
 /**
@@ -135,6 +182,7 @@ export async function claimInvitations(userId: string, rawEmail: string) {
         .where(eq(invitation.id, inv.id));
     }
   });
+  await linkAccessRequests(userId, email);
 }
 
 /** Finner en bruker som allerede har fullført velkomstsiden. */
@@ -677,7 +725,7 @@ export async function listCabinSharing(actor: Actor, cabinId: string) {
   if (!own) return null;
   const today = todayInOslo();
 
-  const [people, invitations, stays] = await Promise.all([
+  const [people, invitations, stays, requests] = await Promise.all([
     db
       .select({
         userId: user.id,
@@ -726,6 +774,7 @@ export async function listCabinSharing(actor: Actor, cabinId: string) {
         ),
       )
       .groupBy(booking.borrowerId, booking.status),
+    listAccessRequests(own.id),
   ]);
 
   const count = (userId: string, statuses: string[]) =>
@@ -740,6 +789,7 @@ export async function listCabinSharing(actor: Actor, cabinId: string) {
       confirmedStays: count(person.userId, ["approved", "paid"]),
     })),
     invitations: invitations.map((inv) => ({ ...inv, expired: inv.expiresAt <= now })),
+    requests,
   };
 }
 
@@ -1030,4 +1080,350 @@ export async function listAccountInvitations(actor: Actor) {
     .where(and(isNull(invitation.cabinId), isNull(invitation.revokedAt)))
     .orderBy(asc(invitation.createdAt));
   return rows.map((row) => ({ ...row, status: statusOf(row) }));
+}
+
+/* ---------------------- Invitasjonslenken uten innlogging -------------------- */
+
+/**
+ * Det alle med lenken til en hytteinvitasjon får se, også uten å være logget
+ * inn: bildene, området på kart og hvem som inviterer. Ikke navnet på hytta,
+ * pris, adresse eller nøyaktig posisjon. En lenke kan være videresendt, så
+ * mer enn dette vises ikke før rett person er logget inn og har tilgang.
+ *
+ * Hytta vises bare så lenge invitasjonen gjelder: ikke trukket tilbake og
+ * innenfor fristen. Lenken kan åpnes så mange ganger som helst.
+ */
+export async function getInvitationPreview(token: unknown) {
+  const row = await loadInvitation(token);
+  if (!row) return null;
+  const base = {
+    status: statusOf(row.invitation),
+    kind: kindOf(row.invitation),
+    inviterName: row.inviterName,
+    maskedEmail: maskEmail(row.invitation.email),
+  };
+  const { cabinId, revokedAt, expiresAt } = row.invitation;
+  if (!cabinId || revokedAt || expiresAt <= new Date()) return { ...base, cabin: null };
+
+  const [place] = await db
+    .select({ area: cabin.area, latitude: cabin.latitude, longitude: cabin.longitude })
+    .from(cabin)
+    .where(eq(cabin.id, cabinId))
+    .limit(1);
+  if (!place) return { ...base, cabin: null };
+  return {
+    ...base,
+    cabin: {
+      area: place.area,
+      // Den nøyaktige posisjonen forlater aldri tjenestelaget her heller.
+      areaPosition: approximatePosition(place),
+      photos: await listCabinPhotos(cabinId),
+    },
+  };
+}
+
+/**
+ * Hytta invitasjonslenken viser bilder av, eller null. Brukes av bildeadressen
+ * for invitasjoner, med de samme reglene som getInvitationPreview.
+ */
+export async function getPreviewCabinId(token: unknown): Promise<string | null> {
+  if (!isInvitationToken(token)) return null;
+  const [row] = await db
+    .select({ cabinId: invitation.cabinId })
+    .from(invitation)
+    .where(and(eq(invitation.token, token), previewable()))
+    .limit(1);
+  return row?.cabinId ?? null;
+}
+
+/**
+ * Adressen invitasjonen ble sendt til, slik at innloggingen kan fylles ut på
+ * forhånd. Adressen går aldri til nettleseren: den brukes bare på serveren,
+ * og siden viser den maskert.
+ */
+export async function getInvitedEmail(token: unknown): Promise<string | null> {
+  const row = await loadInvitation(token);
+  if (!row) return null;
+  const status = statusOf(row.invitation);
+  return status === "valid" || status === "accepted" ? row.invitation.email : null;
+}
+
+/* ------------------- Innlogging med en annen adresse enn invitert ------------------- */
+
+/** Så mange andre adresser kan prøve seg på én invitasjon. Stopper misbruk av en spredt lenke. */
+export const MAX_ACCESS_REQUESTS = 5;
+
+/** Invitasjonen bak lenken, hvis den viser en hytte nå. */
+async function previewableInvitation(token: unknown) {
+  if (!isInvitationToken(token)) return null;
+  const [row] = await db
+    .select({
+      id: invitation.id,
+      email: invitation.email,
+      cabinId: invitation.cabinId,
+      ownerId: cabin.ownerId,
+    })
+    .from(invitation)
+    .innerJoin(cabin, eq(cabin.id, invitation.cabinId))
+    .where(and(eq(invitation.token, token), previewable()))
+    .limit(1);
+  return row ?? null;
+}
+
+async function requestCount(invitationId: string) {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(invitationRequest)
+    .where(eq(invitationRequest.invitationId, invitationId));
+  return row.count;
+}
+
+/**
+ * Noen fra invitasjonslenken ber om kode til en annen adresse enn den
+ * invitasjonen ble sendt til. Da får adressen slippe inn, men personen ser
+ * ingenting før eieren har godkjent. Eieren får vite om det først når
+ * adressen er bekreftet med koden og velkomstsiden er fullført.
+ *
+ * Svarer ingenting: innloggingen skal ikke røpe hva som skjedde.
+ */
+export async function registerAccessRequest(token: unknown, rawEmail: string) {
+  const inv = await previewableInvitation(token);
+  if (!inv) return;
+  const email = normalizeEmail(rawEmail);
+  if (email === inv.email) return;
+  if ((await requestCount(inv.id)) >= MAX_ACCESS_REQUESTS) return;
+  await db
+    .insert(invitationRequest)
+    .values({ invitationId: inv.id, email })
+    .onConflictDoNothing();
+}
+
+/** Eieren får beskjed om en ny person som venter på godkjenning. */
+async function notifyOwner(requestId: string) {
+  const [row] = await db
+    .select({
+      ownerEmail: user.email,
+      ownerName: user.name,
+      cabinId: cabin.id,
+      cabinName: cabin.name,
+      invitedEmail: invitation.email,
+      requesterId: invitationRequest.userId,
+      requesterEmail: invitationRequest.email,
+    })
+    .from(invitationRequest)
+    .innerJoin(invitation, eq(invitation.id, invitationRequest.invitationId))
+    .innerJoin(cabin, eq(cabin.id, invitation.cabinId))
+    .innerJoin(user, eq(user.id, cabin.ownerId))
+    .where(eq(invitationRequest.id, requestId))
+    .limit(1);
+  if (!row?.requesterId) return;
+  const [requester] = await db
+    .select({ name: user.name })
+    .from(user)
+    .where(eq(user.id, row.requesterId))
+    .limit(1);
+  await sendEmail(
+    accessRequestMail(row.ownerEmail, {
+      requesterName: requester?.name ?? row.requesterEmail,
+      requesterEmail: row.requesterEmail,
+      invitedEmail: row.invitedEmail,
+      cabinName: row.cabinName,
+      link: `${appUrl()}/mine-hytter/${row.cabinId}#deling`,
+    }),
+  );
+}
+
+/** Personen har ikke tilgang fra før og eier ikke hytta. Da trengs ingen godkjenning. */
+async function needsApproval(userId: string, cabinId: string, ownerId: string) {
+  if (userId === ownerId) return false;
+  const [has] = await db
+    .select({ userId: cabinAccess.userId })
+    .from(cabinAccess)
+    .where(and(eq(cabinAccess.cabinId, cabinId), eq(cabinAccess.userId, userId)))
+    .limit(1);
+  return !has;
+}
+
+/**
+ * Knytter forespørslene til brukeren når adressen er bekreftet og
+ * velkomstsiden er fullført, og sier fra til eieren. Kalles fra
+ * claimInvitations.
+ */
+async function linkAccessRequests(userId: string, email: string) {
+  const linked = await db
+    .update(invitationRequest)
+    .set({ userId })
+    .where(
+      and(
+        eq(invitationRequest.email, email),
+        isNull(invitationRequest.userId),
+        isNull(invitationRequest.declinedAt),
+      ),
+    )
+    .returning({ id: invitationRequest.id, invitationId: invitationRequest.invitationId });
+  for (const request of linked) {
+    const [inv] = await db
+      .select({ cabinId: invitation.cabinId, ownerId: cabin.ownerId })
+      .from(invitation)
+      .innerJoin(cabin, eq(cabin.id, invitation.cabinId))
+      .where(and(eq(invitation.id, request.invitationId), previewable()))
+      .limit(1);
+    if (inv?.cabinId && (await needsApproval(userId, inv.cabinId, inv.ownerId))) {
+      await notifyOwner(request.id);
+    }
+  }
+}
+
+/**
+ * Hvor en innlogget person med en annen adresse står med invitasjonen:
+ * has-access: ser hytta allerede.
+ * pending: venter på at eieren godkjenner.
+ * declined: eieren har sagt nei.
+ * removed: eieren godkjente, men har sluttet å vise hytta.
+ * none: har ikke bedt om å se hytta ennå.
+ * full: for mange har prøvd seg med denne lenken.
+ * unavailable: invitasjonen viser ingen hytte nå.
+ */
+export type AccessRequestState =
+  | { state: "has-access"; cabinId: string }
+  | { state: "pending" | "declined" | "removed" | "none" | "full" | "unavailable" };
+
+export async function getAccessRequestState(
+  actor: Actor,
+  token: unknown,
+): Promise<AccessRequestState> {
+  const inv = await previewableInvitation(token);
+  if (!inv?.cabinId) return { state: "unavailable" };
+  if (!(await needsApproval(actor.id, inv.cabinId, inv.ownerId))) {
+    return { state: "has-access", cabinId: inv.cabinId };
+  }
+  const [request] = await db
+    .select({ approvedAt: invitationRequest.approvedAt, declinedAt: invitationRequest.declinedAt })
+    .from(invitationRequest)
+    .where(
+      and(
+        eq(invitationRequest.invitationId, inv.id),
+        or(
+          eq(invitationRequest.userId, actor.id),
+          eq(invitationRequest.email, normalizeEmail(actor.email)),
+        ),
+      ),
+    )
+    .limit(1);
+  if (request?.declinedAt) return { state: "declined" };
+  if (request?.approvedAt) return { state: "removed" };
+  if (request) return { state: "pending" };
+  if ((await requestCount(inv.id)) >= MAX_ACCESS_REQUESTS) return { state: "full" };
+  return { state: "none" };
+}
+
+/**
+ * En innlogget person med en annen adresse ber eieren om å få se hytta i
+ * invitasjonen. Eieren får beskjed og må godkjenne.
+ */
+export async function requestAccessViaInvitation(actor: Actor, token: unknown) {
+  const inv = await previewableInvitation(token);
+  if (!inv?.cabinId) throw new UserError("Invitasjonen gjelder ikke lenger.");
+  if (!(await needsApproval(actor.id, inv.cabinId, inv.ownerId))) return;
+  if ((await requestCount(inv.id)) >= MAX_ACCESS_REQUESTS) {
+    throw new UserError("For mange har brukt denne lenken. Be eieren om en egen invitasjon.");
+  }
+  const email = normalizeEmail(actor.email);
+  const [created] = await db
+    .insert(invitationRequest)
+    .values({ invitationId: inv.id, email, userId: actor.id })
+    .onConflictDoNothing()
+    .returning({ id: invitationRequest.id });
+  if (created) await notifyOwner(created.id);
+}
+
+/** Forespørsler eieren må ta stilling til for én hytte. Bare for eieren. */
+async function listAccessRequests(cabinId: string) {
+  const rows = await db
+    .select({
+      id: invitationRequest.id,
+      userId: user.id,
+      name: user.name,
+      email: user.email,
+      invitedEmail: invitation.email,
+      createdAt: invitationRequest.createdAt,
+    })
+    .from(invitationRequest)
+    .innerJoin(invitation, eq(invitation.id, invitationRequest.invitationId))
+    .innerJoin(user, eq(user.id, invitationRequest.userId))
+    .where(
+      and(
+        eq(invitation.cabinId, cabinId),
+        isNull(invitationRequest.approvedAt),
+        isNull(invitationRequest.declinedAt),
+        previewable(),
+        sql`not exists (
+          select 1 from "cabin_access" a
+          where a."cabin_id" = ${cabinId} and a."user_id" = "user"."id"
+        )`,
+      ),
+    )
+    .orderBy(asc(invitationRequest.createdAt));
+  return rows;
+}
+
+/** Forespørselen, men bare hvis brukeren eier hytta den gjelder. */
+async function ownAccessRequest(actor: Actor, requestId: unknown) {
+  if (!z.uuid().safeParse(requestId).success) throw new UserError("Fant ikke forespørselen.");
+  const [row] = await db
+    .select({
+      id: invitationRequest.id,
+      userId: invitationRequest.userId,
+      email: invitationRequest.email,
+      approvedAt: invitationRequest.approvedAt,
+      declinedAt: invitationRequest.declinedAt,
+      cabinId: cabin.id,
+      cabinName: cabin.name,
+      cabinArea: cabin.area,
+      ownerId: cabin.ownerId,
+    })
+    .from(invitationRequest)
+    .innerJoin(invitation, eq(invitation.id, invitationRequest.invitationId))
+    .innerJoin(cabin, eq(cabin.id, invitation.cabinId))
+    .where(eq(invitationRequest.id, requestId as string))
+    .limit(1);
+  if (!row || row.ownerId !== actor.id || !row.userId) {
+    throw new UserError("Fant ikke forespørselen.");
+  }
+  if (row.approvedAt || row.declinedAt) throw new UserError("Forespørselen er allerede besvart.");
+  return { ...row, userId: row.userId };
+}
+
+/** Eieren godkjenner personen. Da ser personen hytta og kan be om å låne den. */
+export async function approveAccessRequest(actor: Actor, requestId: unknown) {
+  const request = await ownAccessRequest(actor, requestId);
+  await db.transaction(async (tx) => {
+    await tx
+      .insert(cabinAccess)
+      .values({ cabinId: request.cabinId, userId: request.userId })
+      .onConflictDoNothing();
+    await tx
+      .update(invitationRequest)
+      .set({ approvedAt: new Date() })
+      .where(eq(invitationRequest.id, request.id));
+  });
+  await sendEmail(
+    cabinSharedMail(request.email, actor.name, {
+      cabinName: request.cabinName,
+      cabinArea: request.cabinArea,
+      message: "",
+      link: `${appUrl()}/hytter/${request.cabinId}`,
+    }),
+  );
+  return { cabinId: request.cabinId };
+}
+
+/** Eieren sier nei. Personen ser fortsatt ingenting, og får ikke spørre på nytt med samme lenke. */
+export async function declineAccessRequest(actor: Actor, requestId: unknown) {
+  const request = await ownAccessRequest(actor, requestId);
+  await db
+    .update(invitationRequest)
+    .set({ declinedAt: new Date() })
+    .where(eq(invitationRequest.id, request.id));
+  return { cabinId: request.cabinId };
 }

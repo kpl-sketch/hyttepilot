@@ -39,7 +39,12 @@ async function LoginGate({
       initialEmail={typeof e === "string" ? e : ""}
       invitation={
         invitation && invitation.status !== "revoked" && invitation.status !== "expired"
-          ? { token, inviterName: invitation.inviterName, maskedEmail: invitation.maskedEmail }
+          ? {
+              token,
+              inviterName: invitation.inviterName,
+              maskedEmail: invitation.maskedEmail,
+              kind: invitation.kind,
+            }
           : undefined
       }
     />

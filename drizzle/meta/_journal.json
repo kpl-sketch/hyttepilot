@@ -29,6 +29,13 @@
       "when": 1794672159624,
       "tag": "0003_hyttekrets",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794847651262,
+      "tag": "0004_invitasjon_foresporsel",
+      "breakpoints": true
     }
   ]
 }

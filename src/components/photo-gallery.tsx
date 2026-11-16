@@ -9,7 +9,16 @@ type Photo = { id: string; width: number; height: number };
  * Bildene på hyttesiden: ett stort bilde, og små bilder under som velger
  * hvilket som vises.
  */
-export function PhotoGallery({ photos, cabinName }: { photos: Photo[]; cabinName: string }) {
+export function PhotoGallery({
+  photos,
+  cabinName,
+  base,
+}: {
+  photos: Photo[];
+  cabinName: string;
+  /** Hvor bildene hentes fra, se photoSrc. */
+  base?: string;
+}) {
   const [selected, setSelected] = useState(0);
   if (photos.length === 0) return null;
   const index = Math.min(selected, photos.length - 1);
@@ -23,7 +32,7 @@ export function PhotoGallery({ photos, cabinName }: { photos: Photo[]; cabinName
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         key={shown.id}
-        src={photoSrc(shown.id)}
+        src={photoSrc(shown.id, false, base)}
         alt={`${cabinName}, bilde ${index + 1} av ${photos.length}`}
         width={shown.width}
         height={shown.height}
@@ -47,7 +56,7 @@ export function PhotoGallery({ photos, cabinName }: { photos: Photo[]; cabinName
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={photoSrc(photo.id, true)}
+                  src={photoSrc(photo.id, true, base)}
                   alt=""
                   loading="lazy"
                   decoding="async"
