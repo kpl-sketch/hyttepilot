@@ -12,7 +12,8 @@ litt over selvkost. Navnet er et arbeidsnavn og byttes ett sted: `NEXT_PUBLIC_AP
   Det første er forsidebildet. Bildene vises bare til dem som får se hytta.
 - **Adresse og vei.** Eieren legger inn adressen, med forslag fra Kartverkets
   adresseregister, og en nøyaktig kartposisjon. Låneren får adressen og lenker som
-  viser veien i kartet når lånet er betalt.
+  viser veien i kartet når lånet er betalt. Før det ser låneren området, med et
+  kart der en sirkel på 5 km viser omtrent hvor hytta ligger.
 - **Privat som utgangspunkt.** En ny hytte ser bare eieren. Eieren velger selv
   hvem som får se hver hytte. Det å eie en hytte eller være administrator gir
   ikke innsyn i andres.

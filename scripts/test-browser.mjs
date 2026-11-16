@@ -519,6 +519,22 @@ async function main() {
     await per.getByText("Forespørselen er sendt.").waitFor();
     await per.getByText("Venter på svar").waitFor();
   });
+  await check("låneren ser området i kart, men ikke hytta sin nøyaktige posisjon", async () => {
+    await pool.query(`update "cabin" set latitude = 61.2345, longitude = 10.4567 where id = $1`, [fjellro]);
+    try {
+      await per.goto(`${BASE}/hytter/${fjellro}`);
+      const where = per.locator("section", { hasText: "Hvor ligger hytta?" });
+      await where.getByText("Hafjell", { exact: true }).waitFor();
+      await where.getByRole("link", { name: "Se området i Google Maps" }).waitFor();
+      await where.locator(".leaflet-container").waitFor();
+      await where.getByText("Kartet viser området, ikke selve hytta.").waitFor();
+      const html = await per.content();
+      assert.equal(/61\.2345|10\.4567|61,2345|10,4567/.test(html), false, "nøyaktig posisjon lekker til låneren");
+      await shot(per, "08b-omradet-i-kart", where);
+    } finally {
+      await pool.query(`update "cabin" set latitude = null, longitude = null where id = $1`, [fjellro]);
+    }
+  });
   await check("kalenderen kan blas helt til siste registrerte dato, forbi tolv måneder", async () => {
     await per.goto(`${BASE}/hytter/${fjellro}`);
     await per.getByText(`Kalenderen går til`).waitFor();

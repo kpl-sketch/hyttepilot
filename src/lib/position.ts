@@ -137,3 +137,35 @@ export function mapLink(position: Position): string {
   const point = `${position.latitude},${position.longitude}`;
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(point)}`;
 }
+
+/**
+ * Hvor grovt området vises for lånere før lånet er betalt. Posisjonen flyttes
+ * til nærmeste punkt i et rutenett på 0,05 grader, og kartet viser en sirkel
+ * rundt det punktet. Sirkelen er så stor at hytta alltid ligger innenfor,
+ * men midten av sirkelen sier ikke hvor hytta er.
+ */
+const GRID = 0.05;
+export const AREA_RADIUS_METERS = 5000;
+
+/** En omtrentlig posisjon for området, eller null hvis hytta ikke har posisjon. */
+export function approximatePosition(place: {
+  latitude: number | null;
+  longitude: number | null;
+}): Position | null {
+  if (place.latitude === null || place.longitude === null) return null;
+  const snap = (value: number) => Math.round(Math.round(value / GRID) * GRID * 100) / 100;
+  return { latitude: snap(place.latitude), longitude: snap(place.longitude) };
+}
+
+/** Grovt anslag: ligger punktet utenfor Norge, der Kartverkets kart er tomt? */
+export function outsideNorway(position: Position): boolean {
+  const { latitude, longitude } = position;
+  return latitude < 57.8 || latitude > 71.5 || longitude < 4 || longitude > 31.5;
+}
+
+/** Lenke som viser området (ikke hytta) i kartet, ut fra navnet eieren har gitt det. */
+export function areaLink(area: string): string | null {
+  const name = area.trim();
+  if (name === "") return null;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`;
+}

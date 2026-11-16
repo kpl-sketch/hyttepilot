@@ -6,7 +6,7 @@ import { db } from "../db";
 import { availability, booking, cabin, cabinAccess, cabinPhoto, user } from "../db/schema";
 import { type Actor, UserError } from "../errors";
 import { photoRows, processPhotos } from "../photo-processing";
-import { isShortMapLink, parsePosition } from "../position";
+import { approximatePosition, isShortMapLink, parsePosition } from "../position";
 import { expandPositionField } from "./map-links";
 
 const whole = (label: string, min: number, max: number) =>
@@ -149,13 +149,22 @@ export async function listSharedCabins(actor: Actor) {
  */
 export async function getVisibleCabin(actor: Actor, cabinId: string) {
   if (!z.uuid().safeParse(cabinId).success) return null;
-  const [row] = await db
-    .select({ cabin: publicCabin, ownerName: user.name })
+  const [found] = await db
+    .select({
+      cabin: publicCabin,
+      ownerName: user.name,
+      latitude: cabin.latitude,
+      longitude: cabin.longitude,
+    })
     .from(cabin)
     .innerJoin(user, eq(user.id, cabin.ownerId))
     .where(eq(cabin.id, cabinId))
     .limit(1);
-  if (!row) return null;
+  if (!found) return null;
+  // Den nøyaktige posisjonen forlater aldri denne funksjonen. Ut går bare et
+  // grovt punkt for området, som alle som ser hytta, kan få se.
+  const { latitude, longitude, ...rest } = found;
+  const row = { ...rest, areaPosition: approximatePosition({ latitude, longitude }) };
   if (row.cabin.ownerId === actor.id) return row;
 
   const [granted] = await db
