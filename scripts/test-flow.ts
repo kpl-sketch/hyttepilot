@@ -93,6 +93,7 @@ import {
   sendIdleReminders,
   setIdleReminders,
 } from "../src/lib/services/reminders";
+import { easterSunday, holidaysInYear, upcomingHoliday } from "../src/lib/holidays";
 import {
   addCabinPhotos,
   getPhotoForViewer,
@@ -1678,78 +1679,117 @@ async function main() {
     assert.match(csv, /"'=HYPERLINK\(1\)";"b@test.local";"2026-11-14";"Kari";"Ja"/);
   });
 
-  console.log("Påminnelse når hytta står ledig");
+  console.log("Påminnelse før feriene");
   {
     const eva = await register("eva@test.local", "Eva Eier");
     const nabo = await register("nabo@test.local", "Nils Nabo");
     const evaCabin = await createCabin(eva, cabinData("Evas hytte"));
     const today = todayInOslo();
-    await addAvailability(eva, evaCabin, addDays(today, 10), addDays(today, 14));
-    const ageCabin = (days: number) =>
-      db.execute(
-        sql`update "cabin" set "created_at" = now() - make_interval(days => ${days}) where "id" = ${evaCabin}`,
-      );
+    const year = Number(today.slice(0, 4));
+    // Den første ferien som begynner om minst en måned.
+    const holiday = [...holidaysInYear(year), ...holidaysInYear(year + 1)].find(
+      (h) => h.startDate >= addDays(today, 30),
+    )!;
+    const at = (date: string) => new Date(`${date}T10:00:00Z`);
+    const inWindow = at(addDays(holiday.startDate, -20));
+    const tooEarly = at(addDays(holiday.startDate, -40));
+    const tooLate = at(addDays(holiday.startDate, -3));
+    await addAvailability(eva, evaCabin, addDays(holiday.startDate, 1), addDays(holiday.startDate, 4));
+    const createdAt = (date: Date) =>
+      db.execute(sql`update "cabin" set "created_at" = ${date} where "id" = ${evaCabin}`);
+    const clearSent = () =>
+      db.execute(sql`update "cabin" set "idle_reminder_sent_at" = null where "id" = ${evaCabin}`);
     const mailsToEva = (mails: Sent[]) => mails.filter((m) => m.to === "eva@test.local");
 
-    await check("første ledige periode på minst to netter innenfor vinduet finnes", () => {
+    await check("feriene i Norge har riktige datoer", () => {
+      assert.equal(easterSunday(2027), "2027-03-28");
+      assert.equal(easterSunday(2028), "2028-04-16");
+      const h2027 = holidaysInYear(2027);
+      assert.deepEqual(
+        h2027.map((h) => h.name),
+        ["vinterferien", "påsken", "sommerferien", "høstferien", "julen"],
+      );
+      // Uke 8 i 2027 begynner mandag 22. februar.
+      assert.deepEqual(h2027[0], { name: "vinterferien", startDate: "2027-02-20", endDate: "2027-03-01" });
+      assert.deepEqual(h2027[1], { name: "påsken", startDate: "2027-03-20", endDate: "2027-03-30" });
+      // Uke 40 i 2027 begynner mandag 4. oktober.
+      assert.deepEqual(h2027[3], { name: "høstferien", startDate: "2027-10-02", endDate: "2027-10-11" });
+      assert.equal(upcomingHoliday("2027-01-30", 28, 7)?.name, "vinterferien");
+      assert.equal(upcomingHoliday("2027-02-25", 28, 7)?.name, "påsken");
+      assert.equal(upcomingHoliday("2027-01-10", 28, 7), null);
+      assert.equal(upcomingHoliday("2027-12-01", 28, 7)?.name, "julen");
+    });
+
+    await check("første ledige periode på minst to netter i ferien finnes", () => {
+      const within = { startDate: "2027-02-20", endDate: "2027-03-01" };
       const open = [
-        { startDate: addDays(today, 2), endDate: addDays(today, 3) },
-        { startDate: addDays(today, 5), endDate: addDays(today, 9) },
-        { startDate: addDays(today, 60), endDate: addDays(today, 70) },
+        { startDate: "2027-02-10", endDate: "2027-02-21" },
+        { startDate: "2027-02-24", endDate: "2027-03-05" },
       ];
-      assert.deepEqual(firstIdlePeriod(open, [], today), {
-        startDate: addDays(today, 5),
-        endDate: addDays(today, 9),
+      assert.deepEqual(firstIdlePeriod(open, [], "2027-01-30", within), {
+        startDate: "2027-02-24",
+        endDate: "2027-03-01",
       });
-      assert.equal(firstIdlePeriod([open[0], open[2]], [], today), null);
+      assert.equal(firstIdlePeriod([open[0]], [], "2027-01-30", within), null);
     });
 
     await check("en ny hytte får ingen påminnelse den første uka", async () => {
-      const { mails } = await sentDuring(() => sendIdleReminders());
+      await createdAt(new Date(inWindow.getTime() - 2 * 24 * 60 * 60 * 1000));
+      const { mails } = await sentDuring(() => sendIdleReminders(inWindow));
       assert.equal(mailsToEva(mails).length, 0);
+      await createdAt(new Date());
     });
 
-    await check("ledig hytte uten forespørsler gir eieren én påminnelse med lenke til invitasjonen", async () => {
-      await ageCabin(8);
-      const { mails } = await sentDuring(() => sendIdleReminders());
+    await check("ingen påminnelse når ingen ferie nærmer seg", async () => {
+      const early = await sentDuring(() => sendIdleReminders(tooEarly));
+      const late = await sentDuring(() => sendIdleReminders(tooLate));
+      assert.equal(mailsToEva(early.mails).length + mailsToEva(late.mails).length, 0);
+    });
+
+    await check("ledig hytte i ferien gir eieren én påminnelse med lenke til invitasjonen", async () => {
+      const { mails } = await sentDuring(() => sendIdleReminders(inWindow));
       const [mail] = mailsToEva(mails);
       assert.ok(mail, "eieren skal få påminnelse");
       assert.equal(mails.filter((m) => m.text.includes("Evas hytte")).length, 1);
-      assert.match(mail.subject, /Evas hytte står ledig/);
+      assert.equal(mail.subject, `Evas hytte er ledig i ${holiday.name}`);
       assert.ok(mail.text.includes(`/mine-hytter/${evaCabin}/inviter`));
       assert.doesNotMatch(mail.text, /dele/i);
     });
 
-    await check("samme hytte får ikke ny påminnelse før det har gått en måned", async () => {
-      const { mails } = await sentDuring(() => sendIdleReminders());
+    await check("samme hytte får ikke ny påminnelse før samme ferie", async () => {
+      const { mails } = await sentDuring(() => sendIdleReminders(inWindow));
       assert.equal(mailsToEva(mails).length, 0);
-      const inThreeWeeks = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000);
-      const later = await sentDuring(() => sendIdleReminders(inThreeWeeks));
+      const nextDay = new Date(inWindow.getTime() + 24 * 60 * 60 * 1000);
+      const later = await sentDuring(() => sendIdleReminders(nextDay));
       assert.equal(mailsToEva(later.mails).length, 0);
     });
 
     await check("to kjøringer samtidig sender påminnelsen bare én gang", async () => {
-      await db.execute(sql`update "cabin" set "idle_reminder_sent_at" = null where "id" = ${evaCabin}`);
+      await clearSent();
       const { mails } = await sentDuring(() =>
-        Promise.all([sendIdleReminders(), sendIdleReminders(), sendIdleReminders()]),
+        Promise.all([
+          sendIdleReminders(inWindow),
+          sendIdleReminders(inWindow),
+          sendIdleReminders(inWindow),
+        ]),
       );
       assert.equal(mailsToEva(mails).length, 1);
     });
 
-    await check("en forespørsel som venter, betyr at hytta ikke står ledig", async () => {
-      await db.execute(sql`update "cabin" set "idle_reminder_sent_at" = null where "id" = ${evaCabin}`);
+    await check("en forespørsel i ferien betyr at hytta ikke står ledig", async () => {
+      await clearSent();
       const [request] = await db
         .insert(booking)
         .values({
           cabinId: evaCabin,
           borrowerId: nabo.id,
-          startDate: addDays(today, 11),
-          endDate: addDays(today, 13),
+          startDate: addDays(holiday.startDate, 1),
+          endDate: addDays(holiday.startDate, 2),
           guests: 2,
           totalPrice: 1000,
         })
         .returning({ id: booking.id });
-      const { mails } = await sentDuring(() => sendIdleReminders());
+      const { mails } = await sentDuring(() => sendIdleReminders(inWindow));
       assert.equal(mailsToEva(mails).length, 0);
       await db.execute(sql`delete from "booking" where "id" = ${request.id}`);
     });
@@ -1758,18 +1798,16 @@ async function main() {
       await refused(() => setIdleReminders(nabo, evaCabin, false), /Fant ikke hytta/);
       await refused(() => setIdleReminders(eva, "ikke-en-id", false), /Fant ikke hytta/);
       await setIdleReminders(eva, evaCabin, false);
-      const { mails } = await sentDuring(() => sendIdleReminders());
+      const { mails } = await sentDuring(() => sendIdleReminders(inWindow));
       assert.equal(mailsToEva(mails).length, 0);
       assert.equal((await getOwnCabin(eva, evaCabin))?.remindWhenIdle, false);
       await setIdleReminders(eva, evaCabin, true);
     });
 
-    await check("hytte uten åpne datoer får ingen påminnelse", async () => {
+    await check("hytte uten åpne datoer i ferien får ingen påminnelse", async () => {
       const empty = await createCabin(eva, cabinData("Evas andre hytte"));
-      await db.execute(
-        sql`update "cabin" set "created_at" = now() - interval '8 days' where "id" = ${empty}`,
-      );
-      const { mails } = await sentDuring(() => sendIdleReminders());
+      await addAvailability(eva, empty, addDays(today, 2), addDays(today, 6));
+      const { mails } = await sentDuring(() => sendIdleReminders(inWindow));
       assert.equal(mails.filter((m) => m.text.includes("Evas andre hytte")).length, 0);
     });
   }

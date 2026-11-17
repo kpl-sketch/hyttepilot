@@ -25,11 +25,14 @@ litt over selvkost. Navnet er et arbeidsnavn og byttes ett sted: `NEXT_PUBLIC_AP
 - **Hvem skal få låne hytta?** Rett etter at hytta er lagt inn, kommer eieren til
   `/mine-hytter/<id>/inviter`, som bare spør om det. Invitasjonene går gjennom
   det vanlige delingsskjemaet, så eieren ser over alt før noe sendes.
-- **Påminnelse når hytta står ledig.** Slått av 2026-11-17: jobben
-  (`/jobber/ledige-hytter`) er ikke lenger planlagt i `vercel.json`, så ingen
-  påminnelser sendes. Den skal erstattes av en påminnelse noen uker før de
-  store feriene, bare når hytta er ledig, med feriedatoer etter eierens land.
-  Reglene for den gamle jobben ligger i `src/lib/services/reminders.ts`.
+- **Påminnelse før feriene.** Noen uker før vinterferien, påsken, sommerferien,
+  høstferien og julen får eieren e-post hvis hytta er åpen for lån minst to
+  netter i ferien uten at noen har spurt. Høyst én per ferie, ikke den første
+  uka, og eieren kan slå den av på siden for hytta. Jobben
+  (`/jobber/ledige-hytter`, planlagt i `vercel.json`) sjekker daglig, men sender
+  bare når en ferie nærmer seg. Feriene ligger i `src/lib/holidays.ts` (foreløpig
+  bare Norge, med vinter- og høstferie for Oslo og Akershus), reglene i
+  `src/lib/services/reminders.ts`.
 - **Forespørsler.** Låneren velger datoer i kalenderen. Eieren svarer ja eller nei.
 - **Betaling.** Skjer med vanlig Vipps utenfor tjenesten. Eieren markerer «betalt»,
   og da er oppholdet reservert og adressen vises til låneren.
@@ -132,8 +135,8 @@ skrives i stedet til filen `.dev-outbox.jsonl` og til terminalen.
    `RESEND_API_KEY`, `EMAIL_FROM`, `NEXT_PUBLIC_APP_NAME`,
    `NEXT_PUBLIC_CONTROLLER_NAME` og `NEXT_PUBLIC_CONTACT_EMAIL`. Svar på e-post
    går til `EMAIL_REPLY_TO`, ellers til `NEXT_PUBLIC_CONTACT_EMAIL`, fordi
-   avsenderadressen ikke har postkasse. Sett `CRON_SECRET` hvis påminnelsesjobben
-   planlegges igjen, så bare Vercel kan starte den. Sett
+   avsenderadressen ikke har postkasse. Sett `CRON_SECRET`, så bare Vercel kan
+   starte påminnelsesjobben. Sett
    `BETTER_AUTH_URL` for produksjon når tjenesten har fått eget domene.
    `BETTER_AUTH_SECRET` er valgfri: uten den avledes nøkkelen av `DATABASE_URL`.
    I produksjon stopper tjenesten heller enn å bruke standardnøkkelen hvis
@@ -163,7 +166,7 @@ src/lib/services/         Alle regler og tilgangssjekker. Start her.
   invitations.ts            hvem slipper inn, deling, invitasjoner, invitasjonssiden, godkjenning av andre adresser, hyttekretsen
   cabins.ts                 hytter, hvem som ser hva, ledige perioder
   bookings.ts               forespørsel, ja/nei, betalt, avlysning
-  reminders.ts              påminnelse til eieren når hytta står ledig
+  reminders.ts              påminnelse til eieren før feriene når hytta står ledig
   photos.ts                 bilder: hvem får legge til, fjerne og se dem
   addresses.ts              adressesøk mot Kartverket, bare for hytteeiere
 src/lib/position.ts       Leser koordinater og kartlenker, lager veilenker

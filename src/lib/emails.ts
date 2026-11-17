@@ -170,11 +170,17 @@ export function cancelledMail(
 export function idleCabinMail(
   to: string,
   ownerName: string,
-  info: { cabinId: string; cabinName: string; startDate: string; endDate: string },
+  info: {
+    cabinId: string;
+    cabinName: string;
+    holidayName: string;
+    startDate: string;
+    endDate: string;
+  },
 ): Mail {
   return {
     to,
-    subject: `${info.cabinName} står ledig ${formatRange(info.startDate, info.endDate)}`,
-    text: `Hei ${firstName(ownerName)}!\n\n${info.cabinName} er åpen for lån ${formatRange(info.startDate, info.endDate)}, men ingen har spurt ennå.\n\nKjenner du noen som ville likt en tur? Skriv adressene deres her, så får de se hytta og kan spørre om å låne den:\n${appUrl()}/mine-hytter/${info.cabinId}/inviter\n\nDu får høyst én slik påminnelse i måneden for hver hytte. Vil du ikke ha dem, slår du dem av på siden for hytta:\n${appUrl()}/mine-hytter/${info.cabinId}#paminnelser${sign}`,
+    subject: `${info.cabinName} er ledig i ${info.holidayName}`,
+    text: `Hei ${firstName(ownerName)}!\n\nSnart er det ${info.holidayName}. ${info.cabinName} er åpen for lån ${formatRange(info.startDate, info.endDate)}, men ingen har spurt ennå.\n\nKjenner du noen som ville likt en tur? Skriv adressene deres her, så får de se hytta og kan spørre om å låne den:\n${appUrl()}/mine-hytter/${info.cabinId}/inviter\n\nDu får bare en slik påminnelse før de store feriene, når hytta står ledig. Vil du ikke ha dem, slår du dem av på siden for hytta:\n${appUrl()}/mine-hytter/${info.cabinId}#paminnelser${sign}`,
   };
 }

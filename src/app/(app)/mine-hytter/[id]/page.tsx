@@ -345,11 +345,11 @@ export default async function ManageCabinPage({
 
         <Panel>
           <h2 id="paminnelser" className="scroll-mt-6 text-2xl font-bold">
-            Påminnelse når hytta står ledig
+            Påminnelse før feriene
           </h2>
           <p className="mt-1 max-w-[60ch] text-muted">
             {cabin.remindWhenIdle
-              ? "Er hytta åpen for lån de neste ukene uten at noen har spurt, får du en e-post med forslag om å invitere flere. Høyst én i måneden."
+              ? "Noen uker før vinterferien, påsken, sommerferien, høstferien og julen får du en e-post hvis hytta er åpen for lån i ferien uten at noen har spurt. Ellers hører du ingenting."
               : "Påminnelsene er slått av. Du får ingen e-post når hytta står ledig."}
           </p>
           <ActionForm action={setIdleRemindersAction} className="mt-4">

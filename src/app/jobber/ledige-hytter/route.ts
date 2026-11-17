@@ -3,8 +3,9 @@ import type { NextRequest } from "next/server";
 import { sendIdleReminders } from "@/lib/services/reminders";
 
 /**
- * Den daglige jobben som sender påminnelser om ledige hytter. Vercel kaller
- * adressen etter planen i vercel.json, og sender med CRON_SECRET når den er satt.
+ * Jobben som sender påminnelser om ledige hytter før feriene. Den kjøres
+ * daglig, men sender bare når en ferie nærmer seg. Vercel kaller adressen etter
+ * planen i vercel.json, og sender med CRON_SECRET når den er satt.
  *
  * Er CRON_SECRET satt, avvises alle kall uten den. Er den ikke satt, kjører
  * jobben likevel: den svarer bare med antall, sier ingenting om hytter eller
