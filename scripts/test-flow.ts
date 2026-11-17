@@ -65,6 +65,7 @@ import {
   getCircle,
   getInvitationPreview,
   getInvitedEmail,
+  getOwnInvitationPreview,
   MAX_ACCESS_REQUESTS,
   registerAccessRequest,
   requestAccessViaInvitation,
@@ -1528,6 +1529,22 @@ async function main() {
     assert.equal(await getPhotoForViewer({ invitationToken: ettToken }, annes.id, "full"), null);
     assert.equal(await getPhotoForViewer({ invitationToken: "x".repeat(32) }, karis.id, "full"), null);
     assert.equal(await getPhotoForViewer({ invitationToken: "ikke gyldig" }, karis.id, "full"), null);
+  });
+  await check("eieren ser invitasjonssiden med nøyaktig det den inviterte ser", async () => {
+    const own = await getOwnInvitationPreview(kari, karisHytte);
+    const invited = await getInvitationPreview(ettToken);
+    assert.ok(own && invited?.cabin);
+    assert.equal(own.inviterName, invited.inviterName);
+    assert.deepEqual(own.cabin, invited.cabin);
+    const json = JSON.stringify(own);
+    for (const secret of ["Karis hytte", "Fjellvegen", "61.2345", "10.4567", "91234567", "Nøkkelboks"]) {
+      assert.equal(json.includes(secret), false, `${secret} skal ikke være med i forhåndsvisningen`);
+    }
+  });
+  await check("bare eieren får forhåndsvisningen av invitasjonssiden", async () => {
+    assert.equal(await getOwnInvitationPreview(admin, karisHytte), null);
+    assert.equal(await getOwnInvitationPreview(per, karisHytte), null);
+    assert.equal(await getOwnInvitationPreview(kari, "ikke en id"), null);
   });
   await check("lenken kan åpnes flere ganger, også etter at den er tatt i bruk", async () => {
     for (let i = 0; i < 3; i++) assert.ok((await getInvitationPreview(ettToken))?.cabin);

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { CabinForm } from "@/components/cabin-form";
 import { photoSrc } from "@/components/cabin-photo";
+import { previewHref } from "@/components/owner-preview";
 import { PhotoPicker } from "@/components/photo-picker";
 import { ButtonLink, Field, Input, PageTitle, Panel } from "@/components/ui";
 import { ShareForm } from "@/components/share-form";
@@ -179,8 +180,8 @@ export default async function ManageCabinPage({
             </div>
           </ActionForm>
 
-          <ButtonLink href={`/hytter/${cabin.id}`} variant="secondary" className="mt-6">
-            Se hytta slik de du har valgt, ser den
+          <ButtonLink href={previewHref(cabin.id, "innlogget")} variant="secondary" className="mt-6">
+            Se kalenderen slik de du inviterer, ser den
           </ButtonLink>
         </Panel>
 
@@ -192,6 +193,12 @@ export default async function ManageCabinPage({
             Bare du og de du velger her, ser hytta. Det gjelder også andre hytteeiere og
             administratorer. De du velger, kan se hytta og spørre om å låne den. De kan ikke
             vise den til andre.
+          </p>
+          <p className="mt-3 max-w-[60ch]">
+            <a href={previewHref(cabin.id)} className="font-semibold underline">
+              Se hytta slik de du inviterer, ser den
+            </a>
+            , både når de åpner invitasjonen og når de har logget inn.
           </p>
 
           {endret === "deling" && (

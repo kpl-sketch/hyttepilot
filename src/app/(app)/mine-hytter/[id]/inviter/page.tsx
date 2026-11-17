@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ButtonLink, PageTitle, Panel } from "@/components/ui";
+import { previewHref } from "@/components/owner-preview";
 import { ShareForm } from "@/components/share-form";
 import { getOwnCabin } from "@/lib/services/cabins";
 import { listCabinSharing } from "@/lib/services/invitations";
@@ -50,6 +51,11 @@ export default async function InviteToCabinPage({
               : `${seen} personer ser hytta eller er invitert fra før.`}
           </p>
         )}
+        <p className="mb-5 max-w-[60ch]">
+          <a href={previewHref(cabin.id)} className="font-semibold underline">
+            Se hva de får se når de åpner invitasjonen
+          </a>
+        </p>
         <ShareForm cabins={[{ id: cabin.id, name: cabin.name, area: cabin.area }]} />
       </Panel>
 

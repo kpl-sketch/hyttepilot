@@ -708,6 +708,29 @@ async function main() {
     assert.match(await cell(d(9)).innerText(), /ikke åpnet/);
     await shot(kari, "13-eierens-kalender", kari.locator("section", { hasText: "Slik ser kalenderen ut" }));
   });
+  await check("eieren ser hytta slik de inviterte ser den, før og etter innlogging", async () => {
+    await kari.goto(`${BASE}/mine-hytter/${fjellro}`);
+    await kari.getByRole("link", { name: "Se hytta slik de du inviterer, ser den" }).click();
+    await kari.waitForURL(new RegExp(`/mine-hytter/${fjellro}/forhandsvisning$`));
+    await kari.getByRole("heading", { name: "Kari låner deg hytta si" }).waitFor();
+    const before = await kari.getByRole("main").innerText();
+    for (const secret of ["Fjellro", "Fjellvegen", "Nøkkelboks"]) {
+      assert.equal(before.includes(secret), false, `${secret} vises ikke før innlogging`);
+    }
+    assert.equal(await kari.getByRole("link", { name: "Bli med og se ledige datoer" }).count(), 0);
+    await shot(kari, "13b-forhandsvisning-invitasjon");
+
+    await kari.getByRole("link", { name: "2. Når de har logget inn" }).click();
+    await kari.waitForURL(new RegExp(`/hytter/${fjellro}\\?som=laaner$`));
+    await kari.getByRole("heading", { name: "Fjellro", exact: true }).waitFor();
+    await kari.getByRole("heading", { name: "Når vil du låne hytta?" }).waitFor();
+    const after = await kari.getByRole("main").innerText();
+    assert.match(after, /Hytta til Kari Eier\./);
+    assert.equal(after.includes("Fjellvegen"), false, "adressen vises ikke før lånet er betalt");
+    assert.equal(after.includes("Dette er din hytte"), false);
+    assert.equal(await kari.getByRole("button", { name: "Send forespørsel" }).count(), 0);
+    await shot(kari, "13c-forhandsvisning-innlogget");
+  });
 
   await kari.goto(`${BASE}/mine-hytter/${fjellro}`);
   let question = "";

@@ -1123,6 +1123,27 @@ export async function getInvitationPreview(token: unknown) {
 }
 
 /**
+ * Eierens forhåndsvisning av invitasjonssiden: nøyaktig de samme feltene som
+ * getInvitationPreview gir den inviterte før innlogging, men for eierens egen
+ * hytte og uten noen invitasjon. Null hvis brukeren ikke eier hytta.
+ *
+ * Eieren ser allerede alt om hytta, så forhåndsvisningen gir ikke mer innsyn.
+ * Den viser bare hvor lite den inviterte ser før innlogging.
+ */
+export async function getOwnInvitationPreview(actor: Actor, cabinId: string) {
+  const own = await getOwnCabin(actor, cabinId);
+  if (!own) return null;
+  return {
+    inviterName: actor.name,
+    cabin: {
+      area: own.area,
+      areaPosition: approximatePosition(own),
+      photos: await listCabinPhotos(own.id),
+    },
+  };
+}
+
+/**
  * Hytta invitasjonslenken viser bilder av, eller null. Brukes av bildeadressen
  * for invitasjoner, med de samme reglene som getInvitationPreview.
  */

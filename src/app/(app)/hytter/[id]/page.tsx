@@ -1,9 +1,11 @@
+import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { AreaMap } from "@/components/area-map";
 import { DateRangePicker } from "@/components/date-range-picker";
+import { OwnerPreviewBar, previewHref } from "@/components/owner-preview";
 import { PhotoGallery } from "@/components/photo-gallery";
-import { ButtonLink, Field, Input, PageTitle, Panel, Textarea } from "@/components/ui";
+import { ButtonLink, buttonClass, Field, Input, PageTitle, Panel, Textarea } from "@/components/ui";
 import { firstName } from "@/lib/emails";
 import { areaLink } from "@/lib/position";
 import { formatKroner } from "@/lib/pricing";
@@ -15,12 +17,15 @@ import { createBookingAction } from "../../actions";
 
 export default async function CabinPage({ params, searchParams }: PageProps<"/hytter/[id]">) {
   const viewer = await requireViewer();
-  const [{ id }, { invitasjon }] = await Promise.all([params, searchParams]);
+  const [{ id }, { invitasjon, som }] = await Promise.all([params, searchParams]);
   const found = await getVisibleCabin(viewer, id);
   if (!found) notFound();
   const { cabin, ownerName, areaPosition } = found;
   const areaSearch = areaLink(cabin.area);
-  const isOwn = cabin.ownerId === viewer.id;
+  // Eieren kan se sin egen hytte slik de inviterte ser den (?som=laaner).
+  // Det gir ikke mer innsyn: eieren ser allerede alt om hytta.
+  const asBorrower = cabin.ownerId === viewer.id && som === "laaner";
+  const isOwn = cabin.ownerId === viewer.id && !asBorrower;
   const [calendar, photos] = await Promise.all([
     getCalendar(cabin.id),
     listCabinPhotos(cabin.id),
@@ -30,16 +35,19 @@ export default async function CabinPage({ params, searchParams }: PageProps<"/hy
 
   // Kommer låneren rett fra invitasjonen, står hilsenen øverst på hytta.
   const invited =
-    !isOwn && typeof invitasjon === "string"
+    cabin.ownerId !== viewer.id && typeof invitasjon === "string"
       ? await getInvitationForViewer(viewer, invitasjon)
       : null;
-  const welcome =
-    invited?.mine && invited.status === "accepted" && invited.cabin?.id === cabin.id
+  // I forhåndsvisningen vises hilsenen slik den ser ut uten egen melding.
+  const welcome = asBorrower
+    ? { inviterName: ownerName, message: null }
+    : invited?.mine && invited.status === "accepted" && invited.cabin?.id === cabin.id
       ? invited
       : null;
 
   return (
     <>
+      {asBorrower && <OwnerPreviewBar cabinId={cabin.id} step="innlogget" />}
       <PageTitle
         title={cabin.name}
         lead={`${cabin.area}. ${isOwn ? "Dette er din hytte." : `Hytta til ${ownerName}.`}`}
@@ -140,12 +148,17 @@ export default async function CabinPage({ params, searchParams }: PageProps<"/hy
               taken={calendar.taken}
               readOnly
             />
-            <ButtonLink href={`/mine-hytter/${cabin.id}`} variant="secondary" className="mt-6">
-              Endre hytta og ledige perioder
-            </ButtonLink>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <ButtonLink href={previewHref(cabin.id)}>
+                Se hytta slik de du inviterer, ser den
+              </ButtonLink>
+              <ButtonLink href={`/mine-hytter/${cabin.id}`} variant="secondary">
+                Endre hytta og ledige perioder
+              </ButtonLink>
+            </div>
           </>
         ) : (
-          <ActionForm action={createBookingAction}>
+          <BookingForm preview={asBorrower}>
             <input type="hidden" name="cabinId" value={cabin.id} />
             <DateRangePicker
               today={calendar.today}
@@ -182,16 +195,31 @@ export default async function CabinPage({ params, searchParams }: PageProps<"/hy
                 >
                   <Textarea name="message" maxLength={1000} />
                 </Field>
-                <SubmitButton>Send forespørsel</SubmitButton>
+                {asBorrower ? (
+                  <span aria-disabled="true" className={buttonClass("primary", "cursor-default")}>
+                    Send forespørsel
+                  </span>
+                ) : (
+                  <SubmitButton>Send forespørsel</SubmitButton>
+                )}
                 <p className="max-w-[60ch] text-sm text-muted">
                   {owner} svarer ja eller nei. Ingenting er avtalt før svaret er ja, og du
                   betaler ingenting før det.
                 </p>
               </div>
             )}
-          </ActionForm>
+          </BookingForm>
         )}
       </Panel>
     </>
   );
+}
+
+/**
+ * Skjemaet for forespørsler. I eierens forhåndsvisning er det bare en ramme
+ * rundt feltene, så ingenting kan sendes.
+ */
+function BookingForm({ preview, children }: { preview: boolean; children: ReactNode }) {
+  if (preview) return <div>{children}</div>;
+  return <ActionForm action={createBookingAction}>{children}</ActionForm>;
 }
