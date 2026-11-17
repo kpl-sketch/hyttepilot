@@ -25,11 +25,11 @@ litt over selvkost. Navnet er et arbeidsnavn og byttes ett sted: `NEXT_PUBLIC_AP
 - **Hvem skal få låne hytta?** Rett etter at hytta er lagt inn, kommer eieren til
   `/mine-hytter/<id>/inviter`, som bare spør om det. Invitasjonene går gjennom
   det vanlige delingsskjemaet, så eieren ser over alt før noe sendes.
-- **Påminnelse når hytta står ledig.** En daglig jobb (`/jobber/ledige-hytter`,
-  planlagt i `vercel.json`) sender eieren e-post når hytta er åpen for lån minst
-  to netter de neste 45 dagene uten at noen har spurt. Høyst én i måneden per
-  hytte, ikke den første uka, og eieren kan slå den av på siden for hytta.
-  Reglene ligger i `src/lib/services/reminders.ts`.
+- **Påminnelse når hytta står ledig.** Slått av 2026-11-17: jobben
+  (`/jobber/ledige-hytter`) er ikke lenger planlagt i `vercel.json`, så ingen
+  påminnelser sendes. Den skal erstattes av en påminnelse noen uker før de
+  store feriene, bare når hytta er ledig, med feriedatoer etter eierens land.
+  Reglene for den gamle jobben ligger i `src/lib/services/reminders.ts`.
 - **Forespørsler.** Låneren velger datoer i kalenderen. Eieren svarer ja eller nei.
 - **Betaling.** Skjer med vanlig Vipps utenfor tjenesten. Eieren markerer «betalt»,
   og da er oppholdet reservert og adressen vises til låneren.
@@ -132,8 +132,8 @@ skrives i stedet til filen `.dev-outbox.jsonl` og til terminalen.
    `RESEND_API_KEY`, `EMAIL_FROM`, `NEXT_PUBLIC_APP_NAME`,
    `NEXT_PUBLIC_CONTROLLER_NAME` og `NEXT_PUBLIC_CONTACT_EMAIL`. Svar på e-post
    går til `EMAIL_REPLY_TO`, ellers til `NEXT_PUBLIC_CONTACT_EMAIL`, fordi
-   avsenderadressen ikke har postkasse. Sett `CRON_SECRET`, så bare Vercel kan
-   starte den daglige påminnelsesjobben. Sett
+   avsenderadressen ikke har postkasse. Sett `CRON_SECRET` hvis påminnelsesjobben
+   planlegges igjen, så bare Vercel kan starte den. Sett
    `BETTER_AUTH_URL` for produksjon når tjenesten har fått eget domene.
    `BETTER_AUTH_SECRET` er valgfri: uten den avledes nøkkelen av `DATABASE_URL`.
    I produksjon stopper tjenesten heller enn å bruke standardnøkkelen hvis
