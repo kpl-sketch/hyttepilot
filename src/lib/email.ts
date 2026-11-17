@@ -1,9 +1,20 @@
 import "server-only";
 import { appendFile } from "node:fs/promises";
 import { Resend } from "resend";
-import { APP_NAME } from "@/lib/brand";
+import { APP_NAME, CONTACT_EMAIL } from "@/lib/brand";
 
 export type Mail = { to: string; subject: string; text: string };
+
+/**
+ * Adressen svar på e-post går til. Avsenderen (EMAIL_FROM) har ingen postkasse,
+ * så uten svaradresse forsvinner svarene. EMAIL_REPLY_TO brukes først, ellers
+ * kontaktadressen fra personvernsiden. Er ingen av dem satt, sendes e-posten
+ * uten svaradresse, som før.
+ */
+export function replyToAddress(): string | undefined {
+  const explicit = process.env.EMAIL_REPLY_TO?.trim();
+  return explicit || CONTACT_EMAIL.trim() || undefined;
+}
 
 /**
  * Sender e-post med Resend når RESEND_API_KEY og EMAIL_FROM er satt.
@@ -48,7 +59,13 @@ export async function sendEmail(mail: Mail): Promise<boolean> {
 
   try {
     const resend = new Resend(key);
-    const message = { to: mail.to, subject: mail.subject, text: mail.text };
+    const replyTo = replyToAddress();
+    const message = {
+      to: mail.to,
+      subject: mail.subject,
+      text: mail.text,
+      ...(replyTo ? { replyTo } : {}),
+    };
     let { data, error } = await resend.emails.send({ from, ...message });
 
     if (error && isUnverifiedDomain(error)) {

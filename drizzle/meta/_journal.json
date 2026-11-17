@@ -36,6 +36,13 @@
       "when": 1794847651262,
       "tag": "0004_invitasjon_foresporsel",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794926649773,
+      "tag": "0005_paminnelse_ledig",
+      "breakpoints": true
     }
   ]
 }

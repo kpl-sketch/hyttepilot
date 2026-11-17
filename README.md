@@ -22,6 +22,14 @@ litt over selvkost. Navnet er et arbeidsnavn og byttes ett sted: `NEXT_PUBLIC_AP
   dager og kan trekkes tilbake.
 - **Din hyttekrets.** Første side etter innlogging viser hyttene som er delt med
   deg, hyttene du selv deler, og menneskene du har en deling med.
+- **Hvem skal få låne hytta?** Rett etter at hytta er lagt inn, kommer eieren til
+  `/mine-hytter/<id>/inviter`, som bare spør om det. Invitasjonene går gjennom
+  det vanlige delingsskjemaet, så eieren ser over alt før noe sendes.
+- **Påminnelse når hytta står ledig.** En daglig jobb (`/jobber/ledige-hytter`,
+  planlagt i `vercel.json`) sender eieren e-post når hytta er åpen for lån minst
+  to netter de neste 45 dagene uten at noen har spurt. Høyst én i måneden per
+  hytte, ikke den første uka, og eieren kan slå den av på siden for hytta.
+  Reglene ligger i `src/lib/services/reminders.ts`.
 - **Forespørsler.** Låneren velger datoer i kalenderen. Eieren svarer ja eller nei.
 - **Betaling.** Skjer med vanlig Vipps utenfor tjenesten. Eieren markerer «betalt»,
   og da er oppholdet reservert og adressen vises til låneren.
@@ -122,9 +130,14 @@ skrives i stedet til filen `.dev-outbox.jsonl` og til terminalen.
    da kommer e-posten bare fram til adressen Resend-kontoen er registrert på.
 4. Sett miljøvariablene fra `.env.example` i Vercel: `ADMIN_EMAILS`,
    `RESEND_API_KEY`, `EMAIL_FROM`, `NEXT_PUBLIC_APP_NAME`,
-   `NEXT_PUBLIC_CONTROLLER_NAME` og `NEXT_PUBLIC_CONTACT_EMAIL`. Sett
+   `NEXT_PUBLIC_CONTROLLER_NAME` og `NEXT_PUBLIC_CONTACT_EMAIL`. Svar på e-post
+   går til `EMAIL_REPLY_TO`, ellers til `NEXT_PUBLIC_CONTACT_EMAIL`, fordi
+   avsenderadressen ikke har postkasse. Sett `CRON_SECRET`, så bare Vercel kan
+   starte den daglige påminnelsesjobben. Sett
    `BETTER_AUTH_URL` for produksjon når tjenesten har fått eget domene.
-   `BETTER_AUTH_SECRET` er valgfri.
+   `BETTER_AUTH_SECRET` er valgfri: uten den avledes nøkkelen av `DATABASE_URL`.
+   I produksjon stopper tjenesten heller enn å bruke standardnøkkelen hvis
+   begge mangler.
 5. Deploy. Byggingen oppdaterer databasen automatisk (`scripts/migrate.mjs`).
 6. Logg inn med en adresse fra `ADMIN_EMAILS` og inviter den første hytteeieren.
 
@@ -150,6 +163,7 @@ src/lib/services/         Alle regler og tilgangssjekker. Start her.
   invitations.ts            hvem slipper inn, deling, invitasjoner, invitasjonssiden, godkjenning av andre adresser, hyttekretsen
   cabins.ts                 hytter, hvem som ser hva, ledige perioder
   bookings.ts               forespørsel, ja/nei, betalt, avlysning
+  reminders.ts              påminnelse til eieren når hytta står ledig
   photos.ts                 bilder: hvem får legge til, fjerne og se dem
   addresses.ts              adressesøk mot Kartverket, bare for hytteeiere
 src/lib/position.ts       Leser koordinater og kartlenker, lager veilenker

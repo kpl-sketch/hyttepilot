@@ -34,10 +34,27 @@ function authSecret(): string | undefined {
   return Buffer.from(key).toString("base64");
 }
 
+/**
+ * I produksjon skal innloggingen aldri falle tilbake på Better Auths
+ * standardnøkkel, som er lik for alle. Mangler både BETTER_AUTH_SECRET og
+ * DATABASE_URL, stopper tjenesten heller enn å lage kaker som kan forfalskes.
+ * Forhåndsvisninger uten database får bruke standardnøkkelen, for der finnes
+ * ingen brukere å logge inn.
+ */
+function requiredAuthSecret(): string | undefined {
+  const secret = authSecret();
+  if (!secret && process.env.VERCEL_ENV === "production") {
+    throw new Error(
+      "Innloggingen mangler nøkkel i produksjon. Sett BETTER_AUTH_SECRET eller DATABASE_URL.",
+    );
+  }
+  return secret;
+}
+
 export const auth = betterAuth({
   appName: APP_NAME,
   baseURL: appUrl(),
-  secret: authSecret(),
+  secret: requiredAuthSecret(),
   // Egen logg, slik at verdier fra spørringer ikke havner i loggen.
   logger: { log: logAuth },
   database: drizzleAdapter(db, {

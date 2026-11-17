@@ -166,6 +166,10 @@ export const cabin = pgTable(
     longitude: doublePrecision("longitude"),
     /** Nøkkel og veibeskrivelse. Vises til låneren når lånet er betalt. */
     arrivalInfo: text("arrival_info").notNull().default(""),
+    /** Eieren vil ha e-post når hytta er åpen for lån, men ingen har spurt. */
+    remindWhenIdle: boolean("remind_when_idle").notNull().default(true),
+    /** Når siste påminnelse om ledig hytte ble sendt. Høyst én i måneden. */
+    idleReminderSentAt: timestamp("idle_reminder_sent_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

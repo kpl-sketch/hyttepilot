@@ -162,3 +162,19 @@ export function cancelledMail(
     text: `${cancelledByName} har avlyst lånet av ${b.cabinName} ${formatRange(b.startDate, b.endDate)}.\n\nSe oversikten:\n${appUrl()}/foresporsler${sign}`,
   };
 }
+
+/**
+ * Til eieren: hytta er åpen for lån de neste ukene, men ingen har spurt.
+ * Sendes høyst én gang i måneden per hytte (se services/reminders.ts).
+ */
+export function idleCabinMail(
+  to: string,
+  ownerName: string,
+  info: { cabinId: string; cabinName: string; startDate: string; endDate: string },
+): Mail {
+  return {
+    to,
+    subject: `${info.cabinName} står ledig ${formatRange(info.startDate, info.endDate)}`,
+    text: `Hei ${firstName(ownerName)}!\n\n${info.cabinName} er åpen for lån ${formatRange(info.startDate, info.endDate)}, men ingen har spurt ennå.\n\nKjenner du noen som ville likt en tur? Skriv adressene deres her, så får de se hytta og kan spørre om å låne den:\n${appUrl()}/mine-hytter/${info.cabinId}/inviter\n\nDu får høyst én slik påminnelse i måneden for hver hytte. Vil du ikke ha dem, slår du dem av på siden for hytta:\n${appUrl()}/mine-hytter/${info.cabinId}#paminnelser${sign}`,
+  };
+}

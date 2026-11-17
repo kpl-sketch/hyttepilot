@@ -218,6 +218,16 @@ async function addCabin(page, { name, area, cost, cleaning }) {
   await field("costPerNight").fill(String(cost));
   if (name === "Fjellro") await shot(page, "04a-legg-inn-hytte");
   await page.getByRole("button", { name: "Legg inn hytta" }).click();
+  // Rett etter at hytta er lagt inn, spør tjenesten hvem som skal få låne den.
+  await page.getByRole("heading", { name: "Hvem skal få låne hytta?" }).waitFor();
+  assert.match(page.url(), /\/mine-hytter\/[0-9a-f-]+\/inviter\?ny=1$/);
+  await page.getByLabel("E-postadressene til dem som skal få se hytta").waitFor();
+  if (name === "Fjellro") await shot(page, "04b-hvem-skal-faa-laane");
+  await page.getByRole("link", { name: "Gå videre til hytta" }).click();
+  await page.getByText("Hytta er lagret. Bare du ser den til du velger noen.").waitFor();
+  // Next holder forrige side skjult i siden etter en lenke. Last på nytt, så
+  // skjemaet fra invitasjonssiden ikke står der to ganger.
+  await page.reload();
   await page.getByText("Hytta er lagret. Bare du ser den til du velger noen.").waitFor();
   const id = page.url().match(/mine-hytter\/([0-9a-f-]+)/)[1];
 

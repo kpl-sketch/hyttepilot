@@ -33,7 +33,7 @@ import {
   todayInOslo,
 } from "../src/lib/dates";
 import { db } from "../src/lib/db";
-import { profile, user } from "../src/lib/db/schema";
+import { booking, profile, user } from "../src/lib/db/schema";
 import { type Actor, UserError } from "../src/lib/errors";
 import { PLEDGE_VERSION } from "../src/lib/pledge";
 import { directionLinks, isShortMapLink, parsePosition } from "../src/lib/position";
@@ -88,6 +88,11 @@ import {
 import { getPilotMetrics, getWeeklyMetrics, WEEKS } from "../src/lib/services/metrics";
 import { listMembers, membersToCsv } from "../src/lib/services/members";
 import { isThrottled } from "../src/lib/services/login";
+import {
+  firstIdlePeriod,
+  sendIdleReminders,
+  setIdleReminders,
+} from "../src/lib/services/reminders";
 import {
   addCabinPhotos,
   getPhotoForViewer,
@@ -1672,6 +1677,102 @@ async function main() {
     assert.match(csv, /"Ærlig ""Øystein""";"a@test.local";"2026-11-15";"";"Nei"/);
     assert.match(csv, /"'=HYPERLINK\(1\)";"b@test.local";"2026-11-14";"Kari";"Ja"/);
   });
+
+  console.log("Påminnelse når hytta står ledig");
+  {
+    const eva = await register("eva@test.local", "Eva Eier");
+    const nabo = await register("nabo@test.local", "Nils Nabo");
+    const evaCabin = await createCabin(eva, cabinData("Evas hytte"));
+    const today = todayInOslo();
+    await addAvailability(eva, evaCabin, addDays(today, 10), addDays(today, 14));
+    const ageCabin = (days: number) =>
+      db.execute(
+        sql`update "cabin" set "created_at" = now() - make_interval(days => ${days}) where "id" = ${evaCabin}`,
+      );
+    const mailsToEva = (mails: Sent[]) => mails.filter((m) => m.to === "eva@test.local");
+
+    await check("første ledige periode på minst to netter innenfor vinduet finnes", () => {
+      const open = [
+        { startDate: addDays(today, 2), endDate: addDays(today, 3) },
+        { startDate: addDays(today, 5), endDate: addDays(today, 9) },
+        { startDate: addDays(today, 60), endDate: addDays(today, 70) },
+      ];
+      assert.deepEqual(firstIdlePeriod(open, [], today), {
+        startDate: addDays(today, 5),
+        endDate: addDays(today, 9),
+      });
+      assert.equal(firstIdlePeriod([open[0], open[2]], [], today), null);
+    });
+
+    await check("en ny hytte får ingen påminnelse den første uka", async () => {
+      const { mails } = await sentDuring(() => sendIdleReminders());
+      assert.equal(mailsToEva(mails).length, 0);
+    });
+
+    await check("ledig hytte uten forespørsler gir eieren én påminnelse med lenke til invitasjonen", async () => {
+      await ageCabin(8);
+      const { mails } = await sentDuring(() => sendIdleReminders());
+      const [mail] = mailsToEva(mails);
+      assert.ok(mail, "eieren skal få påminnelse");
+      assert.equal(mails.filter((m) => m.text.includes("Evas hytte")).length, 1);
+      assert.match(mail.subject, /Evas hytte står ledig/);
+      assert.ok(mail.text.includes(`/mine-hytter/${evaCabin}/inviter`));
+      assert.doesNotMatch(mail.text, /dele/i);
+    });
+
+    await check("samme hytte får ikke ny påminnelse før det har gått en måned", async () => {
+      const { mails } = await sentDuring(() => sendIdleReminders());
+      assert.equal(mailsToEva(mails).length, 0);
+      const inThreeWeeks = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000);
+      const later = await sentDuring(() => sendIdleReminders(inThreeWeeks));
+      assert.equal(mailsToEva(later.mails).length, 0);
+    });
+
+    await check("to kjøringer samtidig sender påminnelsen bare én gang", async () => {
+      await db.execute(sql`update "cabin" set "idle_reminder_sent_at" = null where "id" = ${evaCabin}`);
+      const { mails } = await sentDuring(() =>
+        Promise.all([sendIdleReminders(), sendIdleReminders(), sendIdleReminders()]),
+      );
+      assert.equal(mailsToEva(mails).length, 1);
+    });
+
+    await check("en forespørsel som venter, betyr at hytta ikke står ledig", async () => {
+      await db.execute(sql`update "cabin" set "idle_reminder_sent_at" = null where "id" = ${evaCabin}`);
+      const [request] = await db
+        .insert(booking)
+        .values({
+          cabinId: evaCabin,
+          borrowerId: nabo.id,
+          startDate: addDays(today, 11),
+          endDate: addDays(today, 13),
+          guests: 2,
+          totalPrice: 1000,
+        })
+        .returning({ id: booking.id });
+      const { mails } = await sentDuring(() => sendIdleReminders());
+      assert.equal(mailsToEva(mails).length, 0);
+      await db.execute(sql`delete from "booking" where "id" = ${request.id}`);
+    });
+
+    await check("eieren kan slå av påminnelsene, og bare eieren", async () => {
+      await refused(() => setIdleReminders(nabo, evaCabin, false), /Fant ikke hytta/);
+      await refused(() => setIdleReminders(eva, "ikke-en-id", false), /Fant ikke hytta/);
+      await setIdleReminders(eva, evaCabin, false);
+      const { mails } = await sentDuring(() => sendIdleReminders());
+      assert.equal(mailsToEva(mails).length, 0);
+      assert.equal((await getOwnCabin(eva, evaCabin))?.remindWhenIdle, false);
+      await setIdleReminders(eva, evaCabin, true);
+    });
+
+    await check("hytte uten åpne datoer får ingen påminnelse", async () => {
+      const empty = await createCabin(eva, cabinData("Evas andre hytte"));
+      await db.execute(
+        sql`update "cabin" set "created_at" = now() - interval '8 days' where "id" = ${empty}`,
+      );
+      const { mails } = await sentDuring(() => sendIdleReminders());
+      assert.equal(mails.filter((m) => m.text.includes("Evas andre hytte")).length, 0);
+    });
+  }
 
   console.log("Brems på innlogging");
   await check("sjette kodeforespørsel på et kvarter stoppes", async () => {

@@ -19,7 +19,10 @@ export function proxy(request: NextRequest) {
   // hvem som inviterer, og ingenting om hytta.
   const isPublic = PUBLIC_PATHS.includes(pathname) ||
     AUDIENCE_PATH.test(pathname) ||
-    pathname.startsWith("/invitasjon/");
+    pathname.startsWith("/invitasjon/") ||
+    // Den daglige jobben kalles av Vercel uten innlogging. Den sjekker selv
+    // CRON_SECRET, og svarer bare med antall.
+    pathname.startsWith("/jobber/");
 
   if (!hasSessionCookie && !isPublic) {
     return NextResponse.redirect(new URL("/logg-inn", request.url));

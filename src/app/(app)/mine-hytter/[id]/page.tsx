@@ -22,6 +22,7 @@ import {
   removeCabinPhotoAction,
   revokeAccessAction,
   revokeInvitationAction,
+  setIdleRemindersAction,
   updateCabinAction,
 } from "../../actions";
 
@@ -340,6 +341,24 @@ export default async function ManageCabinPage({
               : "Hvem ville du selv lånt bort hytta til?"}
           </h3>
           <ShareForm cabins={[{ id: cabin.id, name: cabin.name, area: cabin.area }]} />
+        </Panel>
+
+        <Panel>
+          <h2 id="paminnelser" className="scroll-mt-6 text-2xl font-bold">
+            Påminnelse når hytta står ledig
+          </h2>
+          <p className="mt-1 max-w-[60ch] text-muted">
+            {cabin.remindWhenIdle
+              ? "Er hytta åpen for lån de neste ukene uten at noen har spurt, får du en e-post med forslag om å invitere flere. Høyst én i måneden."
+              : "Påminnelsene er slått av. Du får ingen e-post når hytta står ledig."}
+          </p>
+          <ActionForm action={setIdleRemindersAction} className="mt-4">
+            <input type="hidden" name="cabinId" value={cabin.id} />
+            <input type="hidden" name="on" value={cabin.remindWhenIdle ? "0" : "1"} />
+            <SubmitButton variant="secondary">
+              {cabin.remindWhenIdle ? "Slå av påminnelsene" : "Slå på påminnelsene"}
+            </SubmitButton>
+          </ActionForm>
         </Panel>
 
         <Panel>

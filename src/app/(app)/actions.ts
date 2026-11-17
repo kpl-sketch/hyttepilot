@@ -36,6 +36,7 @@ import {
   shareWithPerson,
 } from "@/lib/services/invitations";
 import { addCabinPhotos, makeCoverPhoto, removeCabinPhoto } from "@/lib/services/photos";
+import { setIdleReminders } from "@/lib/services/reminders";
 import { requireViewer } from "@/lib/session";
 
 /*
@@ -77,7 +78,26 @@ export async function createCabinAction(
   } catch (error) {
     return toFormState(error);
   }
-  redirect(`/mine-hytter/${cabinId}?ny=1`);
+  redirect(`/mine-hytter/${cabinId}/inviter?ny=1`);
+}
+
+export async function setIdleRemindersAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const viewer = await requireViewer();
+  const on = text(formData, "on") === "1";
+  try {
+    await setIdleReminders(viewer, text(formData, "cabinId"), on);
+  } catch (error) {
+    return toFormState(error);
+  }
+  refresh();
+  return {
+    ok: on
+      ? "Du får e-post når hytta står ledig og ingen har spurt."
+      : "Du får ikke lenger e-post når hytta står ledig.",
+  };
 }
 
 export async function updateCabinAction(
