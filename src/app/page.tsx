@@ -31,9 +31,12 @@ export default function LandingPage() {
         Mange hytter står tomme store deler av året, og få av oss liker å spørre om å låne. Med{" "}
         {APP_NAME} {WHAT_IT_IS}. Eieren bestemmer alltid.
       </p>
-      <ButtonLink href="/logg-inn" className="mt-6">
-        Logg inn
-      </ButtonLink>
+      <div className="mt-6 flex flex-wrap gap-3">
+        <ButtonLink href="/logg-inn">Logg inn</ButtonLink>
+        <ButtonLink href="/slik-virker-det" variant="secondary">
+          Slik virker det
+        </ButtonLink>
+      </div>
 
       {/* Fjell, fjord og en rød hytte med lys i vinduet. */}
       <CabinScene className="mt-12" />

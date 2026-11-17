@@ -24,7 +24,10 @@ export function PublicShell({
       {belowHeader}
       <main className="mx-auto w-full max-w-3xl flex-1 px-5 pb-16 pt-10">{children}</main>
       <footer className="mx-auto w-full max-w-3xl border-t border-line px-5 py-6 text-sm text-muted">
-        <nav className="flex gap-6">
+        <nav className="flex flex-wrap gap-x-6 gap-y-2">
+          <Link href="/slik-virker-det" className="underline">
+            Slik virker det
+          </Link>
           <Link href="/hytteloftet" className="underline">
             Hytteløftet
           </Link>
