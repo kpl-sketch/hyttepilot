@@ -80,6 +80,10 @@ kan låne, eie og dele. Forskjellen ligger i hva som er delt med hvem.
   forespørsler. Forespørsler og opphold røres ikke. De avlyses bare med en egen
   handling under Forespørsler.
 - Administrasjon gir ikke innsyn i andres hytter, delinger eller forespørsler.
+  Unntaket er oversikten over de mest populære hyttene (`/admin/hytter`), valgt
+  av prosjekteier 2026-11-18: navn, sted, eier og antall, aldri adresse, bilder,
+  datoer eller hvem som har spurt eller lånt. Reglene står i
+  `src/lib/services/cabin-stats.ts`.
   Det finnes ingen støttevisning. Trengs innsyn for å hjelpe noen, må den som er
   ansvarlig for opplysningene, slå opp direkte i databasen og føre det i
   prosjektets beslutningslogg.

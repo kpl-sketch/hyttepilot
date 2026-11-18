@@ -55,7 +55,7 @@ export default function PrivacyPage() {
           <h2 className="text-xl font-bold">Hvem ser hva</h2>
           <ul className="mt-2 list-disc space-y-1 pl-6">
             <li>En hytte er privat til eieren velger hvem som får se den. Bare eieren og de eieren har valgt, ser hytta, bildene og navnet på eieren.</li>
-            <li>Det å eie en hytte eller være administrator gir ikke innsyn i andres hytter.</li>
+            <li>Det å eie en hytte eller være administrator gir ikke innsyn i andres hytter. Administratorene ser en oversikt over hyttene med navn, sted og eier, og hvor mange som ser hver hytte, har spurt om å låne den og har lånt den. De ser ikke adresse, bilder, datoer eller hvem som har spurt eller lånt.</li>
             <li>Du ser navnet på dem som viser deg en hytte, og dem du viser din. Ingen ser en liste over alle som er med.</li>
             <li>Eieren ser navnet på dem som ser hytta, og adressen eieren selv skrev inn i invitasjonen.</li>
             <li>Åpnes en invitasjonslenke uten innlogging, vises bare navnet på den som inviterer og en maskert e-postadresse.</li>

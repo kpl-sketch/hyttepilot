@@ -88,6 +88,7 @@ import {
 } from "../src/lib/services/invitations";
 import { getPilotMetrics, getWeeklyMetrics, WEEKS } from "../src/lib/services/metrics";
 import { listMembers, membersToCsv } from "../src/lib/services/members";
+import { getCabinStats, parseCabinSort } from "../src/lib/services/cabin-stats";
 import { isThrottled } from "../src/lib/services/login";
 import {
   firstIdlePeriod,
@@ -1500,6 +1501,40 @@ async function main() {
     assert.equal(m.staysPaid, Number(row.paid));
     assert.equal(m.nightsPaid, Number(row.nights));
     assert.ok(m.requestsApproved >= m.staysPaid);
+  });
+
+  console.log("Mest populære hytter for administratorene");
+  await check("bare administratorer får hyttelisten", async () => {
+    await refused(() => getCabinStats(kari), /administratorer/);
+  });
+  await check("listen har navn, sted og eier, men aldri adresse, Vipps eller hvem som lånte", async () => {
+    const cabins = await getCabinStats(admin);
+    assert.ok(cabins.some((c) => c.name === "Karis hytte" && c.owner === "Kari Eier"));
+    const allowed = ["approved", "area", "askers", "createdAt", "id", "invitesSent", "name", "nightsPaid", "open",
+      "owner", "requests", "requestsLast30", "staysPaid", "valuePaid", "viewers"];
+    for (const c of cabins) assert.deepEqual(Object.keys(c).sort(), allowed);
+  });
+  await check("tallene per hytte summerer seg til totalene", async () => {
+    const [m, cabins] = await Promise.all([getPilotMetrics(admin), getCabinStats(admin)]);
+    const sum = (f: (c: (typeof cabins)[number]) => number) => cabins.reduce((a, c) => a + f(c), 0);
+    assert.equal(cabins.length, m.cabins);
+    assert.equal(sum((c) => c.requests), m.requests);
+    assert.equal(sum((c) => c.staysPaid), m.staysPaid);
+    assert.equal(sum((c) => c.nightsPaid), m.nightsPaid);
+    assert.equal(sum((c) => c.valuePaid), m.valuePaid);
+    assert.equal(sum((c) => c.approved), m.requestsApproved);
+    assert.equal(cabins.filter((c) => c.viewers > 0).length, m.cabinsShared);
+    assert.equal(cabins.filter((c) => c.open).length, m.cabinsOpen);
+  });
+  await check("den mest populære hytta kommer først, etter valgt tall", async () => {
+    for (const [sort, key] of [["foresporsler", "requests"], ["netter", "nightsPaid"], ["ser", "viewers"]] as const) {
+      const cabins = await getCabinStats(admin, sort);
+      for (let n = 1; n < cabins.length; n++) assert.ok(cabins[n - 1][key] >= cabins[n][key], `${sort} er ikke sortert`);
+    }
+    assert.ok((await getCabinStats(admin))[0].requests > 0);
+    assert.equal(parseCabinSort("netter"), "netter");
+    assert.equal(parseCabinSort("tull"), "foresporsler");
+    assert.equal(parseCabinSort(["ser"]), "foresporsler");
   });
 
   console.log("Invitasjon med ett klikk: hytta vises før innlogging");

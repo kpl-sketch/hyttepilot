@@ -35,7 +35,8 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
 
       <p className="mb-8 max-w-[60ch] rounded-xl border border-line bg-surface p-4">
         Som administrator ser du ikke andres hytter eller forespørsler. Du ser hytter som
-        alle andre: dine egne, og de eieren har valgt å vise deg.
+        alle andre: dine egne, og de eieren har valgt å vise deg. Under Hytter ser du bare
+        navn, sted, eier og antall.
       </p>
 
       <Panel>
