@@ -79,11 +79,12 @@ kan låne, eie og dele. Forskjellen ligger i hva som er delt med hvem.
 - Slutter eieren å dele, ser ikke personen hytta lenger og kan ikke sende nye
   forespørsler. Forespørsler og opphold røres ikke. De avlyses bare med en egen
   handling under Forespørsler.
-- Administrasjon gir ikke innsyn i andres hytter, delinger eller forespørsler.
-  Unntaket er oversikten over de mest populære hyttene (`/admin/hytter`), valgt
-  av prosjekteier 2026-11-18: navn, sted, eier og antall, aldri adresse, bilder,
-  datoer eller hvem som har spurt eller lånt. Reglene står i
-  `src/lib/services/cabin-stats.ts`.
+- Administratorene ser alle hytter slik lånerne ser dem, og en oversikt over
+  de mest populære hyttene (`/admin/hytter`). Valgt av prosjekteier 2026-11-18
+  (D027 og D028). De ser aldri adresse, kartposisjon, Vipps-nummer eller
+  praktiske opplysninger, ikke andres delinger eller forespørsler, og kan ikke
+  spørre om å låne en hytte eieren ikke har vist dem. Reglene står i
+  `getVisibleCabin` og `src/lib/services/cabin-stats.ts`.
   Det finnes ingen støttevisning. Trengs innsyn for å hjelpe noen, må den som er
   ansvarlig for opplysningene, slå opp direkte i databasen og føre det i
   prosjektets beslutningslogg.

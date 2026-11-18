@@ -190,9 +190,9 @@ export default async function ManageCabinPage({
             Steg 3: Vis hytta til noen du kjenner
           </h2>
           <p className="mt-1 max-w-[60ch] text-muted">
-            Bare du og de du velger her, ser hytta. Det gjelder også andre hytteeiere og
-            administratorer. De du velger, kan se hytta og spørre om å låne den. De kan ikke
-            vise den til andre.
+            Bare du og de du velger her, ser hytta, i tillegg til tjenestens
+            administratorer. Andre hytteeiere ser den ikke. De du velger, kan se hytta og
+            spørre om å låne den. De kan ikke vise den til andre.
           </p>
           <p className="mt-3 max-w-[60ch]">
             <a href={previewHref(cabin.id)} className="font-semibold underline">

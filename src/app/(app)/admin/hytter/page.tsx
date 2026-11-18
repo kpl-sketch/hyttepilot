@@ -32,7 +32,7 @@ export default async function CabinStatsPage({ searchParams }: PageProps<"/admin
     <>
       <PageTitle
         title="Hytter"
-        lead="Hvilke hytter som er mest populære. Listen viser navn, sted og eier, men ikke adresse, datoer eller hvem som har lånt."
+        lead="Hvilke hytter som er mest populære. Trykk på en hytte for å se den slik lånerne ser den, uten adresse."
       />
       <AdminTabs active="hytter" />
 
@@ -95,7 +95,9 @@ function TopChart({ cabins, sort }: { cabins: CabinStat[]; sort: CabinSort }) {
             <div className="flex items-baseline justify-between gap-4 text-sm">
               <span className="min-w-0 truncate">
                 <span className="tabular-nums text-muted">{index + 1}.</span>{" "}
-                <span className="font-semibold">{c.name}</span>
+                <Link href={`/hytter/${c.id}`} className="font-semibold underline">
+                  {c.name}
+                </Link>
                 <span className="text-muted"> · {c.area}</span>
               </span>
               <span className="shrink-0 font-semibold tabular-nums">{int(value(c))}</span>
@@ -140,7 +142,9 @@ function CabinTable({ cabins }: { cabins: CabinStat[] }) {
             <tr key={c.id} className="border-b border-line align-top">
               <td className="py-2 pr-2 text-muted">{index + 1}</td>
               <th scope="row" className="min-w-40 py-2 pr-4 font-normal">
-                <span className="font-semibold">{c.name}</span>
+                <Link href={`/hytter/${c.id}`} className="font-semibold underline">
+                  {c.name}
+                </Link>
                 <span className="block text-muted">
                   {c.area} · {c.owner}
                   {!c.open && " · ingen ledige datoer"}

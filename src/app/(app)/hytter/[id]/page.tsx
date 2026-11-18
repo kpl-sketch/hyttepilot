@@ -21,6 +21,8 @@ export default async function CabinPage({ params, searchParams }: PageProps<"/hy
   const found = await getVisibleCabin(viewer, id);
   if (!found) notFound();
   const { cabin, ownerName, areaPosition } = found;
+  // Administrator som ser hytta uten at eieren har vist den: bare lesing.
+  const asAdmin = found.access === "admin";
   const areaSearch = areaLink(cabin.area);
   // Eieren kan se sin egen hytte slik de inviterte ser den (?som=laaner).
   // Det gir ikke mer innsyn: eieren ser allerede alt om hytta.
@@ -35,7 +37,7 @@ export default async function CabinPage({ params, searchParams }: PageProps<"/hy
 
   // Kommer låneren rett fra invitasjonen, står hilsenen øverst på hytta.
   const invited =
-    cabin.ownerId !== viewer.id && typeof invitasjon === "string"
+    cabin.ownerId !== viewer.id && !asAdmin && typeof invitasjon === "string"
       ? await getInvitationForViewer(viewer, invitasjon)
       : null;
   // I forhåndsvisningen vises hilsenen slik den ser ut uten egen melding.
@@ -52,6 +54,16 @@ export default async function CabinPage({ params, searchParams }: PageProps<"/hy
         title={cabin.name}
         lead={`${cabin.area}. ${isOwn ? "Dette er din hytte." : `Hytta til ${ownerName}.`}`}
       />
+
+      {asAdmin && (
+        <p className="mb-8 max-w-[60ch] rounded-xl border border-line bg-surface p-4">
+          Du ser hytta som administrator. {owner} har ikke vist deg hytta, så du kan ikke
+          spørre om å låne den.{" "}
+          <a href="/admin/hytter" className="font-semibold underline">
+            Tilbake til hytteoversikten
+          </a>
+        </p>
+      )}
 
       {welcome && (
         <section
@@ -101,7 +113,9 @@ export default async function CabinPage({ params, searchParams }: PageProps<"/hy
             <p className="mt-2 max-w-[60ch] text-sm text-muted">
               {isOwn
                 ? "Lånerne ser området og et kart over området. Adressen og veien til hytta får de når lånet er betalt."
-                : `Kartet viser området, ikke selve hytta. Adressen og veibeskrivelsen får du når lånet er betalt.`}
+                : asAdmin
+                  ? "Kartet viser området, ikke selve hytta. Administratorer ser ikke adressen."
+                  : `Kartet viser området, ikke selve hytta. Adressen og veibeskrivelsen får du når lånet er betalt.`}
             </p>
           </section>
           {cabin.description && (
@@ -136,7 +150,7 @@ export default async function CabinPage({ params, searchParams }: PageProps<"/hy
             )}
           </dl>
           {/* På mobil står kalenderen rett under, så knappen trengs bare når prisen står i egen kolonne. */}
-          {!isOwn && calendar.available.length > 0 && (
+          {!isOwn && !asAdmin && calendar.available.length > 0 && (
             <div className="mt-5 hidden xl:block">
               <ButtonLink href="#datoer" className="w-full">
                 Velg datoer
@@ -147,14 +161,27 @@ export default async function CabinPage({ params, searchParams }: PageProps<"/hy
 
         <Panel className="xl:col-start-1 xl:row-start-2">
           <h2 id="datoer" className="scroll-mt-24 text-2xl font-bold">
-            {isOwn ? "Slik ser kalenderen ut for dem du har valgt" : "Når vil du låne hytta?"}
+            {isOwn
+              ? "Slik ser kalenderen ut for dem du har valgt"
+              : asAdmin
+                ? "Ledige datoer"
+                : "Når vil du låne hytta?"}
           </h2>
           <p className="mt-1 mb-5 max-w-[60ch] text-muted">
             {isOwn
-              ? "Bare du og de du har valgt, ser denne siden."
-              : `${owner} har åpnet datoene under for forespørsler. Du spør, og ${owner} svarer ja eller nei.`}
+              ? "Bare du, de du har valgt, og administratorene ser denne siden."
+              : asAdmin
+                ? `Datoene ${owner} har åpnet for forespørsler.`
+                : `${owner} har åpnet datoene under for forespørsler. Du spør, og ${owner} svarer ja eller nei.`}
           </p>
-          {isOwn ? (
+          {asAdmin ? (
+            <DateRangePicker
+              today={calendar.today}
+              available={calendar.available}
+              taken={calendar.taken}
+              readOnly
+            />
+          ) : isOwn ? (
             <>
               <DateRangePicker
                 today={calendar.today}

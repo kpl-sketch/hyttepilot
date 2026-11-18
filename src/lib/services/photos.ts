@@ -101,8 +101,8 @@ async function maySeeCabin(viewer: PhotoViewer, cabinId: string): Promise<boolea
 
 /**
  * Selve bildet, eller null hvis den som ser på, ikke får se hytta det hører
- * til. Reglene er de samme som for hytta: eieren og dem eieren har vist hytta
- * til. Lenken til en hytteinvitasjon som gjelder, viser bildene av den hytta.
+ * til. Reglene er de samme som for hytta: eieren, dem eieren har vist hytta
+ * til, og administratorene. Lenken til en hytteinvitasjon som gjelder, viser bildene av den hytta.
  */
 export async function getPhotoForViewer(
   viewer: PhotoViewer,

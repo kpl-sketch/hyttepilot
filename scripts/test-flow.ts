@@ -389,9 +389,9 @@ async function main() {
   console.log("Privat som utgangspunkt");
   const karisHytte = await createCabin(kari, cabinData("Karis hytte"));
   await addAvailability(kari, karisHytte, d(10), d(40));
-  await check("en ny hytte er privat: ingen andre ser den", async () => {
-    assert.equal(await getVisibleCabin(admin, karisHytte), null);
-    assert.deepEqual(await listSharedCabins(admin), []);
+  await check("en ny hytte er privat: ingen andre enn administratorene ser den", async () => {
+    assert.equal((await getVisibleCabin(admin, karisHytte))?.access, "admin");
+    assert.deepEqual(await listSharedCabins(admin), [], "administratorer får ikke hytta i hyttekretsen");
     const [own] = await listOwnCabins(kari);
     assert.equal(own.sharedWith, 0);
     assert.equal(own.pendingInvitations, 0);
@@ -401,13 +401,20 @@ async function main() {
     assert.equal(await getVisibleCabin(kari, annesHytte), null);
     assert.deepEqual(await listSharedCabins(kari), []);
   });
-  await check("administrator ser ikke andres hytter og kan ikke be om dem", async () => {
-    assert.equal(await getVisibleCabin(admin, karisHytte), null);
+  await check("administrator ser andres hytter slik lånerne gjør, men kan ikke be om lån", async () => {
+    const seen = await getVisibleCabin(admin, karisHytte);
+    assert.equal(seen?.access, "admin");
+    assert.equal(seen?.cabin.name, "Karis hytte");
+    for (const secret of ["address", "latitude", "longitude", "vippsNumber", "arrivalInfo"]) {
+      assert.ok(!(secret in (seen?.cabin ?? {})), `${secret} skal ikke med`);
+      assert.ok(!(secret in (seen ?? {})), `${secret} skal ikke med`);
+    }
     await refused(
       () => createBooking(admin, karisHytte, { startDate: d(12), endDate: d(14), guests: "2", message: "" }),
-      /Fant ikke hytta/,
+      /ikke vist deg hytta/,
     );
     assert.equal(await listCabinSharing(admin, karisHytte), null);
+    assert.equal((await getVisibleCabin(kari, karisHytte))?.access, "owner");
   });
 
   console.log("Akseptansetest 1: A inviterer B til hytte A");
@@ -1101,14 +1108,14 @@ async function main() {
     assert.equal(await addCabinPhotos(kari, karisHytte, [bilde]), 1);
     assert.equal(await addCabinPhotos(admin, annesHytte, [bilde]), 1);
   });
-  await check("bare de eieren har delt med, får se bildene, også via direkte lenke", async () => {
+  await check("bare de eieren har delt med og administratorene får se bildene, også via direkte lenke", async () => {
     const [karis] = await listCabinPhotos(karisHytte);
     const [annes] = await listCabinPhotos(annesHytte);
     assert.ok(await getPhotoForViewer(per, karis.id, "thumb"), "Kari har delt med Per");
     assert.ok(await getPhotoForViewer(lise, annes.id, "full"), "Anne har delt med Lise");
     assert.equal(await getPhotoForViewer(ola, karis.id, "thumb"), null, "venn av Per");
     assert.equal(await getPhotoForViewer(ola, karis.id, "full"), null);
-    assert.equal(await getPhotoForViewer(admin, karis.id, "full"), null, "administrator");
+    assert.ok(await getPhotoForViewer(admin, karis.id, "full"), "administrator ser bildene");
     assert.equal(await getPhotoForViewer(kari, annes.id, "full"), null, "annen hytteeier");
     assert.equal(await getPhotoForViewer(kari, "ikke-en-id", "full"), null);
     assert.equal(await getPhotoForViewer(kari, randomUUID(), "full"), null);

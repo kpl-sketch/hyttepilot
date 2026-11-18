@@ -14,8 +14,8 @@ import { type Actor, UserError } from "../errors";
  *    summer. Aldri adresse, kartposisjon, Vipps-nummer, praktiske
  *    opplysninger, bilder, datoer for opphold, meldinger eller hvem som har
  *    sett, spurt om eller lånt hytta.
- *  - Listen gir ikke innsyn i selve hytta. Hyttesiden følger fortsatt bare
- *    `cabin_access`.
+ *  - Hver hytte lenker til hyttesiden. Administratorene ser den slik lånerne
+ *    ser den, uten å kunne spørre om lån (D028, se getVisibleCabin).
  *
  * Tjenesten logger ikke hvem som åpner en hytteside. «Ser hytta» er derfor
  * antall personer eieren har vist hytta til, ikke antall visninger.

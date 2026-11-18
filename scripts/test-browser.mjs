@@ -363,8 +363,8 @@ async function main() {
   await anne.getByLabel("Personlig hilsen").fill("Fint om du vil være med fra start.");
   await anne.getByRole("button", { name: "Send invitasjonen" }).click();
   await anne.getByText("Invitasjonen er sendt.").waitFor();
-  await check("administrasjon sier rett ut at den ikke gir innsyn i andres hytter", async () => {
-    await anne.getByText("Som administrator ser du ikke andres hytter").waitFor();
+  await check("administrasjon sier rett ut hva administratorer ser av andres hytter", async () => {
+    await anne.getByText("Som administrator ser du alle hytter under Hytter").waitFor();
     await shot(anne, "03-administrasjon");
   });
 

@@ -127,8 +127,8 @@ const publicCabin = {
  * Hyttene andre har delt med brukeren, med de ledige periodene framover.
  * Egne hytter er ikke med: de hentes med listOwnCabins.
  *
- * En rad i cabin_access er den eneste veien til innsyn i en annens hytte.
- * Det gjelder også for hytteeiere og administratorer.
+ * Listen følger bare cabin_access. Administratorer får ingen hytter her bare
+ * fordi de er administratorer; de finner andres hytter under /admin/hytter.
  */
 export async function listSharedCabins(actor: Actor) {
   const rows = await db
@@ -143,9 +143,19 @@ export async function listSharedCabins(actor: Actor) {
 }
 
 /**
- * Én hytte, eller null hvis brukeren ikke har lov til å se den: enten eier
- * brukeren hytta, eller så har eieren delt den med brukeren. Alle sider,
- * bilder og forespørsler går gjennom denne sjekken.
+ * Hvorfor brukeren får se hytta:
+ *  - owner: brukeren eier hytta.
+ *  - shared: eieren har vist hytta til brukeren (en rad i cabin_access).
+ *  - admin: brukeren er administrator og ser hytta uten at eieren har vist den
+ *    (D028, valgt av prosjekteier 2026-11-18). Gir de samme feltene som andre
+ *    som ser hytta, men aldri rett til å spørre om å låne den.
+ */
+export type CabinAccessReason = "owner" | "shared" | "admin";
+
+/**
+ * Én hytte, eller null hvis brukeren ikke har lov til å se den. Alle sider,
+ * bilder og forespørsler går gjennom denne sjekken. Adresse, kartposisjon,
+ * Vipps-nummer og praktiske opplysninger er aldri med.
  */
 export async function getVisibleCabin(actor: Actor, cabinId: string) {
   if (!z.uuid().safeParse(cabinId).success) return null;
@@ -165,14 +175,16 @@ export async function getVisibleCabin(actor: Actor, cabinId: string) {
   // grovt punkt for området, som alle som ser hytta, kan få se.
   const { latitude, longitude, ...rest } = found;
   const row = { ...rest, areaPosition: approximatePosition({ latitude, longitude }) };
-  if (row.cabin.ownerId === actor.id) return row;
+  if (row.cabin.ownerId === actor.id) return { ...row, access: "owner" as CabinAccessReason };
 
   const [granted] = await db
     .select({ cabinId: cabinAccess.cabinId })
     .from(cabinAccess)
     .where(and(eq(cabinAccess.cabinId, cabinId), eq(cabinAccess.userId, actor.id)))
     .limit(1);
-  return granted ? row : null;
+  if (granted) return { ...row, access: "shared" as CabinAccessReason };
+  if (actor.isAdmin) return { ...row, access: "admin" as CabinAccessReason };
+  return null;
 }
 
 /** Så mange har eieren delt hytta med. */

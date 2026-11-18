@@ -34,9 +34,9 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
       <AdminTabs active="invitasjoner" />
 
       <p className="mb-8 max-w-[60ch] rounded-xl border border-line bg-surface p-4">
-        Som administrator ser du ikke andres hytter eller forespørsler. Du ser hytter som
-        alle andre: dine egne, og de eieren har valgt å vise deg. Under Hytter ser du bare
-        navn, sted, eier og antall.
+        Som administrator ser du alle hytter under Hytter, slik lånerne ser dem: bilder,
+        pris, regler og ledige datoer, men ikke adresse eller Vipps-nummer. Du ser ikke
+        andres forespørsler, og du kan bare spørre om å låne hytter eieren har vist deg.
       </p>
 
       <Panel>

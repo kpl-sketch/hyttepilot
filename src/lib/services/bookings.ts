@@ -35,6 +35,11 @@ export async function createBooking(actor: Actor, cabinId: string, data: unknown
 
   const visible = await getVisibleCabin(actor, cabinId);
   if (!visible) throw new UserError("Fant ikke hytta.");
+  // En administrator ser alle hytter, men kan bare spørre om å låne en hytte
+  // eieren har vist ham eller henne.
+  if (visible.access === "admin") {
+    throw new UserError("Eieren har ikke vist deg hytta, så du kan ikke spørre om å låne den.");
+  }
   const target = visible.cabin;
   if (target.ownerId === actor.id) {
     throw new UserError("Du kan ikke sende forespørsel til din egen hytte.");
