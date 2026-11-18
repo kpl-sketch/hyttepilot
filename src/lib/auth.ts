@@ -7,6 +7,7 @@ import { emailOTP } from "better-auth/plugins";
 import { logAuth } from "./auth-log";
 import { APP_NAME, appUrl } from "./brand";
 import { db } from "./db";
+import { eq } from "drizzle-orm";
 import { account, session, user, verification } from "./db/schema";
 import { sendEmail } from "./email";
 import { loginCodeMail } from "./emails";
@@ -70,6 +71,21 @@ export const auth = betterAuth({
       create: {
         before: async (newUser) => {
           if (!(await isEmailAllowed(newUser.email))) return false;
+        },
+      },
+    },
+    session: {
+      create: {
+        // En ny økt betyr en ny innlogging. Feil her skal aldri stoppe innloggingen.
+        after: async (newSession) => {
+          try {
+            await db
+              .update(user)
+              .set({ lastLoginAt: new Date(newSession.createdAt) })
+              .where(eq(user.id, newSession.userId));
+          } catch (error) {
+            logAuth("error", "Kunne ikke lagre tidspunkt for innlogging", error);
+          }
         },
       },
     },

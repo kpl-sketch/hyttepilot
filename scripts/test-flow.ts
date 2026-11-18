@@ -1726,16 +1726,16 @@ async function main() {
     assert.equal(perRow?.invitedBy, "Kari Eier");
     assert.equal(members.find((m) => m.email === "admin@test.local")?.isAdmin, true);
     assert.equal(members.find((m) => m.email === "kari@test.local")?.invitedBy, "Anne Admin");
-    for (const m of members) assert.deepEqual(Object.keys(m).sort(), ["email", "invitedBy", "isAdmin", "joinedAt", "name"]);
+    for (const m of members) assert.deepEqual(Object.keys(m).sort(), ["email", "invitedBy", "isAdmin", "joinedAt", "lastLoginAt", "name"]);
   });
   await check("CSV-filen leses riktig i Excel og kan ikke lure inn formler", () => {
     const csv = membersToCsv([
-      { name: 'Ærlig "Øystein"', email: "a@test.local", joinedAt: new Date("2026-11-14T23:30:00Z"), invitedBy: null, isAdmin: false },
-      { name: "=HYPERLINK(1)", email: "b@test.local", joinedAt: new Date("2026-11-14T10:00:00Z"), invitedBy: "Kari", isAdmin: true },
+      { name: 'Ærlig "Øystein"', email: "a@test.local", joinedAt: new Date("2026-11-14T23:30:00Z"), lastLoginAt: null, invitedBy: null, isAdmin: false },
+      { name: "=HYPERLINK(1)", email: "b@test.local", joinedAt: new Date("2026-11-14T10:00:00Z"), lastLoginAt: new Date("2026-11-18T20:40:00Z"), invitedBy: "Kari", isAdmin: true },
     ]);
     assert.ok(csv.startsWith("\uFEFF\"Navn\";\"E-post\""));
-    assert.match(csv, /"Ærlig ""Øystein""";"a@test.local";"2026-11-15";"";"Nei"/);
-    assert.match(csv, /"'=HYPERLINK\(1\)";"b@test.local";"2026-11-14";"Kari";"Ja"/);
+    assert.match(csv, /"Ærlig ""Øystein""";"a@test.local";"2026-11-15";"";"";"Nei"/);
+    assert.match(csv, /"'=HYPERLINK\(1\)";"b@test.local";"2026-11-14";"2026-11-18 21:40";"Kari";"Ja"/);
   });
 
   console.log("Påminnelse før feriene");

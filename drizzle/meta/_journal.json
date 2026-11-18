@@ -43,6 +43,13 @@
       "when": 1794926649773,
       "tag": "0005_paminnelse_ledig",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795035755061,
+      "tag": "0006_sist_innlogget",
+      "breakpoints": true
     }
   ]
 }

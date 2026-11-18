@@ -40,6 +40,12 @@ export const user = pgTable("user", {
   image: text("image"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
+  /**
+   * Siste gang personen logget inn med engangskode. Settes når Better Auth
+   * lager en ny økt (se databaseHooks i src/lib/auth.ts). Vises bare for
+   * administratorene i medlemslisten.
+   */
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
 });
 
 export const session = pgTable(
