@@ -7,6 +7,7 @@ import { type DateRange, formatDate, formatRange, todayInOslo } from "@/lib/date
 import { firstName } from "@/lib/emails";
 import { listOwnCabins, listSharedCabins } from "@/lib/services/cabins";
 import { getCircle, getInvitationForViewer } from "@/lib/services/invitations";
+import { CARD_GRID } from "@/lib/layout";
 import { requireViewer } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Din hyttekrets" };
@@ -107,7 +108,7 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
           Hytter du kan låne
         </h2>
         {shared.length === 0 ? (
-          <Panel className="mt-4">
+          <Panel className="mt-4 max-w-3xl">
             <p className="text-lg">Ingen har vist deg en hytte ennå.</p>
             <p className="mt-2 max-w-[60ch] text-muted">
               En hytte dukker opp her når eieren velger å vise deg den. Kjenner du en
@@ -115,7 +116,7 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
             </p>
           </Panel>
         ) : (
-          <ul className="mt-5 grid gap-x-6 gap-y-8 sm:grid-cols-2">
+          <ul className={`mt-5 ${CARD_GRID}`}>
             {shared.map(({ cabin, ownerName, free }) => (
               <li key={cabin.id}>
                 <Link
@@ -124,7 +125,7 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
                 >
                   <CabinThumb photoId={cabin.coverPhotoId} card />
                   <span className="mt-3 block">
-                    <span className="block text-xl font-bold group-hover:underline">
+                    <span className="block text-lg font-bold group-hover:underline">
                       {cabin.name}
                     </span>
                     <span className="block text-muted">
@@ -157,7 +158,7 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
           Hytter du låner bort
         </h2>
         {own.length === 0 ? (
-          <Panel className="mt-4">
+          <Panel className="mt-4 max-w-3xl">
             <h3 className="text-xl font-bold">
               Har du en hytte du vil låne bort til noen du kjenner?
             </h3>
@@ -175,7 +176,7 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
           </Panel>
         ) : (
           <>
-            <ul className="mt-5 grid gap-x-6 gap-y-8 sm:grid-cols-2">
+            <ul className={`mt-5 ${CARD_GRID}`}>
               {own.map((cabin) => (
                 <li key={cabin.id}>
                   <Link
@@ -184,7 +185,7 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
                   >
                     <CabinThumb photoId={cabin.coverPhotoId} card />
                     <span className="mt-3 block">
-                      <span className="block text-xl font-bold group-hover:underline">
+                      <span className="block text-lg font-bold group-hover:underline">
                         {cabin.name}
                       </span>
                       <span className="block text-muted">{cabin.area}</span>
@@ -216,7 +217,7 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
             De som viser deg en hytte, og de du viser din. Ingen ser en liste over
             alle som er med.
           </p>
-          <ul className="mt-4 space-y-4">
+          <ul className="mt-4 grid items-start gap-4 lg:grid-cols-2">
             {circle.people.map((person) => {
               const first = firstName(person.name);
               // Forslaget om å dele tilbake vises når personen deler med brukeren og
@@ -268,7 +269,7 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
 
       {own.length > 0 && (
         <section aria-labelledby="inviter" className="mb-12">
-          <Panel>
+          <Panel className="max-w-3xl">
             <h2 id="inviter" className="text-2xl font-bold">
               Hvem ville du selv lånt bort hytta til?
             </h2>

@@ -4,6 +4,7 @@ import { CabinThumb } from "@/components/cabin-photo";
 import { ButtonLink, PageTitle, Panel } from "@/components/ui";
 import { formatRange } from "@/lib/dates";
 import { listOwnCabins } from "@/lib/services/cabins";
+import { CARD_GRID } from "@/lib/layout";
 import { requireViewer } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Dine hytter" };
@@ -19,7 +20,7 @@ export default async function MyCabinsPage() {
         lead="Du velger hvem som får se hver hytte, når den er ledig, og hvilke opphold du sier ja til."
       />
       {cabins.length === 0 && (
-        <Panel className="mb-8">
+        <Panel className="mb-8 max-w-3xl">
           <h2 className="text-xl font-bold">Har du en hytte du vil låne bort til noen du kjenner?</h2>
           <p className="mt-2 max-w-[60ch]">
             Legg inn hytta, åpne noen datoer og velg hvem som får se den. Ingen andre enn deg
@@ -30,7 +31,7 @@ export default async function MyCabinsPage() {
           </p>
         </Panel>
       )}
-      <ul className="mb-10 grid gap-x-6 gap-y-8 empty:hidden sm:grid-cols-2">
+      <ul className={`mb-10 empty:hidden ${CARD_GRID}`}>
         {cabins.map((cabin) => (
           <li key={cabin.id}>
             <Link
@@ -39,7 +40,7 @@ export default async function MyCabinsPage() {
             >
               <CabinThumb photoId={cabin.coverPhotoId} card />
               <span className="mt-3 block">
-                <span className="block text-xl font-bold group-hover:underline">
+                <span className="block text-lg font-bold group-hover:underline">
                   {cabin.name}
                 </span>
                 <span className="block text-muted">{cabin.area}</span>

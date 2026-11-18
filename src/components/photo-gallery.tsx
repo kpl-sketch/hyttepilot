@@ -37,7 +37,7 @@ export function PhotoGallery({
         width={shown.width}
         height={shown.height}
         decoding="async"
-        className={`aspect-[3/2] w-full rounded-2xl border border-line bg-surface ${
+        className={`aspect-[3/2] w-full rounded-2xl lg:aspect-[2/1] border border-line bg-surface ${
           upright ? "object-contain" : "object-cover"
         }`}
       />

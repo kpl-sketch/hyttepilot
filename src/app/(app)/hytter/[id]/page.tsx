@@ -78,8 +78,10 @@ export default async function CabinPage({ params, searchParams }: PageProps<"/hy
 
       <PhotoGallery photos={photos} cabinName={cabin.name} />
 
-      <div className="grid gap-10 md:grid-cols-[2fr_1fr]">
-        <div className="space-y-6">
+      {/* Mobil: fakta, pris, kalender under hverandre. Stor skjerm (xl): fakta og kalender
+          til venstre, prisen i en kolonne til høyre som blir stående når man blar. */}
+      <div className="grid gap-10 xl:grid-cols-[minmax(0,1fr)_22rem] xl:gap-x-16">
+        <div className="space-y-6 xl:col-start-1 xl:row-start-1">
           <section aria-labelledby="hvor">
             <h2 id="hvor" className="text-xl font-bold">
               Hvor ligger hytta?
@@ -113,104 +115,117 @@ export default async function CabinPage({ params, searchParams }: PageProps<"/hy
           )}
         </div>
 
-        <dl className="grid h-fit grid-cols-[1fr_auto] gap-x-6 gap-y-2 border-t-4 border-pine pt-4">
-          <dt className="text-muted">Per døgn</dt>
-          <dd className="text-right font-semibold tabular-nums">{formatKroner(perNight)}</dd>
-          <dt className="text-muted">Vask</dt>
-          <dd className="text-right font-semibold tabular-nums">
-            {cabin.cleaningFee > 0 ? formatKroner(cabin.cleaningFee) : "Du vasker selv"}
-          </dd>
-          <dt className="text-muted">Sengeplasser</dt>
-          <dd className="text-right font-semibold tabular-nums">{cabin.beds}</dd>
-          {cabin.minAge && (
-            <>
-              <dt className="text-muted">Aldersgrense</dt>
-              <dd className="text-right font-semibold tabular-nums">{cabin.minAge} år</dd>
-            </>
-          )}
-        </dl>
-      </div>
-
-      <Panel className="mt-10">
-        <h2 id="datoer" className="scroll-mt-24 text-2xl font-bold">
-          {isOwn ? "Slik ser kalenderen ut for dem du har valgt" : "Når vil du låne hytta?"}
-        </h2>
-        <p className="mt-1 mb-5 max-w-[60ch] text-muted">
-          {isOwn
-            ? "Bare du og de du har valgt, ser denne siden."
-            : `${owner} har åpnet datoene under for forespørsler. Du spør, og ${owner} svarer ja eller nei.`}
-        </p>
-        {isOwn ? (
-          <>
-            <DateRangePicker
-              today={calendar.today}
-              available={calendar.available}
-              taken={calendar.taken}
-              readOnly
-            />
-            <div className="mt-6 flex flex-wrap gap-3">
-              <ButtonLink href={previewHref(cabin.id)}>
-                Se hytta slik de du inviterer, ser den
-              </ButtonLink>
-              <ButtonLink href={`/mine-hytter/${cabin.id}`} variant="secondary">
-                Endre hytta og ledige perioder
+        <aside
+          aria-label="Pris og plass"
+          className="h-fit max-w-sm rounded-2xl border border-line bg-surface p-6 shadow-card xl:sticky xl:top-28 xl:col-start-2 xl:row-span-2 xl:row-start-1 xl:max-w-none"
+        >
+          <dl className="grid grid-cols-[1fr_auto] gap-x-6 gap-y-2">
+            <dt className="text-muted">Per døgn</dt>
+            <dd className="text-right font-semibold tabular-nums">{formatKroner(perNight)}</dd>
+            <dt className="text-muted">Vask</dt>
+            <dd className="text-right font-semibold tabular-nums">
+              {cabin.cleaningFee > 0 ? formatKroner(cabin.cleaningFee) : "Du vasker selv"}
+            </dd>
+            <dt className="text-muted">Sengeplasser</dt>
+            <dd className="text-right font-semibold tabular-nums">{cabin.beds}</dd>
+            {cabin.minAge && (
+              <>
+                <dt className="text-muted">Aldersgrense</dt>
+                <dd className="text-right font-semibold tabular-nums">{cabin.minAge} år</dd>
+              </>
+            )}
+          </dl>
+          {/* På mobil står kalenderen rett under, så knappen trengs bare når prisen står i egen kolonne. */}
+          {!isOwn && calendar.available.length > 0 && (
+            <div className="mt-5 hidden xl:block">
+              <ButtonLink href="#datoer" className="w-full">
+                Velg datoer
               </ButtonLink>
             </div>
-          </>
-        ) : (
-          <BookingForm preview={asBorrower}>
-            <input type="hidden" name="cabinId" value={cabin.id} />
-            <DateRangePicker
-              today={calendar.today}
-              available={calendar.available}
-              taken={calendar.taken}
-              price={{
-                costPerNight: cabin.costPerNight,
-                markupPercent: cabin.markupPercent,
-                cleaningFee: cabin.cleaningFee,
-              }}
-            />
-            {calendar.available.length === 0 && (
-              <p className="mt-3 max-w-[60ch]">
-                Du ser hytta, men du kan ikke sende en forespørsel før {owner} har
-                åpnet noen datoer. Si gjerne fra til {owner} at du er interessert.
-              </p>
-            )}
-            {calendar.available.length > 0 && (
-              <div className="mt-6 space-y-4">
-                <Field label="Hvor mange blir dere?" className="max-w-[12rem]">
-                  <Input
-                    name="guests"
-                    type="number"
-                    min={1}
-                    max={cabin.beds}
-                    defaultValue={2}
-                    required
-                  />
-                </Field>
-                <Field
-                  label={`Melding til ${owner}`}
-                  hint="Hvem blir med, og hva er planen?"
-                  className="max-w-xl"
-                >
-                  <Textarea name="message" maxLength={1000} />
-                </Field>
-                {asBorrower ? (
-                  <span aria-disabled="true" className={buttonClass("primary", "cursor-default")}>
-                    Send forespørsel
-                  </span>
-                ) : (
-                  <SubmitButton>Send forespørsel</SubmitButton>
-                )}
-                <p className="max-w-[60ch] text-sm text-muted">
-                  {owner} svarer ja eller nei. Ingenting er avtalt før svaret er ja, og du
-                  betaler ingenting før det.
-                </p>
+          )}
+        </aside>
+
+        <Panel className="xl:col-start-1 xl:row-start-2">
+          <h2 id="datoer" className="scroll-mt-24 text-2xl font-bold">
+            {isOwn ? "Slik ser kalenderen ut for dem du har valgt" : "Når vil du låne hytta?"}
+          </h2>
+          <p className="mt-1 mb-5 max-w-[60ch] text-muted">
+            {isOwn
+              ? "Bare du og de du har valgt, ser denne siden."
+              : `${owner} har åpnet datoene under for forespørsler. Du spør, og ${owner} svarer ja eller nei.`}
+          </p>
+          {isOwn ? (
+            <>
+              <DateRangePicker
+                today={calendar.today}
+                available={calendar.available}
+                taken={calendar.taken}
+                readOnly
+              />
+              <div className="mt-6 flex flex-wrap gap-3">
+                <ButtonLink href={previewHref(cabin.id)}>
+                  Se hytta slik de du inviterer, ser den
+                </ButtonLink>
+                <ButtonLink href={`/mine-hytter/${cabin.id}`} variant="secondary">
+                  Endre hytta og ledige perioder
+                </ButtonLink>
               </div>
-            )}
-          </BookingForm>
-        )}
-      </Panel>
+            </>
+          ) : (
+            <BookingForm preview={asBorrower}>
+              <input type="hidden" name="cabinId" value={cabin.id} />
+              <DateRangePicker
+                today={calendar.today}
+                available={calendar.available}
+                taken={calendar.taken}
+                price={{
+                  costPerNight: cabin.costPerNight,
+                  markupPercent: cabin.markupPercent,
+                  cleaningFee: cabin.cleaningFee,
+                }}
+              />
+              {calendar.available.length === 0 && (
+                <p className="mt-3 max-w-[60ch]">
+                  Du ser hytta, men du kan ikke sende en forespørsel før {owner} har
+                  åpnet noen datoer. Si gjerne fra til {owner} at du er interessert.
+                </p>
+              )}
+              {calendar.available.length > 0 && (
+                <div className="mt-6 space-y-4">
+                  <Field label="Hvor mange blir dere?" className="max-w-[12rem]">
+                    <Input
+                      name="guests"
+                      type="number"
+                      min={1}
+                      max={cabin.beds}
+                      defaultValue={2}
+                      required
+                    />
+                  </Field>
+                  <Field
+                    label={`Melding til ${owner}`}
+                    hint="Hvem blir med, og hva er planen?"
+                    className="max-w-xl"
+                  >
+                    <Textarea name="message" maxLength={1000} />
+                  </Field>
+                  {asBorrower ? (
+                    <span aria-disabled="true" className={buttonClass("primary", "cursor-default")}>
+                      Send forespørsel
+                    </span>
+                  ) : (
+                    <SubmitButton>Send forespørsel</SubmitButton>
+                  )}
+                  <p className="max-w-[60ch] text-sm text-muted">
+                    {owner} svarer ja eller nei. Ingenting er avtalt før svaret er ja, og du
+                    betaler ingenting før det.
+                  </p>
+                </div>
+              )}
+            </BookingForm>
+          )}
+        </Panel>
+      </div>
     </>
   );
 }

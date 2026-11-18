@@ -3,6 +3,7 @@ import { type ReactNode, Suspense } from "react";
 import { NavLink } from "@/components/nav-link";
 import { Logo } from "@/components/logo";
 import { Loading } from "@/components/ui";
+import { PAGE_WIDTH } from "@/lib/layout";
 import { getViewer } from "@/lib/session";
 import { signOut } from "../logg-inn/actions";
 
@@ -14,28 +15,30 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <>
       <header className="sticky top-0 z-10 border-b border-line bg-surface/95 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-x-8 gap-y-2 px-5 py-4">
+        <div className={`${PAGE_WIDTH} flex flex-wrap items-center gap-x-8 gap-y-2 py-4`}>
           <Logo href="/krets" />
           <Suspense fallback={null}>
             <Nav />
           </Suspense>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-4xl flex-1 px-5 py-10">
+      <main className={`${PAGE_WIDTH} flex-1 py-10`}>
         <Suspense fallback={<Loading />}>{children}</Suspense>
       </main>
-      <footer className="mx-auto w-full max-w-4xl border-t border-line px-5 py-6 text-sm text-muted">
-        <nav className="flex gap-6">
-          <Link href="/hytteloftet" className="underline">
-            Hytteløftet
-          </Link>
-          <Link href="/personvern" className="underline">
-            Personvern
-          </Link>
-          <Link href="/om" className="underline">
-            Om oss
-          </Link>
-        </nav>
+      <footer className="border-t border-line">
+        <div className={`${PAGE_WIDTH} py-6 text-sm text-muted`}>
+          <nav className="flex gap-6">
+            <Link href="/hytteloftet" className="underline">
+              Hytteløftet
+            </Link>
+            <Link href="/personvern" className="underline">
+              Personvern
+            </Link>
+            <Link href="/om" className="underline">
+              Om oss
+            </Link>
+          </nav>
+        </div>
       </footer>
     </>
   );

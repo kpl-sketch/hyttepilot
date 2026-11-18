@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { PAGE_WIDTH } from "@/lib/layout";
 
 /**
  * Linje øverst på /v1 til /v10 for å bla mellom versjonene: forrige, neste,
@@ -44,7 +45,7 @@ export function AudienceNav({
       aria-label="Bla mellom versjonene"
       className="sticky top-0 z-10 border-b border-line bg-surface/95 backdrop-blur"
     >
-      <div className="mx-auto flex w-full max-w-3xl items-center gap-3 px-5 py-2">
+      <div className={`${PAGE_WIDTH} flex items-center gap-3 py-2`}>
         <Link href={`/v${prev}`} className={arrow} aria-label={`Forrige versjon: ${prev}`}>
           ←
         </Link>
