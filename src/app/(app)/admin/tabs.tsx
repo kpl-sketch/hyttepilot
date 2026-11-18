@@ -1,14 +1,15 @@
 import Link from "next/link";
 
 /** Faner øverst i administrasjonen. */
-export function AdminTabs({ active }: { active: "invitasjoner" | "medlemmer" | "tall" }) {
+export function AdminTabs({ active }: { active: "invitasjoner" | "medlemmer" | "tall" | "innboks" }) {
   const tabs = [
     { key: "invitasjoner", href: "/admin", label: "Invitasjoner" },
     { key: "medlemmer", href: "/admin/medlemmer", label: "Medlemmer" },
     { key: "tall", href: "/admin/tall", label: "Tall" },
+    { key: "innboks", href: "/admin/innboks", label: "Innboks" },
   ] as const;
   return (
-    <nav aria-label="Administrasjon" className="mb-8 flex gap-6 border-b border-line">
+    <nav aria-label="Administrasjon" className="mb-8 flex gap-6 overflow-x-auto border-b border-line">
       {tabs.map((tab) => (
         <Link
           key={tab.key}
