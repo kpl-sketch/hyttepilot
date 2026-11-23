@@ -391,8 +391,18 @@ async function main() {
     // Utviklingsmerket til Next ligger over venstre pil i dev, så den trykkes med tastaturet.
     await nav.getByRole("link", { name: /Forrige versjon/ }).press("Enter");
     await anne.waitForURL(/\/v10$/);
+    // Piltastene virker først når linjen for den nye siden er på plass. Testen
+    // venter på det, slik et menneske ville gjort, før den trykker.
+    const ready = async (n) => {
+      await nav.getByRole("link", { name: new RegExp(`Versjon ${n} av 10`) }).waitFor();
+      await anne.evaluate(
+        () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(true)))),
+      );
+    };
+    await ready(10);
     await anne.keyboard.press("ArrowRight");
     await anne.waitForURL(/\/v1$/);
+    await ready(1);
     await anne.keyboard.press("ArrowLeft");
     await anne.waitForURL(/\/v10$/);
     await nav.getByRole("link", { name: /Versjon 10 av 10/ }).click();
@@ -933,7 +943,7 @@ async function main() {
     has: per.getByRole("button", { name: "Lagre endringene" }),
   });
   const description = form.locator('[name="description"]');
-  const suggest = form.getByRole("button", { name: "Foreslå tekst fra bilde og sted" });
+  const suggest = form.getByRole("button", { name: "La AI skrive teksten" });
   const save = async (expected) => {
     await form.getByRole("button", { name: "Lagre endringene" }).click();
     await eventually(
@@ -951,6 +961,20 @@ async function main() {
   await check("uten bilde er knappen grå, og siden sier hva som mangler", async () => {
     assert.equal(await suggest.isDisabled(), true);
     await form.getByText("Legg til et bilde under «Bilder» først.", { exact: false }).waitFor();
+  });
+
+  await check("siden sier tre steder at stikkord holder, og at AI skriver teksten", async () => {
+    // Under ledeteksten, i det tomme feltet og i ruten med knappen.
+    await form.getByText("Skriv stikkord. AI kan gjøre dem om til en ferdig tekst.").waitFor();
+    assert.match(await description.getAttribute("placeholder"), /^For eksempel: brygge, badstue/);
+    await form.getByText("Fra stikkord til ferdig tekst").waitFor();
+    assert.equal(await form.locator("ol > li").count(), 2);
+    await form.getByText("Stikkord holder, for eksempel «brygge, badstue, 15 min til butikken».", { exact: false }).waitFor();
+    await form.getByText("AI setter stikkordene sammen med bildene, stedet og sengeplassene", { exact: false }).waitFor();
+    // Stegene leses opp sammen med feltet.
+    const helpId = await description.getAttribute("aria-describedby");
+    assert.ok(helpId);
+    assert.equal(await form.locator(`[id="${helpId}"] > li`).count(), 2);
   });
 
   // Et bilde av en rød bu ved sjøen, lastet opp slik eieren gjør det.
@@ -986,7 +1010,7 @@ async function main() {
       dialog.dismiss();
     });
     await suggest.click();
-    assert.match(question, /bygger på teksten i feltet og erstatter den/);
+    assert.match(question, /AI skriver en ny tekst ut fra det som står i feltet, og erstatter det/);
     assert.equal(await description.inputValue(), ORIGINAL);
     assert.equal(ai.seen.length, 0, "ingenting sendes når eieren sier nei");
   });
@@ -995,7 +1019,7 @@ async function main() {
     per.once("dialog", (dialog) => dialog.accept());
     await description.focus();
     await per.keyboard.press("Tab");
-    assert.match(await focusName(per), /Foreslå tekst fra bilde og sted/);
+    assert.match(await focusName(per), /La AI skrive teksten/);
     await per.keyboard.press("Enter");
     await form.getByRole("status").getByText("Forslaget står i feltet.", { exact: false }).waitFor();
     assert.equal(await description.inputValue(), DRAFT);
@@ -1044,6 +1068,18 @@ async function main() {
     ai.state.answer = "text";
   });
 
+  await check("stikkord i feltet blir til en ferdig tekst", async () => {
+    const before = ai.seen.length;
+    await description.fill("brygge, badstue, 15 min til butikken");
+    per.once("dialog", (dialog) => dialog.accept());
+    await suggest.click();
+    await form.getByRole("status").getByText("Forslaget står i feltet.", { exact: false }).waitFor();
+    const [facts] = JSON.parse(ai.seen[before]).messages[1].content;
+    assert.ok(facts.text.includes("---\nbrygge, badstue, 15 min til butikken\n---"), "stikkordene er grunnlag");
+    assert.equal(await description.inputValue(), DRAFT);
+    assert.equal(await storedDescription(), "Skrevet selv, uten hjelp.", "ingenting er lagret ennå");
+  });
+
   await check("tom beskrivelse gir et hint øverst, og forslaget kommer uten spørsmål", async () => {
     await description.fill("");
     await save("");
@@ -1055,7 +1091,9 @@ async function main() {
       dialog.accept();
     };
     per.on("dialog", onDialog);
-    await per.getByRole("link", { name: "Få et forslag ut fra bildet og stedet" }).click();
+    await per.getByRole("link", { name: "Skriv noen stikkord, så skriver AI teksten" }).click();
+    // Det tomme feltet viser et eksempel på stikkord, og ruten under forklarer de to stegene.
+    await shot(per, "17c-stikkord-tomt-felt", form.locator("fieldset").first());
     await suggest.click();
     await form.getByRole("status").getByText("Forslaget står i feltet.", { exact: false }).waitFor();
     per.off("dialog", onDialog);

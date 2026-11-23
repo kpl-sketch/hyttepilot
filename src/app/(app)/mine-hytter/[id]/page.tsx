@@ -145,7 +145,7 @@ export default async function ManageCabinPage({
           <p className="mt-4 max-w-[60ch]">
             Hytta har ingen beskrivelse ennå.{" "}
             <a href="#detaljer" className="underline">
-              Få et forslag ut fra bildet og stedet
+              Skriv noen stikkord, så skriver AI teksten
             </a>
             .
           </p>
