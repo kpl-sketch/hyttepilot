@@ -12,7 +12,8 @@ litt over selvkost. Navnet er et arbeidsnavn og byttes ett sted: `NEXT_PUBLIC_AP
   Det første er forsidebildet. Bildene vises bare til dem som får se hytta.
 - **Tekstforslag til beskrivelsen.** Under beskrivelsesfeltet på siden for hytta
   står knappen «Foreslå tekst fra bilde og sted». En AI-tjeneste skriver et kort,
-  nøkternt utkast ut fra forsidebildet og stedsnavnet. Utkastet legges i feltet,
+  nøkternt utkast ut fra bildene, stedet, antall sengeplasser og det eieren alt
+  har skrevet i feltet, for eksempel stikkord. Utkastet legges i feltet,
   og ingenting lagres før eieren trykker «Lagre endringene». Uten bilde er knappen
   grå. Høyst ti forslag per hytte i døgnet. Slått av uten `AI_GATEWAY_API_KEY`.
 - **Adresse og vei.** Eieren legger inn adressen, med forslag fra Kartverkets
@@ -238,7 +239,10 @@ Regelen for ny funksjonalitet: tilgangssjekken skal ligge i tjenestelaget
   koordinater eller en kartlenke.
 - **Tekstforslagene kommer fra Vercel AI Gateway** (`eu.ai-gateway.vercel.sh`), med
   modellen i `AI_DESCRIPTION_MODEL` (standard `anthropic/claude-sonnet-5.5`). Ut går
-  bare forsidebildet, forminsket til 1024 punkter, og stedsnavnet. Forespørselen
+  ikke mer enn det en låner ser før lånet er betalt: bildene, forminsket til 1024
+  punkter, stedsnavnet, en avrundet posisjon for området, antall sengeplasser og
+  teksten i beskrivelsesfeltet. Aldri navnet på hytta, adresse, nøyaktig posisjon,
+  Vipps-nummer, praktiske opplysninger, pris, regler eller noe om eieren. Forespørselen
   ber om at modellen kjører i EU og at leverandøren ikke tar vare på innholdet
   (`inferenceRegion` og `zeroDataRetention`). Kan ikke gatewayen oppfylle det,
   feiler forespørselen, og eieren får beskjed om å skrive selv. Zero data

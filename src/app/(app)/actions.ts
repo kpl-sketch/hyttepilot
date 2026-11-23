@@ -116,16 +116,18 @@ export async function updateCabinAction(
 }
 
 /**
- * Et utkast til beskrivelsen av hytta, ut fra forsidebildet og stedet. Kalles
- * fra knappen under beskrivelsesfeltet. Ingenting lagres: teksten legges i
- * feltet, og eieren lagrer selv med skjemaet.
+ * Et utkast til beskrivelsen av hytta, ut fra bildene, stedet, sengeplassene
+ * og det som står i beskrivelsesfeltet (`written`). Kalles fra knappen under
+ * feltet. Ingenting lagres: teksten legges i feltet, og eieren lagrer selv
+ * med skjemaet.
  */
 export async function suggestDescriptionAction(
   cabinId: string,
+  written: string,
 ): Promise<{ text: string } | { error: string }> {
   const viewer = await requireViewer();
   try {
-    return { text: await suggestDescription(viewer, String(cabinId)) };
+    return { text: await suggestDescription(viewer, String(cabinId), written) };
   } catch (error) {
     return { error: toFormState(error)?.error ?? "Noe gikk galt hos oss. Prøv igjen om litt." };
   }

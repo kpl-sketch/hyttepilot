@@ -61,7 +61,7 @@ async function check(name, fn) {
 
 const AI_PORT = Number(process.env.TEST_AI_PORT ?? 4011);
 const DRAFT =
-  "Rød bu helt nede ved sjøen i Kragerø. Sandstrand foran, og utsikt mot holmene.";
+  "Rød bu helt nede ved sjøen i Kragerø. Seks sengeplasser. Peis og badstue. Sandstrand foran bua, og utsikt mot holmene.";
 
 /**
  * Etterligner AI-tjenesten som skriver tekstforslag. Serveren som testes, må
@@ -977,14 +977,16 @@ async function main() {
 
   await check("med tekst i feltet spør siden først, og nei endrer ingenting", async () => {
     await eventually(async () => suggest.isEnabled(), "knappen ble ikke klar etter at bildet kom på plass");
-    await form.getByText("Forsidebildet og stedsnavnet sendes til en AI-tjeneste", { exact: false }).waitFor();
+    await form
+      .getByText("Bildene, stedet, sengeplassene og det du har skrevet i feltet, sendes til en AI-tjeneste", { exact: false })
+      .waitFor();
     let question = "";
     per.once("dialog", (dialog) => {
       question = dialog.message();
       dialog.dismiss();
     });
     await suggest.click();
-    assert.match(question, /erstatter teksten/);
+    assert.match(question, /bygger på teksten i feltet og erstatter den/);
     assert.equal(await description.inputValue(), ORIGINAL);
     assert.equal(ai.seen.length, 0, "ingenting sendes når eieren sier nei");
   });
@@ -1006,15 +1008,20 @@ async function main() {
     await shot(per, "17a-tekstforslag", form.locator("fieldset").first());
   });
 
-  await check("AI-tjenesten fikk bildet og stedet, og ikke noe annet om hytta eller eieren", async () => {
+  await check("AI-tjenesten fikk bildet, stedet, sengeplassene og teksten i feltet, og ikke noe annet", async () => {
     assert.equal(ai.seen.length, 1);
     const body = JSON.parse(ai.seen[0]);
-    const [place, image] = body.messages[1].content;
-    assert.equal(place.text, "Stedet eieren har oppgitt: «Kragerø»");
-    assert.match(image.image_url.url, /^data:image\/jpeg;base64,/);
-    const rest = ai.seen[0].replace(image.image_url.url, "");
-    // Beskrivelsen som står i feltet, sendes ikke. (Ordet «Tømmerhytte» alene står i instruksens eksempler.)
-    assert.equal(/Sjøbua|Fjellvegen|Nøkkelboks|91234567|per@test\.local|Per Eier|Tømmerhytte med peis|skiløypa/.test(rest), false);
+    const [facts, ...images] = body.messages[1].content;
+    assert.match(facts.text, /^Opplysninger om hytta:\n- Sted: «Kragerø»\n/);
+    assert.match(facts.text, /\n- Sengeplasser: 6\n/);
+    // Det eieren hadde skrevet i feltet, er grunnlag for forslaget.
+    assert.ok(facts.text.includes(`---\n${ORIGINAL}\n---`));
+    assert.equal(images.length, 1);
+    assert.match(images[0].image_url.url, /^data:image\/jpeg;base64,/);
+    // Navn, adresse, nøkkel, regler, telefon og eier sendes ikke.
+    body.messages[1].content = [facts];
+    const rest = JSON.stringify(body);
+    assert.equal(/Sjøbua|Fjellvegen|Nøkkelboks|Hund er velkommen|91234567|per@test\.local|Per Eier/.test(rest), false);
   });
 
   await check("forslaget lagres først når eieren trykker lagre", async () => {
@@ -1062,7 +1069,7 @@ async function main() {
   await check("personvernsiden sier hva som sendes til AI-tjenesten", async () => {
     await anne.goto(`${BASE}/personvern`);
     await anne
-      .getByText("sender vi forsidebildet og stedsnavnet til en AI-tjeneste", { exact: false })
+      .getByText("sender vi bildene av hytta, stedsnavnet, en avrundet posisjon", { exact: false })
       .waitFor();
     await anne.getByText("Selve forslaget lagrer vi ikke.", { exact: false }).waitFor();
   });

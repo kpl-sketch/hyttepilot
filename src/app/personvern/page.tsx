@@ -89,10 +89,11 @@ export default function PrivacyPage() {
           </p>
           {suggestions && (
             <p className="mt-2">
-              Ber du om et tekstforslag til beskrivelsen av hytta, sender vi forsidebildet og
-              stedsnavnet til en AI-tjeneste som skriver utkastet. Navnet ditt, navnet på hytta,
-              adressen og kartposisjonen sendes ikke. Vi ber om at bildet behandles i EU, og at
-              AI-tjenesten sletter bildet og teksten når forslaget er laget.
+              Ber du om et tekstforslag til beskrivelsen av hytta, sender vi bildene av hytta,
+              stedsnavnet, en avrundet posisjon for området, antall sengeplasser og det du har
+              skrevet i beskrivelsen, til en AI-tjeneste som skriver utkastet. Navnet ditt, navnet
+              på hytta, adressen og den nøyaktige kartposisjonen sendes ikke. Vi ber om at
+              opplysningene behandles i EU, og at AI-tjenesten sletter dem når forslaget er laget.
             </p>
           )}
         </section>

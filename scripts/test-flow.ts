@@ -37,7 +37,12 @@ import { booking, profile, user } from "../src/lib/db/schema";
 import { canSuggestDescription, MAX_SUGGESTIONS_PER_DAY } from "../src/lib/description-assist";
 import { type Actor, UserError } from "../src/lib/errors";
 import { PLEDGE_VERSION } from "../src/lib/pledge";
-import { directionLinks, isShortMapLink, parsePosition } from "../src/lib/position";
+import {
+  approximatePosition,
+  directionLinks,
+  isShortMapLink,
+  parsePosition,
+} from "../src/lib/position";
 import { positionInMapPage, resolveShortMapLink } from "../src/lib/services/map-links";
 import { searchAddresses, searchLocations } from "../src/lib/services/addresses";
 import {
@@ -1224,14 +1229,31 @@ async function main() {
     assert.equal(await suggestionCount(medBilder), 0);
   });
   process.env.AI_GATEWAY_API_KEY = "test-nokkel";
-  await check("eieren får et forslag ut fra forsidebildet og stedet", async () => {
+  await check("eieren får et forslag", async () => {
     assert.equal(canSuggestDescription(), true);
     assert.equal(await suggestDescription(kari, medBilder), DRAFT);
     assert.equal(ai.seen.length, 1);
     assert.equal(ai.seen[0].authorization, "Bearer test-nokkel");
   });
-  await check("ut går bare forsidebildet og stedsnavnet, med krav om EU og ingen lagring", async () => {
-    const body = JSON.parse(ai.seen[0].body);
+  /** Forespørselen delt i opplysningene som tekst, bildene, og alt uten bildene. */
+  const sentParts = (raw: string) => {
+    const body = JSON.parse(raw);
+    const [facts, ...images] = body.messages[1].content as {
+      type: string;
+      text?: string;
+      image_url?: { url: string };
+    }[];
+    const jpegs = images.map((image) => {
+      const found = String(image.image_url?.url).match(/^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/);
+      assert.ok(found, "hvert bilde sendes som JPG i selve forespørselen");
+      return Buffer.from(found[1], "base64");
+    });
+    // Bildene tas ut før vi leter etter opplysninger som ikke skal være med.
+    body.messages[1].content = [facts];
+    return { body, facts: String(facts.text), jpegs, rest: JSON.stringify(body) };
+  };
+  await check("ut går alle bildene, stedet, en avrundet posisjon og sengeplassene, med krav om EU og ingen lagring", async () => {
+    const { body, facts, jpegs } = sentParts(ai.seen[0].body);
     assert.equal(body.model, "anthropic/claude-sonnet-5.5");
     assert.deepEqual(body.providerOptions, {
       gateway: { zeroDataRetention: true, inferenceRegion: { scope: "zone", geoRegion: "eu" } },
@@ -1240,22 +1262,39 @@ async function main() {
       body.messages.map((m: { role: string }) => m.role),
       ["system", "user"],
     );
-    const [text, image] = body.messages[1].content;
-    assert.equal(text.text, "Stedet eieren har oppgitt: «Hafjell»");
 
-    // Bildet er forsidebildet («stue.jpg», rødt), forminsket og som JPG.
-    const found = String(image.image_url.url).match(/^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/);
-    assert.ok(found, "bildet sendes som JPG i selve forespørselen");
-    const sent = sharp(Buffer.from(found[1], "base64"));
-    const meta = await sent.metadata();
-    assert.equal(meta.format, "jpeg");
-    assert.deepEqual([meta.width, meta.height], [1024, 768]);
-    assert.equal(meta.exif, undefined);
-    const [red, green, blue] = (await sent.stats()).channels.map((c) => Math.round(c.mean));
-    assert.ok(Math.abs(red - 0xa3) < 12 && Math.abs(green - 0x27) < 12 && Math.abs(blue - 0x1c) < 12);
+    // Opplysningene: sted, avrundet posisjon og sengeplasser fra den lagrede hytta.
+    const point = approximatePosition({ latitude: 61.2345, longitude: 10.4567 });
+    assert.ok(point);
+    const one = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
+    assert.match(facts, /^Opplysninger om hytta:\n- Sted: «Hafjell»\n/);
+    assert.ok(
+      facts.includes(`breddegrad ${one(point.latitude)}, lengdegrad ${one(point.longitude)}.`),
+      "posisjonen er avrundet til én desimal",
+    );
+    assert.match(facts, /\n- Sengeplasser: 6\n/);
+    assert.match(facts, /Eieren har ikke skrevet noe i beskrivelsen ennå\.$/);
 
-    // Ingenting annet om hytta eller eieren er med.
-    const rest = ai.seen[0].body.replace(found[1], "");
+    // Alle bildene til hytta, forminsket og som JPG, forsidebildet først.
+    const stored = await listCabinPhotos(medBilder);
+    assert.equal(stored.length, 7);
+    assert.equal(jpegs.length, stored.length);
+    assert.match(facts, /\n- Bilder: 7 bilder følger\. Det første er forsidebildet\.\n/);
+    const mean = async (jpeg: Buffer) =>
+      (await sharp(jpeg).stats()).channels.map((c) => Math.round(c.mean));
+    const near = (color: number[], hex: number[]) =>
+      color.every((value, i) => Math.abs(value - hex[i]) < 12);
+    for (const jpeg of jpegs) {
+      const meta = await sharp(jpeg).metadata();
+      assert.equal(meta.format, "jpeg");
+      assert.deepEqual([meta.width, meta.height], [1024, 768]);
+      assert.equal(meta.exif, undefined);
+    }
+    assert.ok(near(await mean(jpegs[0]), [0xa3, 0x27, 0x1c]), "forsidebildet («stue.jpg») først");
+    assert.ok(near(await mean(jpegs[1]), [0x16, 0x30, 0x27]), "deretter «utsikt.jpg»");
+  });
+  await check("navn, adresse, nøyaktig posisjon, Vipps, nøkkel, regler og eier sendes aldri", async () => {
+    const { rest } = sentParts(ai.seen[0].body);
     for (const secret of [
       "Bildehytta",
       "Fjellvegen",
@@ -1275,6 +1314,39 @@ async function main() {
       assert.equal(rest.includes(secret), false, `«${secret}» skal ikke sendes til AI-tjenesten`);
     }
   });
+  await check("det eieren har skrevet i feltet, blir med som grunnlag", async () => {
+    const before = ai.seen.length;
+    await suggestDescription(kari, medBilder, "  Badstue og brygge. 15 minutter til butikken.  ");
+    const { facts, rest } = sentParts(ai.seen[before].body);
+    assert.match(
+      facts,
+      /Det eieren har skrevet i beskrivelsen, mellom strekene:\n---\nBadstue og brygge\. 15 minutter til butikken\.\n---$/,
+    );
+    // Den lagrede beskrivelsen sendes ikke av seg selv, bare det som står i feltet.
+    assert.equal(rest.includes("Tømmerhytte med badstue"), false);
+    // Annet enn tekst fra skjemaet blir ikke med, og lang tekst kuttes.
+    await suggestDescription(kari, medBilder, { text: "ikke en tekst" });
+    assert.match(sentParts(ai.seen[before + 1].body).facts, /ikke skrevet noe i beskrivelsen ennå/);
+    await suggestDescription(kari, medBilder, "x".repeat(5000));
+    assert.equal(sentParts(ai.seen[before + 2].body).facts.includes("x".repeat(2001)), false);
+    assert.ok(sentParts(ai.seen[before + 2].body).facts.includes("x".repeat(2000)));
+  });
+  await check("hytte uten kartposisjon sendes uten posisjon", async () => {
+    const was = await db.execute<{ latitude: number | null; longitude: number | null }>(
+      sql`select "latitude", "longitude" from "cabin" where "id" = ${karisHytte}`,
+    );
+    await db.execute(sql`update "cabin" set "latitude" = null, "longitude" = null where "id" = ${karisHytte}`);
+    const before = ai.seen.length;
+    await suggestDescription(kari, karisHytte);
+    const { facts, jpegs } = sentParts(ai.seen[before].body);
+    assert.equal(/posisjon|breddegrad/.test(facts), false);
+    assert.equal(jpegs.length, 1);
+    assert.match(facts, /\n- Bilder: 1 bilde følger\.\n/);
+    // Hytta settes tilbake slik den var, så resten av testen ser det samme som før.
+    await db.execute(
+      sql`update "cabin" set "latitude" = ${was.rows[0].latitude}, "longitude" = ${was.rows[0].longitude} where "id" = ${karisHytte}`,
+    );
+  });
   await check("instruksen ber om nøktern tekst: ikke vi-form, ikke følelser, ikke klisjeer", async () => {
     // Valgt av prosjekteier 2026-11-23, etter å ha lest de første forslagene.
     const instructions: string = JSON.parse(ai.seen[0].body).messages[0].content;
@@ -1284,33 +1356,40 @@ async function main() {
     assert.match(instructions, /Ingen klisjeer og ingen skryteord/);
     assert.match(instructions, /Finn aldri på noe/);
     assert.equal(/varm og personlig|vi-form/.test(instructions), false);
+    // Grunnlaget (prosjekteier 2026-11-23): eierens egen tekst og sengeplassene er fakta.
+    assert.match(instructions, /Det eieren selv har skrevet, er fakta/);
+    assert.match(instructions, /Antall sengeplasser er fakta/);
+    assert.match(instructions, /Se på alle bildene/);
+    assert.match(instructions, /Skriv aldri koordinater/);
   });
   await check("forslaget lagres ikke på hytta, bare at eieren ba om det", async () => {
     assert.equal((await getOwnCabin(kari, medBilder))?.description, "Tømmerhytte med badstue.");
-    assert.equal(await suggestionCount(medBilder), 1);
+    assert.equal(await suggestionCount(medBilder), 4, "fire forsøk så langt, ett per forespørsel");
   });
   await check("bare eieren kan be om forslag, ikke lånere eller administratorer", async () => {
+    const sentSoFar = ai.seen.length;
     await refused(() => suggestDescription(per, medBilder), /Fant ikke hytta/);
     await refused(() => suggestDescription(admin, medBilder), /Fant ikke hytta/);
     await refused(() => suggestDescription(ola, medBilder), /Fant ikke hytta/);
     await refused(() => suggestDescription(kari, "ikke-en-id"), /Fant ikke hytta/);
     await refused(() => suggestDescription(kari, randomUUID()), /Fant ikke hytta/);
-    assert.equal(ai.seen.length, 1, "ingenting er sendt for andre enn eieren");
-    assert.equal(await suggestionCount(medBilder), 1);
+    assert.equal(ai.seen.length, sentSoFar, "ingenting er sendt for andre enn eieren");
+    assert.equal(await suggestionCount(medBilder), 4);
   });
   await check("hytte uten bilde får ikke forslag, og ingenting sendes ut", async () => {
     assert.deepEqual(await listCabinPhotos(persHytte), []);
+    const sentSoFar = ai.seen.length;
     await refused(() => suggestDescription(per, persHytte), /Legg til et bilde/);
-    assert.equal(ai.seen.length, 1);
+    assert.equal(ai.seen.length, sentSoFar);
     assert.equal(await suggestionCount(persHytte), 0);
   });
   await check("svaret ryddes for anførselstegn og utheving", async () => {
     ai.state.answer = "quoted";
     assert.equal(await suggestDescription(kari, medBilder), "Hytta ligger lunt til.");
   });
-  await check("viser ikke bildet en hytte, blir eieren bedt om å bytte forsidebilde", async () => {
+  await check("viser ingen av bildene en hytte, blir eieren bedt om et bilde som gjør det", async () => {
     ai.state.answer = "none";
-    await refused(() => suggestDescription(kari, medBilder), /annet forsidebilde/);
+    await refused(() => suggestDescription(kari, medBilder), /bilde som viser hytta/);
   });
   await check("svikter AI-tjenesten, får eieren beskjed og kan fortsatt lagre hytta", async () => {
     const logged = await loggedDuring(async () => {

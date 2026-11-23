@@ -12,10 +12,10 @@ import { buttonClass, Field, Textarea } from "./ui";
 export type SuggestState = "ready" | "needs-photo";
 
 /**
- * Beskrivelsen av hytta, med en knapp som foreslår en tekst ut fra
- * forsidebildet og stedet. Forslaget legges i feltet og lagres først når
- * eieren trykker «Lagre endringene». Uten `suggest` er tekstforslag ikke
- * slått på, og feltet står alene.
+ * Beskrivelsen av hytta, med en knapp som foreslår en tekst ut fra bildene,
+ * stedet, sengeplassene og det eieren alt har skrevet i feltet. Forslaget
+ * legges i feltet og lagres først når eieren trykker «Lagre endringene».
+ * Uten `suggest` er tekstforslag ikke slått på, og feltet står alene.
  */
 export function DescriptionField({
   cabinId,
@@ -46,14 +46,14 @@ export function DescriptionField({
     const written = field.current?.value.trim() ?? "";
     if (
       written &&
-      !window.confirm("Forslaget erstatter teksten som står i feltet nå. Vil du fortsette?")
+      !window.confirm("Forslaget bygger på teksten i feltet og erstatter den. Vil du fortsette?")
     ) {
       return;
     }
     setResult(null);
     startTransition(async () => {
       try {
-        const answer = await suggestDescriptionAction(cabinId);
+        const answer = await suggestDescriptionAction(cabinId, written);
         if ("error" in answer) {
           setResult({ ok: false, text: answer.error });
           return;
@@ -100,8 +100,8 @@ export function DescriptionField({
           </div>
           <p className="mt-2 max-w-[60ch] text-sm text-muted">
             {suggest === "needs-photo"
-              ? "Legg til et bilde under «Bilder» først. Da kan du få et forslag ut fra forsidebildet og stedet."
-              : "Forsidebildet og stedsnavnet sendes til en AI-tjeneste som skriver et utkast. Du retter på det før du lagrer."}
+              ? "Legg til et bilde under «Bilder» først. Da kan du få et forslag ut fra bildene og opplysningene om hytta."
+              : "Bildene, stedet, sengeplassene og det du har skrevet i feltet, sendes til en AI-tjeneste som skriver et utkast. Skriv gjerne stikkord først. Du retter på utkastet før du lagrer."}
           </p>
           {result && (
             <p
