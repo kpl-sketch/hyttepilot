@@ -326,7 +326,7 @@ async function photo(name: string, background: string): Promise<File> {
 }
 
 const DRAFT =
-  "Vi har hatt hytta på Hafjell i mange år. Den ligger lunt til mellom furutrærne, og fra trappa ser vi rett ut i skogen.";
+  "Tømmerhytte mellom furutrær på Hafjell. Trapp opp til inngangen, og skog på alle sider.";
 
 /**
  * Etterligner AI-tjenesten som skriver tekstforslag, slik at testen verken
@@ -1274,6 +1274,16 @@ async function main() {
     ]) {
       assert.equal(rest.includes(secret), false, `«${secret}» skal ikke sendes til AI-tjenesten`);
     }
+  });
+  await check("instruksen ber om nøktern tekst: ikke vi-form, ikke følelser, ikke klisjeer", async () => {
+    // Valgt av prosjekteier 2026-11-23, etter å ha lest de første forslagene.
+    const instructions: string = JSON.parse(ai.seen[0].body).messages[0].content;
+    assert.match(instructions, /Nøktern, konkret og vennlig/);
+    assert.match(instructions, /Bruk ikke «vi», «vår», «oss», «jeg» eller «min»/);
+    assert.match(instructions, /ingenting om følelser, minner, vaner/);
+    assert.match(instructions, /Ingen klisjeer og ingen skryteord/);
+    assert.match(instructions, /Finn aldri på noe/);
+    assert.equal(/varm og personlig|vi-form/.test(instructions), false);
   });
   await check("forslaget lagres ikke på hytta, bare at eieren ba om det", async () => {
     assert.equal((await getOwnCabin(kari, medBilder))?.description, "Tømmerhytte med badstue.");

@@ -12,7 +12,7 @@ litt over selvkost. Navnet er et arbeidsnavn og byttes ett sted: `NEXT_PUBLIC_AP
   Det første er forsidebildet. Bildene vises bare til dem som får se hytta.
 - **Tekstforslag til beskrivelsen.** Under beskrivelsesfeltet på siden for hytta
   står knappen «Foreslå tekst fra bilde og sted». En AI-tjeneste skriver et kort,
-  personlig utkast ut fra forsidebildet og stedsnavnet. Utkastet legges i feltet,
+  nøkternt utkast ut fra forsidebildet og stedsnavnet. Utkastet legges i feltet,
   og ingenting lagres før eieren trykker «Lagre endringene». Uten bilde er knappen
   grå. Høyst ti forslag per hytte i døgnet. Slått av uten `AI_GATEWAY_API_KEY`.
 - **Adresse og vei.** Eieren legger inn adressen, med forslag fra Kartverkets

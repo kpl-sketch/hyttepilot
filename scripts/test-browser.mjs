@@ -61,7 +61,7 @@ async function check(name, fn) {
 
 const AI_PORT = Number(process.env.TEST_AI_PORT ?? 4011);
 const DRAFT =
-  "Vi har hatt hytta i Kragerø i mange år. Den røde bua ligger helt nede ved sjøen, og fra døra ser vi rett ut mot holmene.";
+  "Rød bu helt nede ved sjøen i Kragerø. Sandstrand foran, og utsikt mot holmene.";
 
 /**
  * Etterligner AI-tjenesten som skriver tekstforslag. Serveren som testes, må
@@ -1013,7 +1013,8 @@ async function main() {
     assert.equal(place.text, "Stedet eieren har oppgitt: «Kragerø»");
     assert.match(image.image_url.url, /^data:image\/jpeg;base64,/);
     const rest = ai.seen[0].replace(image.image_url.url, "");
-    assert.equal(/Sjøbua|Fjellvegen|Nøkkelboks|91234567|per@test\.local|Per Eier|Tømmerhytte/.test(rest), false);
+    // Beskrivelsen som står i feltet, sendes ikke. (Ordet «Tømmerhytte» alene står i instruksens eksempler.)
+    assert.equal(/Sjøbua|Fjellvegen|Nøkkelboks|91234567|per@test\.local|Per Eier|Tømmerhytte med peis|skiløypa/.test(rest), false);
   });
 
   await check("forslaget lagres først når eieren trykker lagre", async () => {
