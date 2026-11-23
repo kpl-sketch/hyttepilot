@@ -35,6 +35,7 @@ import {
   type SharePreview,
   shareWithPerson,
 } from "@/lib/services/invitations";
+import { suggestDescription } from "@/lib/services/descriptions";
 import { addCabinPhotos, makeCoverPhoto, removeCabinPhoto } from "@/lib/services/photos";
 import { setIdleReminders } from "@/lib/services/reminders";
 import { requireViewer } from "@/lib/session";
@@ -112,6 +113,22 @@ export async function updateCabinAction(
   }
   refresh();
   return { ok: "Lagret." };
+}
+
+/**
+ * Et utkast til beskrivelsen av hytta, ut fra forsidebildet og stedet. Kalles
+ * fra knappen under beskrivelsesfeltet. Ingenting lagres: teksten legges i
+ * feltet, og eieren lagrer selv med skjemaet.
+ */
+export async function suggestDescriptionAction(
+  cabinId: string,
+): Promise<{ text: string } | { error: string }> {
+  const viewer = await requireViewer();
+  try {
+    return { text: await suggestDescription(viewer, String(cabinId)) };
+  } catch (error) {
+    return { error: toFormState(error)?.error ?? "Noe gikk galt hos oss. Prøv igjen om litt." };
+  }
 }
 
 export async function addCabinPhotosAction(

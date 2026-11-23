@@ -208,6 +208,26 @@ export const cabinPhoto = pgTable(
 );
 
 /**
+ * Hver gang en eier ber om et tekstforslag til beskrivelsen av hytta. Brukes
+ * til taket per døgn og til å telle hvor ofte forslaget brukes. Selve
+ * forslaget lagres ikke.
+ */
+export const descriptionSuggestion = pgTable(
+  "description_suggestion",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    cabinId: uuid("cabin_id")
+      .notNull()
+      .references(() => cabin.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("description_suggestion_cabin_idx").on(t.cabinId, t.createdAt)],
+);
+
+/**
  * Deling: eieren har valgt at denne personen får se hytta og sende
  * forespørsler. Dette er den eneste kilden til innsyn i andres hytter.
  * Raden sier ingenting om ledighet, og den gir ingen rett til å dele videre.

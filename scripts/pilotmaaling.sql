@@ -4,6 +4,8 @@
 --   psql "$DATABASE_URL" -f scripts/pilotmaaling.sql
 --
 -- Tallene bygger på det tjenesten allerede lagrer. Ingen sporing er lagt til.
+-- Unntaket er tekstforslag: tjenesten fører når en eier ber om et forslag,
+-- fordi taket per døgn trenger det. Selve forslaget lagres ikke.
 -- Resultatet inneholder bare antall, aldri navn eller adresser.
 --
 -- TESTDATA: Brukere i listen under telles ikke, verken som inviterte eller
@@ -118,5 +120,19 @@ union all
 select 12, 'Av disse: gjennomført opphold (betalt, og avreisedagen er passert)',
        count(*) filter (where b.status = 'paid' and b.end_date <= current_date)::text
 from booking b where b.borrower_id not in (select id from test_user)
+
+union all
+select 13, 'Hytter lagt inn (ikke fra testbrukere)', count(*)::text
+from cabin c where c.owner_id not in (select id from test_user)
+union all
+select 14, 'Av disse: har en beskrivelse',
+       count(*) filter (where btrim(c.description) <> '')::text
+from cabin c where c.owner_id not in (select id from test_user)
+union all
+select 15, 'Av disse: eieren har bedt om tekstforslag minst én gang',
+       count(*) filter (where exists (
+         select 1 from description_suggestion s where s.cabin_id = c.id
+       ))::text
+from cabin c where c.owner_id not in (select id from test_user)
 
 order by nr;

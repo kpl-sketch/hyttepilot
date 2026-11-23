@@ -10,6 +10,11 @@ litt over selvkost. Navnet er et arbeidsnavn og byttes ett sted: `NEXT_PUBLIC_AP
 - **Hytter.** Eieren legger inn hytte, pris, regler og ledige perioder.
 - **Bilder.** Opptil åtte bilder per hytte, valgt når hytta legges inn eller senere.
   Det første er forsidebildet. Bildene vises bare til dem som får se hytta.
+- **Tekstforslag til beskrivelsen.** Under beskrivelsesfeltet på siden for hytta
+  står knappen «Foreslå tekst fra bilde og sted». En AI-tjeneste skriver et kort,
+  personlig utkast ut fra forsidebildet og stedsnavnet. Utkastet legges i feltet,
+  og ingenting lagres før eieren trykker «Lagre endringene». Uten bilde er knappen
+  grå. Høyst ti forslag per hytte i døgnet. Slått av uten `AI_GATEWAY_API_KEY`.
 - **Adresse og vei.** Eieren legger inn adressen, med forslag fra Kartverkets
   adresseregister, og en nøyaktig kartposisjon. Låneren får adressen og lenker som
   viser veien i kartet når lånet er betalt. Før det ser låneren området, med et
@@ -144,6 +149,8 @@ skrives i stedet til filen `.dev-outbox.jsonl` og til terminalen.
    starte påminnelsesjobben. Sett
    `BETTER_AUTH_URL` for produksjon når tjenesten har fått eget domene.
    `BETTER_AUTH_SECRET` er valgfri: uten den avledes nøkkelen av `DATABASE_URL`.
+   Sett `AI_GATEWAY_API_KEY` (lages under AI Gateway i Vercel) for å slå på
+   tekstforslag til beskrivelsen. Uten den vises ikke knappen.
    I produksjon stopper tjenesten heller enn å bruke standardnøkkelen hvis
    begge mangler.
 5. Deploy. Byggingen oppdaterer databasen automatisk (`scripts/migrate.mjs`).
@@ -173,11 +180,14 @@ src/lib/services/         Alle regler og tilgangssjekker. Start her.
   bookings.ts               forespørsel, ja/nei, betalt, avlysning
   reminders.ts              påminnelse til eieren før feriene når hytta står ledig
   photos.ts                 bilder: hvem får legge til, fjerne og se dem
+  descriptions.ts           tekstforslag til beskrivelsen: hvem får be om det, hva som sendes ut, taket per døgn
   addresses.ts              adressesøk mot Kartverket, bare for hytteeiere
 src/lib/position.ts       Leser koordinater og kartlenker, lager veilenker
 src/app/adressesok/       Adresseforslagene i hytteskjemaet, bak innlogging
 src/lib/photo-processing.ts  Forminsker bildene og fjerner opptaksdata (sharp)
 src/lib/photo-limits.ts   Grensene for antall og størrelse på bilder
+src/lib/description-assist.ts  Om tekstforslag er slått på, og taket per døgn
+src/components/description-field.tsx  Beskrivelsesfeltet med knappen for tekstforslag
 src/app/bilder/[id]/      Adressen som viser et bilde, bak innlogging
 src/lib/auth.ts           Innlogging med Better Auth (engangskode på e-post)
 src/lib/session.ts        requireViewer(): hvem er innlogget
@@ -226,6 +236,16 @@ Regelen for ny funksjonalitet: tilgangssjekken skal ligge i tjenestelaget
   Svarer ikke tjenesten, kommer det ingen forslag, og eieren skriver adressen selv.
   Tjenesten dekker bare norske adresser. Hytter i utlandet får posisjon fra
   koordinater eller en kartlenke.
+- **Tekstforslagene kommer fra Vercel AI Gateway** (`eu.ai-gateway.vercel.sh`), med
+  modellen i `AI_DESCRIPTION_MODEL` (standard `anthropic/claude-sonnet-5.5`). Ut går
+  bare forsidebildet, forminsket til 1024 punkter, og stedsnavnet. Forespørselen
+  ber om at modellen kjører i EU og at leverandøren ikke tar vare på innholdet
+  (`inferenceRegion` og `zeroDataRetention`). Kan ikke gatewayen oppfylle det,
+  feiler forespørselen, og eieren får beskjed om å skrive selv. Zero data
+  retention krever Pro-plan eller kjøpte AI Gateway-kreditter. Hvert forsøk føres
+  i tabellen `description_suggestion`, uten selve teksten. Testene bruker en
+  etterligning (`AI_DESCRIPTION_URL`) og sender aldri noe til en ekte AI-tjeneste.
+  Personvernsiden lages ved bygging og nevner tekstforslag bare når nøkkelen er satt.
 - **Forhåndsvisninger deler database med produksjon** hvis de får samme
   `DATABASE_URL`. Bruk en egen database for forhåndsvisninger når piloten er i bruk.
   Bygging av en forhåndsvisning hos Vercel oppdaterer aldri databasen, med mindre

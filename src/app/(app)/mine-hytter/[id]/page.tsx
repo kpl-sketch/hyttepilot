@@ -3,11 +3,13 @@ import type { ReactNode } from "react";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { CabinForm } from "@/components/cabin-form";
 import { photoSrc } from "@/components/cabin-photo";
+import type { SuggestState } from "@/components/description-field";
 import { previewHref } from "@/components/owner-preview";
 import { PhotoPicker } from "@/components/photo-picker";
 import { ButtonLink, Field, Input, PageTitle, Panel } from "@/components/ui";
 import { ShareForm } from "@/components/share-form";
 import { formatDate, formatRange, freePeriods, todayInOslo } from "@/lib/dates";
+import { canSuggestDescription } from "@/lib/description-assist";
 import { MAX_PHOTOS } from "@/lib/photo-limits";
 import { getCalendar, getOwnCabin } from "@/lib/services/cabins";
 import { listCabinSharing } from "@/lib/services/invitations";
@@ -84,6 +86,12 @@ export default async function ManageCabinPage({
   const hasDates = free.length > 0;
   const ready = isShared && hasDates;
   const missingPractical = !cabin.address.trim() || !cabin.arrivalInfo.trim();
+  // Tekstforslag vises bare når AI-tjenesten er satt opp. Uten bilde er knappen grå.
+  const suggest: SuggestState | undefined = canSuggestDescription()
+    ? photos.length > 0
+      ? "ready"
+      : "needs-photo"
+    : undefined;
 
   return (
     <>
@@ -131,6 +139,15 @@ export default async function ManageCabinPage({
               legg inn adresse og hvor nøkkelen ligger
             </a>
             . Låneren ser det først når oppholdet er betalt.
+          </p>
+        )}
+        {suggest === "ready" && !cabin.description.trim() && (
+          <p className="mt-4 max-w-[60ch]">
+            Hytta har ingen beskrivelse ennå.{" "}
+            <a href="#detaljer" className="underline">
+              Få et forslag ut fra bildet og stedet
+            </a>
+            .
           </p>
         )}
       </section>
@@ -436,7 +453,7 @@ export default async function ManageCabinPage({
             Alt her kan endres når som helst. Adresse og nøkkel ser låneren først når
             oppholdet er betalt.
           </p>
-          <CabinForm action={updateCabinAction} cabin={cabin} />
+          <CabinForm action={updateCabinAction} cabin={cabin} suggestDescription={suggest} />
         </Panel>
       </div>
     </>

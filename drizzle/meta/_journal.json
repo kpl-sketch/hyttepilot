@@ -50,6 +50,13 @@
       "when": 1795035755061,
       "tag": "0006_sist_innlogget",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1795464208718,
+      "tag": "0007_tekstforslag",
+      "breakpoints": true
     }
   ]
 }

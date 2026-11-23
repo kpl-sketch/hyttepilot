@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { PublicShell } from "@/components/public-shell";
 import { PageTitle } from "@/components/ui";
 import { APP_NAME, CONTACT_EMAIL } from "@/lib/brand";
+import { canSuggestDescription } from "@/lib/description-assist";
 
 export const metadata: Metadata = { title: "Personvern" };
 
@@ -12,6 +13,9 @@ export const metadata: Metadata = { title: "Personvern" };
  * bør leses av noen som kan personvern.
  */
 const controller = process.env.NEXT_PUBLIC_CONTROLLER_NAME || "";
+
+/** Avsnittene om tekstforslag vises bare når tekstforslag er slått på. */
+const suggestions = canSuggestDescription();
 
 export default function PrivacyPage() {
   return (
@@ -47,6 +51,9 @@ export default function PrivacyPage() {
             <li>Forespørsler du sender eller får, med datoer, antall personer, pris og meldinger.</li>
             <li>Hvem som har invitert hvem, hvilken hytte invitasjonen gjelder, og en hilsen hvis avsenderen skrev en.</li>
             <li>Innlogginger: tidspunkt, IP-adresse og nettlesertype.</li>
+            {suggestions && (
+              <li>Tidspunktet du ba om et tekstforslag til en hytte. Selve forslaget lagrer vi ikke.</li>
+            )}
           </ul>
           <p className="mt-2">Betaling skjer i Vipps, utenfor tjenesten. Vi lagrer ingen betalingsopplysninger.</p>
         </section>
@@ -80,6 +87,14 @@ export default function PrivacyPage() {
             Lenkene som viser veien til hytta, åpner Google Maps eller Apple Kart. De får da
             vite adressen eller posisjonen du ber om veibeskrivelse til.
           </p>
+          {suggestions && (
+            <p className="mt-2">
+              Ber du om et tekstforslag til beskrivelsen av hytta, sender vi forsidebildet og
+              stedsnavnet til en AI-tjeneste som skriver utkastet. Navnet ditt, navnet på hytta,
+              adressen og kartposisjonen sendes ikke. Vi ber om at bildet behandles i EU, og at
+              AI-tjenesten sletter bildet og teksten når forslaget er laget.
+            </p>
+          )}
         </section>
 
         <section>

@@ -3,6 +3,7 @@ import type { FormState } from "@/lib/errors";
 import { MAX_PHOTOS } from "@/lib/photo-limits";
 import { formatPosition } from "@/lib/position";
 import { ActionForm, SubmitButton } from "./action-form";
+import { DescriptionField, type SuggestState } from "./description-field";
 import { LocationFields } from "./location-fields";
 import { PhotoPicker } from "./photo-picker";
 import { Field, Input, Textarea } from "./ui";
@@ -19,11 +20,17 @@ export function CabinForm({
   action,
   cabin,
   defaultVipps,
+  suggestDescription,
 }: {
   action: (prev: FormState, formData: FormData) => Promise<FormState>;
   cabin?: Cabin;
   /** Forslag til Vipps-nummer for en ny hytte: eierens eget mobilnummer. */
   defaultVipps?: string;
+  /**
+   * Satt når tekstforslag er slått på: om hytta har et forsidebilde forslaget
+   * kan lages ut fra. Uten denne vises ikke knappen under beskrivelsen.
+   */
+  suggestDescription?: SuggestState;
 }) {
   if (!cabin) return <NewCabinForm action={action} defaultVipps={defaultVipps} />;
   return (
@@ -35,9 +42,12 @@ export function CabinForm({
         <Field label="Navn på hytta" className="sm:col-span-2">
           <Input name="name" required maxLength={80} defaultValue={cabin?.name} />
         </Field>
-        <Field label="Beskrivelse" className="sm:col-span-2">
-          <Textarea name="description" maxLength={2000} defaultValue={cabin?.description} />
-        </Field>
+        <DescriptionField
+          cabinId={cabin.id}
+          defaultValue={cabin.description}
+          suggest={suggestDescription}
+          className="sm:col-span-2"
+        />
         <Field label="Sengeplasser">
           <Input
             name="beds"

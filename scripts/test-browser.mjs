@@ -4,19 +4,25 @@
  * kalenderen sjekkes for dato og ledighet slik en skjermleser får det.
  *
  * Slik kjøres den:
- *   1. npx next build
- *   2. EMAIL_DEV_OUTBOX=1 ADDRESS_SEARCH_URL=http://127.0.0.1:9/sok npx next start
+ *   1. AI_GATEWAY_API_KEY=test npx next build
+ *      (personvernsiden lages ved bygging og nevner bare tekstforslag når nøkkelen er satt)
+ *   2. EMAIL_DEV_OUTBOX=1 ADDRESS_SEARCH_URL=http://127.0.0.1:9/sok \
+ *      AI_GATEWAY_API_KEY=test AI_DESCRIPTION_URL=http://127.0.0.1:4011/v1/chat/completions \
+ *      npx next start
  *   3. npm run test:nettleser
  *
  * Testen TØMMER databasen og nekter å kjøre mot annet enn en lokal database.
  * Den trenger Chrome eller Chromium (sett CHROME_PATH hvis den ikke finnes
  * av seg selv). Ingen e-post sendes: innloggingskoder og invitasjoner leses
- * fra .dev-outbox.jsonl. Alle adresser slutter på @test.local.
+ * fra .dev-outbox.jsonl. Alle adresser slutter på @test.local. Tekstforslagene
+ * kommer fra en etterligning av AI-tjenesten som testen selv starter på port
+ * 4011 (TEST_AI_PORT). Ingenting sendes til en ekte AI-tjeneste.
  *
  * Skjermbildene havner i mappen SCREENSHOT_DIR (standard: skjermbilder/).
  */
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
+import { createServer } from "node:http";
 import { mkdir, readFile } from "node:fs/promises";
 import pg from "pg";
 import { chromium } from "playwright-core";
@@ -49,6 +55,51 @@ async function check(name, fn) {
   await fn();
   passed += 1;
   console.log(`  ok  ${name}`);
+}
+
+/* ------------------------------ Tekstforslag ------------------------------- */
+
+const AI_PORT = Number(process.env.TEST_AI_PORT ?? 4011);
+const DRAFT =
+  "Vi har hatt hytta i Kragerø i mange år. Den røde bua ligger helt nede ved sjøen, og fra døra ser vi rett ut mot holmene.";
+
+/**
+ * Etterligner AI-tjenesten som skriver tekstforslag. Serveren som testes, må
+ * være startet med AI_DESCRIPTION_URL som peker hit, se toppen av filen.
+ */
+async function fakeTextService() {
+  const seen = [];
+  const state = { answer: "text" };
+  const server = createServer((request, response) => {
+    const chunks = [];
+    request.on("data", (chunk) => chunks.push(chunk));
+    request.on("end", () => {
+      seen.push(Buffer.concat(chunks).toString("utf8"));
+      if (state.answer === "down") {
+        response.writeHead(503, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: "nede for vedlikehold" }));
+        return;
+      }
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({ choices: [{ message: { role: "assistant", content: DRAFT } }] }),
+      );
+    });
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(AI_PORT, "127.0.0.1", resolve);
+  });
+  return { seen, state, close: () => new Promise((resolve) => server.close(resolve)) };
+}
+
+/** Venter til påstanden er sann, høyst ti sekunder. */
+async function eventually(fn, message) {
+  for (let i = 0; i < 100; i++) {
+    if (await fn()) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(message);
 }
 
 /* --------------------------------- Datoer ---------------------------------- */
@@ -870,6 +921,151 @@ async function main() {
     await partner.waitForURL(new RegExp(`/hytter/${fjellro}$`));
     await partner.getByRole("heading", { name: "Fjellro" }).first().waitFor();
   });
+
+  console.log("Tekstforslag fra bilde og sted");
+  const ai = await fakeTextService();
+  const ORIGINAL = "Tømmerhytte med peis og badstue. Fem minutter til skiløypa.";
+  const storedDescription = async () =>
+    (await pool.query(`select "description" from "cabin" where "id" = $1`, [sjobua])).rows[0]
+      .description;
+  await per.goto(`${BASE}/mine-hytter/${sjobua}`);
+  const form = per.locator("form", {
+    has: per.getByRole("button", { name: "Lagre endringene" }),
+  });
+  const description = form.locator('[name="description"]');
+  const suggest = form.getByRole("button", { name: "Foreslå tekst fra bilde og sted" });
+  const save = async (expected) => {
+    await form.getByRole("button", { name: "Lagre endringene" }).click();
+    await eventually(
+      async () => (await storedDescription()) === expected,
+      `beskrivelsen ble ikke lagret som «${expected}»`,
+    );
+  };
+  await description.waitFor();
+  assert.equal(
+    await suggest.count(),
+    1,
+    "Knappen for tekstforslag vises ikke. Start serveren med AI_GATEWAY_API_KEY og AI_DESCRIPTION_URL, se toppen av filen.",
+  );
+
+  await check("uten bilde er knappen grå, og siden sier hva som mangler", async () => {
+    assert.equal(await suggest.isDisabled(), true);
+    await form.getByText("Legg til et bilde under «Bilder» først.", { exact: false }).waitFor();
+  });
+
+  // Et bilde av en rød bu ved sjøen, lastet opp slik eieren gjør det.
+  const scene = await sharp(
+    Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200">
+      <rect width="1600" height="1200" fill="#bfe0ee"/>
+      <path d="M0 760 L380 610 L820 760 Z" fill="#7d9a8c"/>
+      <rect y="760" width="1600" height="440" fill="#2d6f8e"/>
+      <path d="M0 1200 L0 930 Q500 860 1600 960 L1600 1200 Z" fill="#c9b79c"/>
+      <rect x="640" y="560" width="420" height="360" fill="#a3271c"/>
+      <path d="M600 560 L850 400 L1100 560 Z" fill="#3b3b3b"/>
+      <rect x="710" y="650" width="100" height="110" fill="#f4e9c8"/>
+      <rect x="890" y="700" width="90" height="220" fill="#f7f3ea"/>
+    </svg>`),
+  )
+    .png()
+    .toBuffer();
+  await per
+    .locator('input[type="file"][accept]')
+    .setInputFiles({ name: "sjobua.png", mimeType: "image/png", buffer: scene });
+  await per.getByText("1 bilde valgt.").waitFor();
+  await per.getByRole("button", { name: "Last opp bildene" }).click();
+  await per.getByText("Bildet er lagt til.").waitFor();
+
+  await check("med tekst i feltet spør siden først, og nei endrer ingenting", async () => {
+    await eventually(async () => suggest.isEnabled(), "knappen ble ikke klar etter at bildet kom på plass");
+    await form.getByText("Forsidebildet og stedsnavnet sendes til en AI-tjeneste", { exact: false }).waitFor();
+    let question = "";
+    per.once("dialog", (dialog) => {
+      question = dialog.message();
+      dialog.dismiss();
+    });
+    await suggest.click();
+    assert.match(question, /erstatter teksten/);
+    assert.equal(await description.inputValue(), ORIGINAL);
+    assert.equal(ai.seen.length, 0, "ingenting sendes når eieren sier nei");
+  });
+
+  await check("ja legger forslaget i feltet, bare med tastatur, og ingenting er lagret ennå", async () => {
+    per.once("dialog", (dialog) => dialog.accept());
+    await description.focus();
+    await per.keyboard.press("Tab");
+    assert.match(await focusName(per), /Foreslå tekst fra bilde og sted/);
+    await per.keyboard.press("Enter");
+    await form.getByRole("status").getByText("Forslaget står i feltet.", { exact: false }).waitFor();
+    assert.equal(await description.inputValue(), DRAFT);
+    assert.equal(
+      await per.evaluate(() => document.activeElement?.getAttribute("name")),
+      "description",
+      "fokus står i feltet, så eieren kan rette med en gang",
+    );
+    assert.equal(await storedDescription(), ORIGINAL);
+    await shot(per, "17a-tekstforslag", form.locator("fieldset").first());
+  });
+
+  await check("AI-tjenesten fikk bildet og stedet, og ikke noe annet om hytta eller eieren", async () => {
+    assert.equal(ai.seen.length, 1);
+    const body = JSON.parse(ai.seen[0]);
+    const [place, image] = body.messages[1].content;
+    assert.equal(place.text, "Stedet eieren har oppgitt: «Kragerø»");
+    assert.match(image.image_url.url, /^data:image\/jpeg;base64,/);
+    const rest = ai.seen[0].replace(image.image_url.url, "");
+    assert.equal(/Sjøbua|Fjellvegen|Nøkkelboks|91234567|per@test\.local|Per Eier|Tømmerhytte/.test(rest), false);
+  });
+
+  await check("forslaget lagres først når eieren trykker lagre", async () => {
+    await save(DRAFT);
+    await form.getByText("Forslaget står i feltet.", { exact: false }).waitFor({ state: "detached" });
+  });
+
+  await check("svikter AI-tjenesten, står teksten urørt, og eieren kan fortsatt lagre", async () => {
+    ai.state.answer = "down";
+    await description.fill("Skrevet selv, uten hjelp.");
+    per.once("dialog", (dialog) => dialog.accept());
+    await suggest.click();
+    await form
+      .getByRole("alert")
+      .getByText("Vi fikk ikke laget et forslag akkurat nå.", { exact: false })
+      .waitFor();
+    assert.equal(await description.inputValue(), "Skrevet selv, uten hjelp.");
+    await shot(per, "17b-tekstforslag-feil", form.locator("fieldset").first());
+    await save("Skrevet selv, uten hjelp.");
+    ai.state.answer = "text";
+  });
+
+  await check("tom beskrivelse gir et hint øverst, og forslaget kommer uten spørsmål", async () => {
+    await description.fill("");
+    await save("");
+    await per.reload();
+    await per.getByText("Hytta har ingen beskrivelse ennå.").waitFor();
+    let asked = false;
+    const onDialog = (dialog) => {
+      asked = true;
+      dialog.accept();
+    };
+    per.on("dialog", onDialog);
+    await per.getByRole("link", { name: "Få et forslag ut fra bildet og stedet" }).click();
+    await suggest.click();
+    await form.getByRole("status").getByText("Forslaget står i feltet.", { exact: false }).waitFor();
+    per.off("dialog", onDialog);
+    assert.equal(asked, false, "et tomt felt erstattes uten spørsmål");
+    assert.equal(await description.inputValue(), DRAFT);
+    // Hytta settes tilbake slik den var, så resten av testen ser det samme som før.
+    await description.fill(ORIGINAL);
+    await save(ORIGINAL);
+  });
+
+  await check("personvernsiden sier hva som sendes til AI-tjenesten", async () => {
+    await anne.goto(`${BASE}/personvern`);
+    await anne
+      .getByText("sender vi forsidebildet og stedsnavnet til en AI-tjeneste", { exact: false })
+      .waitFor();
+    await anne.getByText("Selve forslaget lagrer vi ikke.", { exact: false }).waitFor();
+  });
+  await ai.close();
 
   console.log("Varsler");
   await check("lenken til en deling som er fjernet, gir ingenting", async () => {

@@ -34,6 +34,7 @@ import {
 } from "../src/lib/dates";
 import { db } from "../src/lib/db";
 import { booking, profile, user } from "../src/lib/db/schema";
+import { canSuggestDescription, MAX_SUGGESTIONS_PER_DAY } from "../src/lib/description-assist";
 import { type Actor, UserError } from "../src/lib/errors";
 import { PLEDGE_VERSION } from "../src/lib/pledge";
 import { directionLinks, isShortMapLink, parsePosition } from "../src/lib/position";
@@ -89,6 +90,7 @@ import {
 import { getPilotMetrics, getWeeklyMetrics, WEEKS } from "../src/lib/services/metrics";
 import { listMembers, membersToCsv } from "../src/lib/services/members";
 import { getCabinStats, parseCabinSort } from "../src/lib/services/cabin-stats";
+import { suggestDescription } from "../src/lib/services/descriptions";
 import { isThrottled } from "../src/lib/services/login";
 import {
   firstIdlePeriod,
@@ -321,6 +323,67 @@ async function photo(name: string, background: string): Promise<File> {
     .jpeg()
     .toBuffer();
   return new File([new Uint8Array(bytes)], name, { type: "image/jpeg" });
+}
+
+const DRAFT =
+  "Vi har hatt hytta på Hafjell i mange år. Den ligger lunt til mellom furutrærne, og fra trappa ser vi rett ut i skogen.";
+
+/**
+ * Etterligner AI-tjenesten som skriver tekstforslag, slik at testen verken
+ * trenger nett eller nøkkel. `state.answer` styrer hva neste svar blir.
+ */
+async function fakeTextService() {
+  const seen: { authorization: string; body: string }[] = [];
+  const state = { answer: "text" as "text" | "quoted" | "none" | "empty" | "down" };
+  const server = createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
+    request.on("end", () => {
+      seen.push({
+        authorization: request.headers.authorization ?? "",
+        body: Buffer.concat(chunks).toString("utf8"),
+      });
+      if (state.answer === "down") {
+        response.writeHead(503, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: "nede for vedlikehold" }));
+        return;
+      }
+      const content = {
+        text: DRAFT,
+        quoted: "«**Hytta** ligger lunt til.»",
+        none: "INGEN",
+        empty: "",
+      }[state.answer];
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ choices: [{ message: { role: "assistant", content } }] }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("fikk ingen port");
+  const url = `http://127.0.0.1:${address.port}/v1/chat/completions`;
+  process.env.AI_DESCRIPTION_URL = url;
+  return { seen, state, url, close: () => new Promise((resolve) => server.close(resolve)) };
+}
+
+/** Utfører handlingen og gir tilbake det den skrev i feilloggen, uten å vise det i terminalen. */
+async function loggedDuring(fn: () => Promise<unknown>): Promise<string[]> {
+  const lines: string[] = [];
+  const original = console.error;
+  console.error = (...parts: unknown[]) => void lines.push(parts.map(String).join(" "));
+  try {
+    await fn();
+  } finally {
+    console.error = original;
+  }
+  return lines;
+}
+
+async function suggestionCount(cabinId: string): Promise<number> {
+  const result = await db.execute<{ n: number }>(
+    sql`select count(*)::int as n from "description_suggestion" where "cabin_id" = ${cabinId}`,
+  );
+  return result.rows[0].n;
 }
 
 async function main() {
@@ -1149,6 +1212,134 @@ async function main() {
     assert.equal(await getPhotoForViewer(kari, last.id, "full"), null);
     assert.equal((await listCabinPhotos(medBilder))[0].id, before[0].id);
   });
+
+  console.log("Tekstforslag fra bilde og sted");
+  const ai = await fakeTextService();
+  delete process.env.AI_GATEWAY_API_KEY;
+  delete process.env.AI_DESCRIPTION_MODEL;
+  await check("uten nøkkel til AI-tjenesten er tekstforslag slått av, og ingenting sendes ut", async () => {
+    assert.equal(canSuggestDescription(), false);
+    await refused(() => suggestDescription(kari, medBilder), /ikke slått på/);
+    assert.equal(ai.seen.length, 0);
+    assert.equal(await suggestionCount(medBilder), 0);
+  });
+  process.env.AI_GATEWAY_API_KEY = "test-nokkel";
+  await check("eieren får et forslag ut fra forsidebildet og stedet", async () => {
+    assert.equal(canSuggestDescription(), true);
+    assert.equal(await suggestDescription(kari, medBilder), DRAFT);
+    assert.equal(ai.seen.length, 1);
+    assert.equal(ai.seen[0].authorization, "Bearer test-nokkel");
+  });
+  await check("ut går bare forsidebildet og stedsnavnet, med krav om EU og ingen lagring", async () => {
+    const body = JSON.parse(ai.seen[0].body);
+    assert.equal(body.model, "anthropic/claude-sonnet-5.5");
+    assert.deepEqual(body.providerOptions, {
+      gateway: { zeroDataRetention: true, inferenceRegion: { scope: "zone", geoRegion: "eu" } },
+    });
+    assert.deepEqual(
+      body.messages.map((m: { role: string }) => m.role),
+      ["system", "user"],
+    );
+    const [text, image] = body.messages[1].content;
+    assert.equal(text.text, "Stedet eieren har oppgitt: «Hafjell»");
+
+    // Bildet er forsidebildet («stue.jpg», rødt), forminsket og som JPG.
+    const found = String(image.image_url.url).match(/^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/);
+    assert.ok(found, "bildet sendes som JPG i selve forespørselen");
+    const sent = sharp(Buffer.from(found[1], "base64"));
+    const meta = await sent.metadata();
+    assert.equal(meta.format, "jpeg");
+    assert.deepEqual([meta.width, meta.height], [1024, 768]);
+    assert.equal(meta.exif, undefined);
+    const [red, green, blue] = (await sent.stats()).channels.map((c) => Math.round(c.mean));
+    assert.ok(Math.abs(red - 0xa3) < 12 && Math.abs(green - 0x27) < 12 && Math.abs(blue - 0x1c) < 12);
+
+    // Ingenting annet om hytta eller eieren er med.
+    const rest = ai.seen[0].body.replace(found[1], "");
+    for (const secret of [
+      "Bildehytta",
+      "Fjellvegen",
+      "2636",
+      "61.2345",
+      "10.4567",
+      "91234567",
+      "912 34 567",
+      "Nøkkelboks",
+      "Tømmerhytte med badstue",
+      "Ingen fest",
+      "kari@test.local",
+      "Kari",
+      kari.id,
+      medBilder,
+    ]) {
+      assert.equal(rest.includes(secret), false, `«${secret}» skal ikke sendes til AI-tjenesten`);
+    }
+  });
+  await check("forslaget lagres ikke på hytta, bare at eieren ba om det", async () => {
+    assert.equal((await getOwnCabin(kari, medBilder))?.description, "Tømmerhytte med badstue.");
+    assert.equal(await suggestionCount(medBilder), 1);
+  });
+  await check("bare eieren kan be om forslag, ikke lånere eller administratorer", async () => {
+    await refused(() => suggestDescription(per, medBilder), /Fant ikke hytta/);
+    await refused(() => suggestDescription(admin, medBilder), /Fant ikke hytta/);
+    await refused(() => suggestDescription(ola, medBilder), /Fant ikke hytta/);
+    await refused(() => suggestDescription(kari, "ikke-en-id"), /Fant ikke hytta/);
+    await refused(() => suggestDescription(kari, randomUUID()), /Fant ikke hytta/);
+    assert.equal(ai.seen.length, 1, "ingenting er sendt for andre enn eieren");
+    assert.equal(await suggestionCount(medBilder), 1);
+  });
+  await check("hytte uten bilde får ikke forslag, og ingenting sendes ut", async () => {
+    assert.deepEqual(await listCabinPhotos(persHytte), []);
+    await refused(() => suggestDescription(per, persHytte), /Legg til et bilde/);
+    assert.equal(ai.seen.length, 1);
+    assert.equal(await suggestionCount(persHytte), 0);
+  });
+  await check("svaret ryddes for anførselstegn og utheving", async () => {
+    ai.state.answer = "quoted";
+    assert.equal(await suggestDescription(kari, medBilder), "Hytta ligger lunt til.");
+  });
+  await check("viser ikke bildet en hytte, blir eieren bedt om å bytte forsidebilde", async () => {
+    ai.state.answer = "none";
+    await refused(() => suggestDescription(kari, medBilder), /annet forsidebilde/);
+  });
+  await check("svikter AI-tjenesten, får eieren beskjed og kan fortsatt lagre hytta", async () => {
+    const logged = await loggedDuring(async () => {
+      ai.state.answer = "down";
+      await refused(() => suggestDescription(kari, medBilder), /skriv teksten selv/);
+      ai.state.answer = "empty";
+      await refused(() => suggestDescription(kari, medBilder), /skriv teksten selv/);
+      // Ingen svarer på denne porten.
+      process.env.AI_DESCRIPTION_URL = "http://127.0.0.1:9/v1/chat/completions";
+      await refused(() => suggestDescription(kari, medBilder), /skriv teksten selv/);
+    });
+    process.env.AI_DESCRIPTION_URL = ai.url;
+    assert.equal(logged.length, 3, "hver feil står i loggen");
+    assert.match(logged[0], /svarte 503/);
+    for (const line of logged) {
+      assert.equal(/base64|test-nokkel|Hafjell/.test(line), false, "loggen har verken bilde, nøkkel eller sted");
+    }
+    await updateCabin(kari, medBilder, { ...cabinData("Bildehytta"), description: "Skrevet selv." });
+    assert.equal((await getOwnCabin(kari, medBilder))?.description, "Skrevet selv.");
+  });
+  await check("en hytte får høyst ti forslag i døgnet, og taket gjelder per hytte", async () => {
+    ai.state.answer = "text";
+    assert.equal(MAX_SUGGESTIONS_PER_DAY, 10);
+    for (let n = await suggestionCount(medBilder); n < MAX_SUGGESTIONS_PER_DAY; n++) {
+      await suggestDescription(kari, medBilder);
+    }
+    const sentBefore = ai.seen.length;
+    await refused(() => suggestDescription(kari, medBilder), /mange forslag/);
+    assert.equal(ai.seen.length, sentBefore, "forsøket over taket sendes ikke til AI-tjenesten");
+    assert.equal(await suggestionCount(medBilder), MAX_SUGGESTIONS_PER_DAY);
+    // En annen hytte hos samme eier er ikke berørt.
+    assert.equal(await suggestDescription(kari, karisHytte), DRAFT);
+    // Døgnet etter kan eieren be om forslag igjen.
+    await db.execute(
+      sql`update "description_suggestion" set "created_at" = now() - interval '25 hours' where "cabin_id" = ${medBilder}`,
+    );
+    assert.equal(await suggestDescription(kari, medBilder), DRAFT);
+  });
+  await ai.close();
 
   console.log("Forespørsler (akseptansetest 4, 8 og 10)");
   const request = (start: number, end: number, guests = "2") => ({
