@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { ActionForm, SubmitButton } from "@/components/action-form";
+import { Avatar } from "@/components/avatar";
 import { CabinForm } from "@/components/cabin-form";
 import { photoSrc } from "@/components/cabin-photo";
 import type { SuggestState } from "@/components/description-field";
@@ -8,6 +9,7 @@ import { previewHref } from "@/components/owner-preview";
 import { PhotoPicker } from "@/components/photo-picker";
 import { ButtonLink, Field, Input, PageTitle, Panel } from "@/components/ui";
 import { ShareForm } from "@/components/share-form";
+import { avatarSrc } from "@/lib/avatar";
 import { formatDate, formatRange, freePeriods, todayInOslo } from "@/lib/dates";
 import { canSuggestDescription } from "@/lib/description-assist";
 import { MAX_PHOTOS } from "@/lib/photo-limits";
@@ -256,10 +258,13 @@ export default async function ManageCabinPage({
                     key={request.id}
                     className="flex flex-wrap items-center justify-between gap-3 py-3"
                   >
-                    <span className="min-w-0">
-                      <span className="font-semibold">{request.name}</span>
-                      <span className="block text-sm break-words text-muted">
-                        {request.email}. Invitasjonen ble sendt til {request.invitedEmail}.
+                    <span className="flex min-w-0 items-center gap-3">
+                      <Avatar name={request.name} src={avatarSrc(request.userId, request.photo)} />
+                      <span className="min-w-0">
+                        <span className="font-semibold">{request.name}</span>
+                        <span className="block text-sm break-words text-muted">
+                          {request.email}. Invitasjonen ble sendt til {request.invitedEmail}.
+                        </span>
                       </span>
                     </span>
                     <span className="flex flex-wrap gap-4">
@@ -296,11 +301,14 @@ export default async function ManageCabinPage({
                     key={person.userId}
                     className="flex flex-wrap items-center justify-between gap-3 py-3"
                   >
-                    <span className="min-w-0">
-                      <span className="font-semibold">{person.name}</span>
-                      <span className="block text-sm break-words text-muted">
-                        {person.email ? `${person.email}. ` : ""}
-                        Ser hytta siden {formatDate(todayInOslo(person.since))}.
+                    <span className="flex min-w-0 items-center gap-3">
+                      <Avatar name={person.name} src={avatarSrc(person.userId, person.photo)} />
+                      <span className="min-w-0">
+                        <span className="font-semibold">{person.name}</span>
+                        <span className="block text-sm break-words text-muted">
+                          {person.email ? `${person.email}. ` : ""}
+                          Ser hytta siden {formatDate(todayInOslo(person.since))}.
+                        </span>
                       </span>
                     </span>
                     <ActionForm

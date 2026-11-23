@@ -4,6 +4,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { isIsoDate, isRangeFree, todayInOslo } from "../dates";
 import { db } from "../db";
+import { profilePhotoVersion } from "../db/people";
 import { booking, cabin, profile, user } from "../db/schema";
 import { sendEmail } from "../email";
 import {
@@ -268,6 +269,7 @@ export async function listIncoming(actor: Actor) {
       booking,
       cabinName: cabin.name,
       borrowerName: user.name,
+      borrowerPhoto: profilePhotoVersion,
       borrowerEmail: user.email,
       borrowerPhone: profile.phone,
     })
@@ -294,7 +296,9 @@ export async function listOutgoing(actor: Actor) {
       latitude: cabin.latitude,
       longitude: cabin.longitude,
       arrivalInfo: cabin.arrivalInfo,
+      ownerId: cabin.ownerId,
       ownerName: user.name,
+      ownerPhoto: profilePhotoVersion,
     })
     .from(booking)
     .innerJoin(cabin, eq(cabin.id, booking.cabinId))

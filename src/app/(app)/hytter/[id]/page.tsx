@@ -2,10 +2,12 @@ import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { AreaMap } from "@/components/area-map";
+import { Avatar } from "@/components/avatar";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { OwnerPreviewBar, previewHref } from "@/components/owner-preview";
 import { PhotoGallery } from "@/components/photo-gallery";
 import { ButtonLink, buttonClass, Field, Input, PageTitle, Panel, Textarea } from "@/components/ui";
+import { avatarSrc } from "@/lib/avatar";
 import { firstName } from "@/lib/emails";
 import { areaLink } from "@/lib/position";
 import { formatKroner } from "@/lib/pricing";
@@ -21,6 +23,7 @@ export default async function CabinPage({ params, searchParams }: PageProps<"/hy
   const found = await getVisibleCabin(viewer, id);
   if (!found) notFound();
   const { cabin, ownerName, areaPosition } = found;
+  const ownerAvatar = avatarSrc(cabin.ownerId, found.ownerPhoto);
   // Administrator som ser hytta uten at eieren har vist den: bare lesing.
   const asAdmin = found.access === "admin";
   const areaSearch = areaLink(cabin.area);
@@ -52,7 +55,18 @@ export default async function CabinPage({ params, searchParams }: PageProps<"/hy
       {asBorrower && <OwnerPreviewBar cabinId={cabin.id} step="innlogget" />}
       <PageTitle
         title={cabin.name}
-        lead={`${cabin.area}. ${isOwn ? "Dette er din hytte." : `Hytta til ${ownerName}.`}`}
+        lead={
+          isOwn ? (
+            `${cabin.area}. Dette er din hytte.`
+          ) : (
+            <span className="flex items-center gap-3">
+              <Avatar name={ownerName} src={ownerAvatar} />
+              <span>
+                {cabin.area}. Hytta til {ownerName}.
+              </span>
+            </span>
+          )
+        }
       />
 
       {asAdmin && (

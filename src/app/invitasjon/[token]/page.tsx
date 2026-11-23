@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { type ReactNode, Suspense } from "react";
 import { ActionForm, SubmitButton } from "@/components/action-form";
+import { Avatar } from "@/components/avatar";
 import { InvitationCabinPreview } from "@/components/invitation-cabin";
 import { PublicShell } from "@/components/public-shell";
 import { ButtonLink, Loading, Panel } from "@/components/ui";
+import { inviterAvatarSrc } from "@/lib/avatar";
 import { APP_NAME, WHAT_IT_IS } from "@/lib/brand";
 import { firstName } from "@/lib/emails";
 import {
@@ -42,9 +44,24 @@ export default function InvitationPage({ params }: PageProps<"/invitasjon/[token
   );
 }
 
-function Message({ title, children }: { title: string; children: ReactNode }) {
+function Message({
+  title,
+  children,
+  from,
+}: {
+  title: string;
+  children: ReactNode;
+  /** Den som inviterer, når bildet skal stå over overskriften. */
+  from?: { name: string; avatar: string | null };
+}) {
   return (
     <>
+      {from?.avatar && (
+        <p className="mb-4 flex items-center gap-3 text-lg font-semibold">
+          <Avatar name={from.name} src={from.avatar} size="lg" />
+          <span>{from.name}</span>
+        </p>
+      )}
       <h1 className="max-w-[20ch] text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
         {title}
       </h1>
@@ -70,6 +87,12 @@ async function Invitation({ params }: { params: PageProps<"/invitasjon/[token]">
     );
   }
   const inviter = firstName(found.inviterName);
+  // Bildet av den som inviterer, vises bare så lenge invitasjonen gjelder
+  // (inviterPhoto er null ellers). Det hentes med nøkkelen i lenken.
+  const from = {
+    name: found.inviterName,
+    avatar: inviterAvatarSrc(token, found.inviterPhoto),
+  };
 
   if (found.status === "revoked") {
     return (
@@ -97,6 +120,7 @@ async function Invitation({ params }: { params: PageProps<"/invitasjon/[token]">
     return (
       <InvitationCabinPreview
         inviterName={found.inviterName}
+        inviterAvatar={from.avatar}
         accepted={found.status === "accepted"}
         cabin={found.cabin}
         photoBase={`/invitasjon/${token}/bilder`}
@@ -106,7 +130,7 @@ async function Invitation({ params }: { params: PageProps<"/invitasjon/[token]">
   }
   if (!sessionUser) {
     return (
-      <Message title={`${found.inviterName} inviterer deg til ${APP_NAME}`}>
+      <Message title={`${found.inviterName} inviterer deg til ${APP_NAME}`} from={from}>
         <p>
           I {APP_NAME} {WHAT_IT_IS}.
         </p>
@@ -186,7 +210,7 @@ async function Invitation({ params }: { params: PageProps<"/invitasjon/[token]">
 
   // Invitasjonen venter fortsatt. Mottakeren tar imot med et eget trykk.
   return (
-    <Message title={`${mine.inviterName} inviterer deg`}>
+    <Message title={`${mine.inviterName} inviterer deg`} from={from}>
       <p>
         {mine.cabin
           ? `${inviter} vil vise deg ${mine.cabin.name} (${mine.cabin.area}).`

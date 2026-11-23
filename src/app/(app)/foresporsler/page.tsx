@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ActionForm, SubmitButton } from "@/components/action-form";
+import { Avatar } from "@/components/avatar";
 import {
   ButtonLink,
   buttonClass,
@@ -9,6 +10,7 @@ import {
   StatusBadge,
   Textarea,
 } from "@/components/ui";
+import { avatarSrc } from "@/lib/avatar";
 import { formatRange, nightsBetween } from "@/lib/dates";
 import { directionLinks } from "@/lib/position";
 import { formatKroner } from "@/lib/pricing";
@@ -49,11 +51,17 @@ export default async function RequestsPage({ searchParams }: PageProps<"/forespo
         <section className="mb-12">
           <h2 className="mb-4 text-2xl font-bold">Til hyttene dine</h2>
           <div className="space-y-4">
-            {incoming.map(({ booking, cabinName, borrowerName, borrowerEmail, borrowerPhone }) => (
+            {incoming.map(({ booking, cabinName, borrowerName, borrowerPhoto, borrowerEmail, borrowerPhone }) => (
               <Panel key={booking.id}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <h3 className="text-xl font-bold">
-                    {borrowerName} vil låne {cabinName}
+                  <h3 className="flex items-center gap-3 text-xl font-bold">
+                    <Avatar
+                      name={borrowerName}
+                      src={avatarSrc(booking.borrowerId, borrowerPhoto)}
+                    />
+                    <span>
+                      {borrowerName} vil låne {cabinName}
+                    </span>
                   </h3>
                   <StatusBadge status={booking.status} />
                 </div>
@@ -136,7 +144,7 @@ export default async function RequestsPage({ searchParams }: PageProps<"/forespo
           </Panel>
         )}
         <div className="space-y-4">
-          {outgoing.map(({ booking, cabinName, cabinArea, ownerName, vippsNumber, ...arrival }) => (
+          {outgoing.map(({ booking, cabinName, cabinArea, ownerId, ownerName, ownerPhoto, vippsNumber, ...arrival }) => (
             <Panel key={booking.id}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <h3 className="text-xl font-bold">
@@ -144,7 +152,11 @@ export default async function RequestsPage({ searchParams }: PageProps<"/forespo
                 </h3>
                 <StatusBadge status={booking.status} />
               </div>
-              <p className="mt-1">{stay(booking.startDate, booking.endDate, booking.guests)}</p>
+              <p className="mt-2 flex items-center gap-2 text-muted">
+                <Avatar name={ownerName} src={avatarSrc(ownerId, ownerPhoto)} size="sm" />
+                <span>Hytta til {ownerName}</span>
+              </p>
+              <p className="mt-2">{stay(booking.startDate, booking.endDate, booking.guests)}</p>
               <p className="font-semibold tabular-nums">{formatKroner(booking.totalPrice)}</p>
 
               {booking.ownerReply && (

@@ -3,6 +3,7 @@ import { PublicShell } from "@/components/public-shell";
 import { PageTitle } from "@/components/ui";
 import { APP_NAME, CONTACT_EMAIL } from "@/lib/brand";
 import { canSuggestDescription } from "@/lib/description-assist";
+import { canFetchFromLinkedIn } from "@/lib/linkedin";
 
 export const metadata: Metadata = { title: "Personvern" };
 
@@ -16,6 +17,9 @@ const controller = process.env.NEXT_PUBLIC_CONTROLLER_NAME || "";
 
 /** Avsnittene om tekstforslag vises bare når tekstforslag er slått på. */
 const suggestions = canSuggestDescription();
+
+/** Avsnittene om LinkedIn vises bare når henting av profilbilde derfra er slått på. */
+const linkedIn = canFetchFromLinkedIn();
 
 export default function PrivacyPage() {
   return (
@@ -46,6 +50,12 @@ export default function PrivacyPage() {
           <h2 className="text-xl font-bold">Hva vi lagrer</h2>
           <ul className="mt-2 list-disc space-y-1 pl-6">
             <li>Navn, e-postadresse og mobilnummer.</li>
+            <li>
+              Profilbildet ditt, hvis du legger inn et. Opptaksdata i bildet, som
+              GPS-posisjon, fjernes før det lagres.
+              {linkedIn &&
+                " Henter du bildet fra LinkedIn, lagrer vi en kopi av bildet og ingenting annet fra LinkedIn-profilen din."}
+            </li>
             <li>Tidspunktet du ga Hytteløftet.</li>
             <li>Hytter du legger inn: navn, sted, adresse, kartposisjon, beskrivelse, bilder, pris, regler, Vipps-nummer og praktiske opplysninger. Opptaksdata i bildene, som GPS-posisjon, fjernes før bildene lagres.</li>
             <li>Forespørsler du sender eller får, med datoer, antall personer, pris og meldinger.</li>
@@ -65,8 +75,9 @@ export default function PrivacyPage() {
             <li>Det å eie en hytte gir ikke innsyn i andres hytter.</li>
             <li>Administratorene ser alle hytter slik lånerne ser dem: bilder, beskrivelse, pris, regler, ledige datoer og området på kart. De ser også hvor mange som ser hver hytte, har spurt om å låne den og har lånt den. De ser ikke adresse, kartposisjon, Vipps-nummer eller praktiske opplysninger, og ikke hvem som har spurt eller lånt. De kan ikke spørre om å låne en hytte eieren ikke har vist dem.</li>
             <li>Du ser navnet på dem som viser deg en hytte, og dem du viser din. Ingen ser en liste over alle som er med.</li>
+            <li>Profilbildet ditt står ved navnet ditt, og bare der navnet vises fra før: hos dem du viser en hytte til, hos dem som viser deg sin, i forespørsler mellom eier og låner, og hos eieren som skal godkjenne deg. Administratorene kan se det. Andre medlemmer ser det ikke. Du kan fjerne bildet når du vil.</li>
             <li>Eieren ser navnet på dem som ser hytta, og adressen eieren selv skrev inn i invitasjonen.</li>
-            <li>Åpnes en invitasjonslenke uten innlogging, vises bare navnet på den som inviterer og en maskert e-postadresse.</li>
+            <li>Åpnes en invitasjonslenke uten innlogging, vises navnet og profilbildet til den som inviterer, og en maskert e-postadresse. Gjelder invitasjonen en hytte, vises også bildene av hytta og området på kart. Det gjelder bare så lenge invitasjonen ikke er trukket tilbake eller utløpt.</li>
             <li>Eieren ser navn, e-postadresse og mobilnummer til den som sender en forespørsel.</li>
             <li>Vipps-nummeret vises til låneren når eieren har sagt ja. Adresse, kartposisjon og praktiske opplysninger vises når lånet er betalt.</li>
           </ul>
@@ -87,6 +98,15 @@ export default function PrivacyPage() {
             Lenkene som viser veien til hytta, åpner Google Maps eller Apple Kart. De får da
             vite adressen eller posisjonen du ber om veibeskrivelse til.
           </p>
+          {linkedIn && (
+            <p className="mt-2">
+              Velger du å hente profilbildet ditt fra LinkedIn, sender vi deg til LinkedIn, der
+              du selv godkjenner at {APP_NAME} får se navnet og profilbildet ditt. LinkedIn får
+              da vite at du bruker {APP_NAME}. Vi henter bare bildet. Vi ber ikke om
+              e-postadressen din, vi får ikke se kontakter, meldinger eller innlegg, og vi kan
+              ikke publisere noe. Godkjenningen kan du trekke tilbake hos LinkedIn når du vil.
+            </p>
+          )}
           {suggestions && (
             <p className="mt-2">
               Ber du om et tekstforslag til beskrivelsen av hytta, sender vi bildene av hytta,

@@ -1,14 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Avatar } from "@/components/avatar";
 import { CabinThumb } from "@/components/cabin-photo";
 import { ShareForm } from "@/components/share-form";
-import { ButtonLink, PageTitle, Panel } from "@/components/ui";
+import { ButtonLink, buttonClass, PageTitle, Panel } from "@/components/ui";
+import { avatarSrc, inviterAvatarSrc } from "@/lib/avatar";
 import { type DateRange, formatDate, formatRange, todayInOslo } from "@/lib/dates";
 import { firstName } from "@/lib/emails";
+import { canFetchFromLinkedIn } from "@/lib/linkedin";
 import { listOwnCabins, listSharedCabins } from "@/lib/services/cabins";
 import { getCircle, getInvitationForViewer } from "@/lib/services/invitations";
 import { CARD_GRID } from "@/lib/layout";
 import { requireViewer } from "@/lib/session";
+import { startLinkedInAction } from "../profil/actions";
 
 export const metadata: Metadata = { title: "Din hyttekrets" };
 
@@ -41,6 +45,11 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
   const invited =
     typeof invitasjon === "string" ? await getInvitationForViewer(viewer, invitasjon) : null;
   const welcome = invited?.mine && invited.status === "accepted" ? invited : null;
+  // Bildet av den som inviterte, hentes med nøkkelen i lenken, se inviterAvatarSrc.
+  const welcomeAvatar =
+    welcome && typeof invitasjon === "string"
+      ? inviterAvatarSrc(invitasjon, welcome.inviterPhoto)
+      : null;
   const ownChoices = own.map(({ id, name, area }) => ({ id, name, area }));
 
   return (
@@ -63,8 +72,11 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
         >
           {welcome.cabin ? (
             <>
-              <h2 id="velkommen" className="text-2xl font-bold">
-                {welcome.inviterName} viser deg {welcome.cabin.name}
+              <h2 id="velkommen" className="flex items-center gap-3 text-2xl font-bold">
+                <Avatar name={welcome.inviterName} src={welcomeAvatar} size="lg" />
+                <span>
+                  {welcome.inviterName} viser deg {welcome.cabin.name}
+                </span>
               </h2>
               {welcome.message && (
                 <blockquote className="mt-3 max-w-[60ch] border-l-4 border-window pl-4 whitespace-pre-line">
@@ -85,8 +97,9 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
             </>
           ) : (
             <>
-              <h2 id="velkommen" className="text-2xl font-bold">
-                Velkommen. {welcome.inviterName} har invitert deg.
+              <h2 id="velkommen" className="flex items-center gap-3 text-2xl font-bold">
+                <Avatar name={welcome.inviterName} src={welcomeAvatar} size="lg" />
+                <span>Velkommen. {welcome.inviterName} har invitert deg.</span>
               </h2>
               {welcome.message && (
                 <blockquote className="mt-3 max-w-[60ch] border-l-4 border-window pl-4 whitespace-pre-line">
@@ -103,6 +116,35 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
         </section>
       )}
 
+      {!viewer.photo && (
+        <aside
+          aria-labelledby="vis-hvem-du-er"
+          className="mb-10 flex max-w-3xl flex-wrap items-center gap-x-4 gap-y-3 rounded-2xl border border-line bg-surface p-4 sm:p-5"
+        >
+          <Avatar name={viewer.name} src={null} />
+          <p className="min-w-[14rem] flex-1">
+            <strong id="vis-hvem-du-er">Vis hvem du er.</strong> Med et bilde kjenner de deg
+            igjen når du spør om å låne, og når du låner bort.
+          </p>
+          {canFetchFromLinkedIn() ? (
+            <span className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <form action={startLinkedInAction}>
+                <button type="submit" className={buttonClass("secondary")}>
+                  Hent bildet fra LinkedIn
+                </button>
+              </form>
+              <Link href="/profil" className="underline">
+                eller last opp et bilde
+              </Link>
+            </span>
+          ) : (
+            <ButtonLink href="/profil" variant="secondary">
+              Legg til et bilde
+            </ButtonLink>
+          )}
+        </aside>
+      )}
+
       <section aria-labelledby="delt-med-deg" className="mb-12">
         <h2 id="delt-med-deg" className="text-2xl font-bold">
           Hytter du kan låne
@@ -117,7 +159,7 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
           </Panel>
         ) : (
           <ul className={`mt-5 ${CARD_GRID}`}>
-            {shared.map(({ cabin, ownerName, free }) => (
+            {shared.map(({ cabin, ownerName, ownerPhoto, free }) => (
               <li key={cabin.id}>
                 <Link
                   href={`/hytter/${cabin.id}`}
@@ -128,8 +170,15 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
                     <span className="block text-lg font-bold group-hover:underline">
                       {cabin.name}
                     </span>
-                    <span className="block text-muted">
-                      {cabin.area}. Hytta til {ownerName}.
+                    <span className="mt-1 flex items-center gap-2 text-muted">
+                      <Avatar
+                        name={ownerName}
+                        src={avatarSrc(cabin.ownerId, ownerPhoto)}
+                        size="sm"
+                      />
+                      <span>
+                        {cabin.area}. Hytta til {ownerName}.
+                      </span>
                     </span>
                     {free.length > 0 ? (
                       <span className="mt-1 block">
@@ -226,7 +275,10 @@ export default async function CirclePage({ searchParams }: PageProps<"/krets">) 
               const canShareBack = person.sharesWithMe.length > 0 && own.length > 0;
               return (
                 <li key={person.id} className="rounded-2xl border border-line bg-surface p-5 shadow-card">
-                  <h3 className="text-xl font-bold">{person.name}</h3>
+                  <h3 className="flex items-center gap-3 text-xl font-bold">
+                    <Avatar name={person.name} src={avatarSrc(person.id, person.photo)} />
+                    <span>{person.name}</span>
+                  </h3>
                   {person.sharesWithMe.length > 0 && (
                     <p className="mt-1">
                       {first} viser deg {list(person.sharesWithMe.map((c) => c.name))}.

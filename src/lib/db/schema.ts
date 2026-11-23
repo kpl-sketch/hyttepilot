@@ -140,6 +140,28 @@ export const profile = pgTable("profile", {
   createdAt: createdAt(),
 });
 
+/**
+ * Profilbildet til en bruker: høyst ett. Bildet ligger i databasen, slik at det
+ * følger tilgangsreglene i src/lib/services/profile-photos.ts. Kolonnene `full`
+ * og `thumb` hentes bare når selve bildet skal vises, aldri i lister.
+ *
+ * Fra LinkedIn lagres bare en kopi av bildet. Ingen nøkler, ingen
+ * LinkedIn-ID og ingenting annet fra profilen tas vare på.
+ */
+export const profilePhoto = pgTable("profile_photo", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  /** Kvadratisk WebP, 400 punkter. */
+  full: bytea("full").notNull(),
+  /** Kvadratisk WebP, 128 punkter. Brukes ved siden av navn. */
+  thumb: bytea("thumb").notNull(),
+  /** Hvor bildet kom fra: «linkedin» eller «upload». */
+  source: text("source").notNull(),
+  /** Når bildet sist ble byttet. Står også i adressen til bildet, se avatarSrc. */
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const cabin = pgTable(
   "cabin",
   {

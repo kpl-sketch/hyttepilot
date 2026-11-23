@@ -97,6 +97,21 @@ import { listMembers, membersToCsv } from "../src/lib/services/members";
 import { getCabinStats, parseCabinSort } from "../src/lib/services/cabin-stats";
 import { suggestDescription } from "../src/lib/services/descriptions";
 import { isThrottled } from "../src/lib/services/login";
+import { canFetchFromLinkedIn } from "../src/lib/linkedin";
+import {
+  fetchLinkedInPhoto,
+  isLinkedInPictureUrl,
+  linkedInAuthorizeUrl,
+  linkedInRedirectUri,
+} from "../src/lib/services/linkedin";
+import {
+  getInviterPhotoByToken,
+  getOwnProfilePhoto,
+  getProfilePhotoForViewer,
+  removeProfilePhoto,
+  setProfilePhoto,
+  uploadProfilePhoto,
+} from "../src/lib/services/profile-photos";
 import {
   firstIdlePeriod,
   sendIdleReminders,
@@ -371,6 +386,58 @@ async function fakeTextService() {
   return { seen, state, url, close: () => new Promise((resolve) => server.close(resolve)) };
 }
 
+/**
+ * Etterligner LinkedIn, slik at testen verken trenger nett eller en ekte
+ * LinkedIn-app. `state.answer` styrer hva neste svar blir:
+ * photo: profilen har bilde. none: profilen har ikke bilde. foreign: bildet
+ * ligger hos en fremmed vert. down: LinkedIn svarer med feil.
+ */
+async function fakeLinkedIn() {
+  const seen: { path: string; authorization: string; body: string }[] = [];
+  const state = { answer: "photo" as "photo" | "none" | "foreign" | "down", foreign: "" };
+  const picture = await sharp({
+    create: { width: 800, height: 800, channels: 3, background: "#0a66c2" },
+  })
+    .jpeg()
+    .toBuffer();
+  const server = createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
+    request.on("end", () => {
+      const path = (request.url ?? "").split("?")[0];
+      seen.push({
+        path,
+        authorization: request.headers.authorization ?? "",
+        body: Buffer.concat(chunks).toString("utf8"),
+      });
+      const json = (status: number, body: unknown) => {
+        response.writeHead(status, { "content-type": "application/json" });
+        response.end(JSON.stringify(body));
+      };
+      if (path === "/oauth/v2/accessToken") {
+        if (state.answer === "down") return json(503, { error: "nede" });
+        return json(200, { access_token: "nokkel-fra-linkedin", expires_in: 3600 });
+      }
+      if (path === "/v2/userinfo") {
+        const base = { sub: "abc123", name: "Nora Nordmann", email: "nora@privat.example" };
+        if (state.answer === "none") return json(200, base);
+        const host = state.answer === "foreign" ? state.foreign : `http://${request.headers.host}`;
+        return json(200, { ...base, picture: `${host}/bilde.jpg?e=1` });
+      }
+      if (path === "/bilde.jpg") {
+        response.writeHead(200, { "content-type": "image/jpeg" });
+        return response.end(picture);
+      }
+      json(404, {});
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("fikk ingen port");
+  const origin = `http://127.0.0.1:${address.port}`;
+  return { seen, state, origin, close: () => new Promise((resolve) => server.close(resolve)) };
+}
+
 /** Utfører handlingen og gir tilbake det den skrev i feilloggen, uten å vise det i terminalen. */
 async function loggedDuring(fn: () => Promise<unknown>): Promise<string[]> {
   const lines: string[] = [];
@@ -393,7 +460,7 @@ async function suggestionCount(cabinId: string): Promise<number> {
 
 async function main() {
   await db.execute(
-    sql`truncate "booking", "availability", "cabin_photo", "cabin_access", "invitation", "cabin", "profile", "login_throttle", "verification", "session", "account", "user" cascade`,
+    sql`truncate "booking", "availability", "cabin_photo", "cabin_access", "invitation", "cabin", "profile_photo", "profile", "login_throttle", "verification", "session", "account", "user" cascade`,
   );
 
   const today = todayInOslo();
@@ -513,6 +580,8 @@ async function main() {
       status: "valid",
       kind: "cabin",
       inviterName: "Kari Eier",
+      // Kari har ikke noe profilbilde. Med bilde står versjonen her, se «Profilbilde».
+      inviterPhoto: null,
       maskedEmail: "p•••@test.local",
     });
     assert.equal(JSON.stringify(open).includes("Karis hytte"), false);
@@ -569,6 +638,7 @@ async function main() {
       {
         id: kari.id,
         name: "Kari Eier",
+        photo: null,
         sharesWithMe: [{ id: karisHytte, name: "Karis hytte" }],
         iShareWith: [],
       },
@@ -697,6 +767,8 @@ async function main() {
       mine: false,
       status: "accepted",
       inviterName: "Per Eier",
+      // Per har ikke noe profilbilde. Lenken viser ellers bildet av den som inviterer.
+      inviterPhoto: null,
       maskedEmail: "o•••@test.local",
     });
     await claimInvitations(lise.id, lise.email);
@@ -2149,6 +2221,334 @@ async function main() {
       const { mails } = await sentDuring(() => sendIdleReminders(inWindow));
       assert.equal(mails.filter((m) => m.text.includes("Evas andre hytte")).length, 0);
     });
+  }
+
+  console.log("Profilbilde");
+  {
+    const nora = await register("nora@test.local", "Nora Eier");
+    const stig = await register("stig@test.local", "Stig Fremmed");
+    const norasHytte = await createCabin(nora, cabinData("Noras hytte"));
+    await addAvailability(nora, norasHytte, d(40), d(50));
+    const invited = await sentDuring(() =>
+      inviteToCabin(nora, norasHytte, "jon@test.local", "Velkommen på hytta"),
+    );
+    const jonToken = tokenIn(invited.mails[0]);
+    const size = async (image: Buffer | null) => {
+      assert.ok(image, "bildet skal finnes");
+      const meta = await sharp(image).metadata();
+      return { format: meta.format, width: meta.width, height: meta.height, exif: Boolean(meta.exif) };
+    };
+
+    await check("uten bilde vises ingenting, og ingen liste peker på et bilde", async () => {
+      assert.equal(await getOwnProfilePhoto(nora), null);
+      assert.equal(await getProfilePhotoForViewer(nora, nora.id, "full"), null);
+      assert.equal((await getInvitationPreview(jonToken))?.inviterPhoto, null);
+      assert.equal(await getInviterPhotoByToken(jonToken, "thumb"), null);
+    });
+
+    await check("opplastet bilde blir kvadratisk i to størrelser, uten opptaksdata", async () => {
+      await uploadProfilePhoto(nora, await photo("meg.jpg", "#aa3322"));
+      const own = await getOwnProfilePhoto(nora);
+      assert.equal(own?.source, "upload");
+      assert.deepEqual(await size(await getProfilePhotoForViewer(nora, nora.id, "full")), {
+        format: "webp",
+        width: 400,
+        height: 400,
+        exif: false,
+      });
+      assert.deepEqual(await size(await getProfilePhotoForViewer(nora, nora.id, "thumb")), {
+        format: "webp",
+        width: 128,
+        height: 128,
+        exif: false,
+      });
+    });
+
+    await check("et lite bilde forstørres ikke, og et høyt bilde blir kvadratisk", async () => {
+      const small = await sharp({
+        create: { width: 100, height: 100, channels: 3, background: "#335577" },
+      })
+        .jpeg()
+        .toBuffer();
+      await setProfilePhoto(stig, small, "upload");
+      const stored = await size(await getProfilePhotoForViewer(stig, stig.id, "full"));
+      assert.deepEqual([stored.width, stored.height], [100, 100]);
+      const tall = await sharp({
+        create: { width: 300, height: 900, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+      })
+        .png()
+        .toBuffer();
+      await setProfilePhoto(stig, tall, "upload");
+      const cropped = await size(await getProfilePhotoForViewer(stig, stig.id, "full"));
+      assert.deepEqual([cropped.width, cropped.height], [300, 300]);
+      const thumb = await size(await getProfilePhotoForViewer(stig, stig.id, "thumb"));
+      assert.deepEqual([thumb.width, thumb.height], [128, 128]);
+      await removeProfilePhoto(stig);
+    });
+
+    await check("tom fil, for stor fil og fil som ikke er et bilde, stoppes", async () => {
+      await refused(() => uploadProfilePhoto(stig, null), /Velg et bilde/);
+      await refused(() => uploadProfilePhoto(stig, new File([], "tom.jpg")), /Velg et bilde/);
+      const big = new File([new Uint8Array(randomBytes(600_000))], "stor.jpg");
+      await refused(() => uploadProfilePhoto(stig, big), /for stort/);
+      const text = new File(["ikke et bilde"], "notat.jpg", { type: "image/jpeg" });
+      await refused(() => uploadProfilePhoto(stig, text), /klarte ikke å lese bildet/);
+      assert.equal(await getOwnProfilePhoto(stig), null);
+    });
+
+    await check("invitasjonen viser bildet av den som inviterer, også uten innlogging", async () => {
+      const own = await getOwnProfilePhoto(nora);
+      assert.equal((await getInvitationPreview(jonToken))?.inviterPhoto, own?.version);
+      assert.equal((await getPublicInvitation(jonToken))?.inviterPhoto, own?.version);
+      assert.equal((await size(await getInviterPhotoByToken(jonToken, "thumb"))).width, 128);
+      // Lenken gir bare bildet av den som inviterer, og bare med riktig nøkkel.
+      assert.equal(await getInviterPhotoByToken("x".repeat(32), "thumb"), null);
+      assert.equal(await getInviterPhotoByToken("ikke en nøkkel", "thumb"), null);
+      assert.equal((await getOwnInvitationPreview(nora, norasHytte))?.inviterPhoto, own?.version);
+    });
+
+    await check("et medlem uten forbindelse ser ikke bildet, og kan ikke slå det opp", async () => {
+      assert.equal(await getProfilePhotoForViewer(stig, nora.id, "full"), null);
+      assert.equal(await getProfilePhotoForViewer(stig, nora.id, "thumb"), null);
+      assert.equal(await getProfilePhotoForViewer(stig, "finnes-ikke", "thumb"), null);
+    });
+
+    const jon = await register("jon@test.local", "Jon Låner");
+    await check("den eieren viser hytta til, ser bildet der navnet står", async () => {
+      const version = (await getOwnProfilePhoto(nora))?.version;
+      assert.ok(await getProfilePhotoForViewer(jon, nora.id, "thumb"));
+      const [shared] = await listSharedCabins(jon);
+      assert.equal(shared.ownerPhoto, version);
+      assert.equal(shared.cabin.ownerId, nora.id);
+      assert.equal((await getVisibleCabin(jon, norasHytte))?.ownerPhoto, version);
+      assert.deepEqual(
+        (await getCircle(jon)).people.map((p) => [p.name, p.photo]),
+        [["Nora Eier", version]],
+      );
+      const mine = await getInvitationForViewer(jon, jonToken);
+      assert.equal(mine?.inviterPhoto, version);
+    });
+
+    await check("eieren ser bildet til den som ser hytta", async () => {
+      await uploadProfilePhoto(jon, await photo("jon.jpg", "#225588"));
+      const version = (await getOwnProfilePhoto(jon))?.version;
+      assert.ok(await getProfilePhotoForViewer(nora, jon.id, "thumb"));
+      const sharing = await listCabinSharing(nora, norasHytte);
+      assert.deepEqual(sharing?.people.map((p) => [p.name, p.photo]), [["Jon Låner", version]]);
+      assert.deepEqual(
+        (await getCircle(nora)).people.map((p) => [p.name, p.photo]),
+        [["Jon Låner", version]],
+      );
+      // Stig har fortsatt ingen forbindelse til noen av dem.
+      assert.equal(await getProfilePhotoForViewer(stig, jon.id, "thumb"), null);
+    });
+
+    await check("administratorene ser bildet, slik de ser navnet i medlemslisten", async () => {
+      assert.ok(await getProfilePhotoForViewer(admin, nora.id, "thumb"));
+      assert.equal((await getVisibleCabin(admin, norasHytte))?.access, "admin");
+    });
+
+    await check("eier og låner ser hverandres bilde i forespørselen", async () => {
+      await createBooking(jon, norasHytte, { ...request(41, 43), message: "" });
+      const [incoming] = await listIncoming(nora);
+      assert.equal(incoming.borrowerPhoto, (await getOwnProfilePhoto(jon))?.version);
+      assert.equal(incoming.booking.borrowerId, jon.id);
+      const [outgoing] = (await listOutgoing(jon)).filter((b) => b.cabinName === "Noras hytte");
+      assert.equal(outgoing.ownerPhoto, (await getOwnProfilePhoto(nora))?.version);
+      assert.equal(outgoing.ownerId, nora.id);
+    });
+
+    await check("den som venter på godkjenning, vises med bilde for eieren, men ser ikke eierens", async () => {
+      await registerAccessRequest(jonToken, "tora@test.local");
+      const tora = await register("tora@test.local", "Tora Annen");
+      await uploadProfilePhoto(tora, await photo("tora.jpg", "#447733"));
+      const sharing = await listCabinSharing(nora, norasHytte);
+      assert.deepEqual(
+        sharing?.requests.map((r) => [r.name, r.photo]),
+        [["Tora Annen", (await getOwnProfilePhoto(tora))?.version]],
+      );
+      assert.ok(await getProfilePhotoForViewer(nora, tora.id, "thumb"));
+      assert.equal(await getProfilePhotoForViewer(tora, nora.id, "thumb"), null);
+      // Sier eieren nei, er forbindelsen borte.
+      const [waiting] = sharing?.requests ?? [];
+      await declineAccessRequest(nora, waiting.id);
+      assert.equal(await getProfilePhotoForViewer(nora, tora.id, "thumb"), null);
+    });
+
+    await check("slutter eieren å vise hytta, blir bildet stående bare der det finnes en forespørsel", async () => {
+      await revokeAccess(nora, norasHytte, jon.id);
+      // Forespørselen står, og begge navnene vises fortsatt under Forespørsler.
+      assert.ok(await getProfilePhotoForViewer(jon, nora.id, "thumb"));
+      assert.ok(await getProfilePhotoForViewer(nora, jon.id, "thumb"));
+      // Invitasjonen er trukket tilbake: lenken viser ikke bildet lenger.
+      assert.equal(await getInviterPhotoByToken(jonToken, "thumb"), null);
+      assert.equal((await getInvitationPreview(jonToken))?.inviterPhoto, null);
+      // Uten forespørselen er det ingen forbindelse igjen.
+      await db.execute(sql`delete from "booking" where "cabin_id" = ${norasHytte}`);
+      assert.equal(await getProfilePhotoForViewer(jon, nora.id, "thumb"), null);
+      assert.equal(await getProfilePhotoForViewer(nora, jon.id, "thumb"), null);
+    });
+
+    await check("en utløpt invitasjon viser ikke bildet", async () => {
+      const again = await sentDuring(() => inviteToCabin(nora, norasHytte, "sent@test.local"));
+      const token = tokenIn(again.mails[0]);
+      assert.ok(await getInviterPhotoByToken(token, "thumb"));
+      await expire("sent@test.local");
+      assert.equal(await getInviterPhotoByToken(token, "thumb"), null);
+      assert.equal((await getPublicInvitation(token))?.inviterPhoto, null);
+    });
+
+    await check("nytt bilde får ny adresse, og bare eieren av bildet kan bytte og fjerne det", async () => {
+      const before = (await getOwnProfilePhoto(nora))?.version;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      await uploadProfilePhoto(nora, await photo("ny.jpg", "#883311"));
+      assert.notEqual((await getOwnProfilePhoto(nora))?.version, before);
+      // Handlingene gjelder alltid den som er logget inn: Stig rører ikke Noras bilde.
+      await removeProfilePhoto(stig);
+      assert.ok(await getOwnProfilePhoto(nora));
+      await removeProfilePhoto(nora);
+      assert.equal(await getOwnProfilePhoto(nora), null);
+      assert.equal(await getProfilePhotoForViewer(nora, nora.id, "full"), null);
+      assert.equal(await getProfilePhotoForViewer(admin, nora.id, "thumb"), null);
+    });
+
+    console.log("Profilbilde fra LinkedIn");
+    const linkedIn = await fakeLinkedIn();
+    const other = await fakeLinkedIn();
+    const env = { ...process.env };
+    try {
+      await check("uten nøkler er henting fra LinkedIn slått av", async () => {
+        delete process.env.LINKEDIN_CLIENT_ID;
+        delete process.env.LINKEDIN_CLIENT_SECRET;
+        assert.equal(canFetchFromLinkedIn(), false);
+        const logged = await loggedDuring(async () => {
+          assert.deepEqual(await fetchLinkedInPhoto("kode"), { ok: false, reason: "failed" });
+        });
+        assert.equal(logged.length, 1);
+        process.env.LINKEDIN_CLIENT_ID = "test-id";
+        assert.equal(canFetchFromLinkedIn(), false);
+        process.env.LINKEDIN_CLIENT_SECRET = "test-hemmelighet";
+        assert.equal(canFetchFromLinkedIn(), true);
+      });
+
+      await check("brukeren sendes til LinkedIn med bare navn og bilde som ønske", async () => {
+        const url = new URL(linkedInAuthorizeUrl("tilfeldig-verdi"));
+        assert.equal(url.origin, "https://www.linkedin.com");
+        assert.equal(url.pathname, "/oauth/v2/authorization");
+        assert.equal(url.searchParams.get("response_type"), "code");
+        assert.equal(url.searchParams.get("client_id"), "test-id");
+        assert.equal(url.searchParams.get("state"), "tilfeldig-verdi");
+        // Ikke e-post, og ingen rett til å lese eller publisere noe.
+        assert.equal(url.searchParams.get("scope"), "openid profile");
+        assert.equal(url.searchParams.get("redirect_uri"), linkedInRedirectUri());
+        assert.match(linkedInRedirectUri(), /\/profil\/linkedin$/);
+        // Hemmeligheten står aldri i adressen brukeren sendes til.
+        assert.doesNotMatch(url.toString(), /test-hemmelighet/);
+      });
+
+      await check("bilder lastes bare ned fra LinkedIns egne adresser", async () => {
+        const ok = (value: string) => isLinkedInPictureUrl(new URL(value));
+        assert.equal(ok("https://media.licdn.com/dms/image/v2/abc/profile-displayphoto/0?e=1"), true);
+        assert.equal(ok("http://media.licdn.com/dms/image/abc"), false);
+        assert.equal(ok("https://media.licdn.com.eksempel.no/abc"), false);
+        assert.equal(ok("https://eksempel.no/media.licdn.com/abc"), false);
+        assert.equal(ok("https://licdnxcom.no/abc"), false);
+        assert.equal(ok("https://127.0.0.1/abc"), false);
+      });
+
+      process.env.LINKEDIN_TEST_ORIGIN = linkedIn.origin;
+      await check("koden byttes mot bildet, og bildet legges på profilen", async () => {
+        const result = await fetchLinkedInPhoto("kode-fra-linkedin");
+        assert.equal(result.ok, true);
+        if (!result.ok) return;
+        const [token, info, picture] = linkedIn.seen;
+        assert.deepEqual(
+          linkedIn.seen.map((r) => r.path),
+          ["/oauth/v2/accessToken", "/v2/userinfo", "/bilde.jpg"],
+        );
+        const sent = new URLSearchParams(token.body);
+        assert.equal(sent.get("grant_type"), "authorization_code");
+        assert.equal(sent.get("code"), "kode-fra-linkedin");
+        assert.equal(sent.get("client_id"), "test-id");
+        assert.equal(sent.get("client_secret"), "test-hemmelighet");
+        assert.equal(sent.get("redirect_uri"), linkedInRedirectUri());
+        assert.equal(info.authorization, "Bearer nokkel-fra-linkedin");
+        // Nøkkelen følger ikke med når selve bildet hentes.
+        assert.equal(picture.authorization, "");
+
+        await setProfilePhoto(nora, result.image, "linkedin");
+        assert.equal((await getOwnProfilePhoto(nora))?.source, "linkedin");
+        assert.deepEqual(await size(await getProfilePhotoForViewer(nora, nora.id, "full")), {
+          format: "webp",
+          width: 400,
+          height: 400,
+          exif: false,
+        });
+      });
+
+      await check("av svaret fra LinkedIn lagres bare bildet", async () => {
+        const rows = await db.execute(
+          sql`select row_to_json(u)::text as u, (select count(*)::int from "account") as accounts
+              from "user" u where u."id" = ${nora.id}`,
+        );
+        const row = rows.rows[0] as { u: string; accounts: number };
+        // Ingen nøkkel, LinkedIn-ID, navn eller adresse fra LinkedIn er tatt vare på.
+        assert.doesNotMatch(row.u, /abc123|Nora Nordmann|privat\.example|nokkel-fra-linkedin/);
+        assert.equal(row.accounts, 0);
+        assert.equal(nora.name, "Nora Eier");
+      });
+
+      await check("profil uten bilde hos LinkedIn gir beskjed og endrer ingenting", async () => {
+        const before = (await getOwnProfilePhoto(nora))?.version;
+        linkedIn.state.answer = "none";
+        assert.deepEqual(await fetchLinkedInPhoto("kode"), { ok: false, reason: "no-photo" });
+        assert.equal((await getOwnProfilePhoto(nora))?.version, before);
+      });
+
+      await check("bilde hos en fremmed vert lastes ikke ned", async () => {
+        linkedIn.state.answer = "foreign";
+        linkedIn.state.foreign = other.origin;
+        const logged = await loggedDuring(async () => {
+          assert.deepEqual(await fetchLinkedInPhoto("kode"), { ok: false, reason: "failed" });
+        });
+        assert.equal(other.seen.length, 0);
+        assert.match(logged.join(" "), /Uventet vert/);
+      });
+
+      await check("svikter LinkedIn, får brukeren en vanlig melding, og loggen røper ingenting", async () => {
+        linkedIn.state.answer = "down";
+        const logged = await loggedDuring(async () => {
+          assert.deepEqual(await fetchLinkedInPhoto("hemmelig-kode-999"), {
+            ok: false,
+            reason: "failed",
+          });
+        });
+        assert.match(logged.join(" "), /Status 503/);
+        assert.doesNotMatch(
+          logged.join(" "),
+          /hemmelig-kode-999|test-hemmelighet|nokkel-fra-linkedin/,
+        );
+      });
+
+      await check("etterligningen av LinkedIn kan aldri brukes i produksjon", async () => {
+        process.env.VERCEL_ENV = "production";
+        assert.equal(new URL(linkedInAuthorizeUrl("x")).origin, "https://www.linkedin.com");
+        delete process.env.VERCEL_ENV;
+        assert.equal(new URL(linkedInAuthorizeUrl("x")).origin, linkedIn.origin);
+      });
+    } finally {
+      for (const key of [
+        "LINKEDIN_CLIENT_ID",
+        "LINKEDIN_CLIENT_SECRET",
+        "LINKEDIN_TEST_ORIGIN",
+        "VERCEL_ENV",
+      ]) {
+        if (env[key] === undefined) delete process.env[key];
+        else process.env[key] = env[key];
+      }
+      await linkedIn.close();
+      await other.close();
+    }
   }
 
   console.log("Brems på innlogging");

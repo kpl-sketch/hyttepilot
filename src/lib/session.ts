@@ -6,10 +6,14 @@ import { cache } from "react";
 import { auth } from "./auth";
 import { isAdminEmail } from "./brand";
 import { db } from "./db";
-import { profile } from "./db/schema";
+import { profile, profilePhoto } from "./db/schema";
 import type { Actor } from "./errors";
 
-export type Viewer = Actor & { phone: string };
+export type Viewer = Actor & {
+  phone: string;
+  /** Versjonen av brukerens eget profilbilde, eller null uten bilde. Se avatarSrc. */
+  photo: string | null;
+};
 
 /** Den innloggede brukeren fra innloggingen, eller null. Leses én gang per forespørsel. */
 export const getSessionUser = cache(async () => {
@@ -22,8 +26,9 @@ export const getViewer = cache(async (): Promise<Viewer | null> => {
   const sessionUser = await getSessionUser();
   if (!sessionUser) return null;
   const [row] = await db
-    .select()
+    .select({ phone: profile.phone, photoUpdatedAt: profilePhoto.updatedAt })
     .from(profile)
+    .leftJoin(profilePhoto, eq(profilePhoto.userId, profile.userId))
     .where(eq(profile.userId, sessionUser.id))
     .limit(1);
   if (!row) return null;
@@ -32,6 +37,7 @@ export const getViewer = cache(async (): Promise<Viewer | null> => {
     email: sessionUser.email,
     name: sessionUser.name,
     phone: row.phone,
+    photo: row.photoUpdatedAt ? String(row.photoUpdatedAt.getTime()) : null,
     isAdmin: isAdminEmail(sessionUser.email),
   };
 });

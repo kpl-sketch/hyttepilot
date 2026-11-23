@@ -6,6 +6,7 @@ import { appUrl, isAdminEmail } from "../brand";
 import { formatDate, todayInOslo } from "../dates";
 import { MAX_INVITATIONS_PER_ROUND } from "../invitation-limits";
 import { db } from "../db";
+import { profilePhotoVersion } from "../db/people";
 import {
   booking,
   type Cabin,
@@ -730,6 +731,7 @@ export async function listCabinSharing(actor: Actor, cabinId: string) {
       .select({
         userId: user.id,
         name: user.name,
+        photo: profilePhotoVersion,
         since: cabinAccess.createdAt,
         // Adressen vises bare når eieren selv skrev den inn i en invitasjon.
         email: sql<string | null>`(
@@ -815,12 +817,30 @@ function kindOf(inv: { cabinId: string | null }): "cabin" | "account" {
   return inv.cabinId ? "cabin" : "account";
 }
 
+/**
+ * En invitasjon viser bildet av den som inviterer så lenge den gjelder: ikke
+ * trukket tilbake og innenfor fristen. Bildet hentes med nøkkelen i lenken
+ * (getInviterPhotoByToken i profile-photos.ts), som bruker samme regel.
+ */
+export function showsInviterPhoto(inv: { revokedAt: Date | null; expiresAt: Date }): boolean {
+  return !inv.revokedAt && inv.expiresAt > new Date();
+}
+
+/** Versjonen av bildet til den som inviterer, eller null når det ikke skal vises. */
+function inviterPhotoOf(row: {
+  invitation: { revokedAt: Date | null; expiresAt: Date };
+  inviterPhoto: string | null;
+}): string | null {
+  return showsInviterPhoto(row.invitation) ? row.inviterPhoto : null;
+}
+
 async function loadInvitation(token: unknown) {
   if (!isInvitationToken(token)) return null;
   const [row] = await db
     .select({
       invitation,
       inviterName: user.name,
+      inviterPhoto: profilePhotoVersion,
       cabinName: cabin.name,
       cabinArea: cabin.area,
     })
@@ -844,6 +864,7 @@ export async function getPublicInvitation(token: unknown) {
     status: statusOf(row.invitation),
     kind: kindOf(row.invitation),
     inviterName: row.inviterName,
+    inviterPhoto: inviterPhotoOf(row),
     maskedEmail: maskEmail(row.invitation.email),
   };
 }
@@ -862,6 +883,7 @@ export async function getInvitationForViewer(actor: Actor, token: unknown) {
       mine: false as const,
       status,
       inviterName: row.inviterName,
+      inviterPhoto: inviterPhotoOf(row),
       maskedEmail: maskEmail(row.invitation.email),
     };
   }
@@ -870,6 +892,7 @@ export async function getInvitationForViewer(actor: Actor, token: unknown) {
     status,
     kind: kindOf(row.invitation),
     inviterName: row.inviterName,
+    inviterPhoto: inviterPhotoOf(row),
     message: row.invitation.message,
     cabin:
       row.invitation.cabinId && row.cabinName && row.cabinArea
@@ -883,6 +906,8 @@ export async function getInvitationForViewer(actor: Actor, token: unknown) {
 export type CirclePerson = {
   id: string;
   name: string;
+  /** Versjonen av profilbildet, eller null uten bilde. Se avatarSrc. */
+  photo: string | null;
   /** Hyttene denne personen deler med brukeren. */
   sharesWithMe: { id: string; name: string }[];
   /** Hyttene brukeren deler med denne personen. */
@@ -901,6 +926,7 @@ export async function getCircle(actor: Actor) {
       .select({
         personId: user.id,
         personName: user.name,
+        personPhoto: profilePhotoVersion,
         cabinId: cabin.id,
         cabinName: cabin.name,
       })
@@ -913,6 +939,7 @@ export async function getCircle(actor: Actor) {
       .select({
         personId: user.id,
         personName: user.name,
+        personPhoto: profilePhotoVersion,
         cabinId: cabin.id,
         cabinName: cabin.name,
       })
@@ -955,23 +982,23 @@ export async function getCircle(actor: Actor) {
   ]);
 
   const people = new Map<string, CirclePerson>();
-  const person = (id: string, name: string) => {
+  const person = (id: string, name: string, photo: string | null) => {
     let found = people.get(id);
     if (!found) {
-      found = { id, name, sharesWithMe: [], iShareWith: [] };
+      found = { id, name, photo, sharesWithMe: [], iShareWith: [] };
       people.set(id, found);
     }
     return found;
   };
   for (const row of incoming) {
     if (row.personId === actor.id) continue;
-    person(row.personId, row.personName).sharesWithMe.push({
+    person(row.personId, row.personName, row.personPhoto).sharesWithMe.push({
       id: row.cabinId,
       name: row.cabinName,
     });
   }
   for (const row of outgoing) {
-    person(row.personId, row.personName).iShareWith.push({
+    person(row.personId, row.personName, row.personPhoto).iShareWith.push({
       id: row.cabinId,
       name: row.cabinName,
     });
@@ -1100,6 +1127,7 @@ export async function getInvitationPreview(token: unknown) {
     status: statusOf(row.invitation),
     kind: kindOf(row.invitation),
     inviterName: row.inviterName,
+    inviterPhoto: inviterPhotoOf(row),
     maskedEmail: maskEmail(row.invitation.email),
   };
   const { cabinId, revokedAt, expiresAt } = row.invitation;
@@ -1133,8 +1161,15 @@ export async function getInvitationPreview(token: unknown) {
 export async function getOwnInvitationPreview(actor: Actor, cabinId: string) {
   const own = await getOwnCabin(actor, cabinId);
   if (!own) return null;
+  const [me] = await db
+    .select({ photo: profilePhotoVersion })
+    .from(user)
+    .where(eq(user.id, actor.id))
+    .limit(1);
   return {
     inviterName: actor.name,
+    /** Eierens eget bilde, slik den inviterte ser det på invitasjonssiden. */
+    inviterPhoto: me?.photo ?? null,
     cabin: {
       area: own.area,
       areaPosition: approximatePosition(own),
@@ -1365,6 +1400,7 @@ async function listAccessRequests(cabinId: string) {
       id: invitationRequest.id,
       userId: user.id,
       name: user.name,
+      photo: profilePhotoVersion,
       email: user.email,
       invitedEmail: invitation.email,
       createdAt: invitationRequest.createdAt,

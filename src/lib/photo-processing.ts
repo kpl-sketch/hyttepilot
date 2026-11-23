@@ -75,3 +75,55 @@ export function photoRows(cabinId: string, photos: ProcessedPhoto[], firstPositi
     ...photo,
   }));
 }
+
+/* ------------------------------- Profilbilde ------------------------------- */
+
+const AVATAR_SIDE = 400;
+const AVATAR_THUMB_SIDE = 128;
+
+export type ProcessedProfilePhoto = { full: Buffer; thumb: Buffer };
+
+/**
+ * Gjør et bilde om til profilbildet vi lagrer: kvadratisk, i to størrelser.
+ * Bildet kodes på nytt, så opptaksdata som GPS-posisjon blir ikke med videre.
+ * Er bildet ikke kvadratisk, beskjæres det rundt det som skiller seg ut i
+ * bildet. Det er oftest ansiktet.
+ *
+ * Et lite bilde forstørres ikke: det blir bare uskarpt og større å lagre.
+ * Bildet LinkedIn gir oss, kan være så lite som 100 punkter. Da lagres det i
+ * den størrelsen, og nettleseren viser det i ruta det står i.
+ */
+export async function processProfilePhoto(input: Buffer): Promise<ProcessedProfilePhoto> {
+  const unreadable = new UserError(
+    "Vi klarte ikke å lese bildet. Bruk et bilde i JPG, PNG eller WebP.",
+  );
+  const { default: sharp } = await import("sharp");
+  try {
+    const image = sharp(input, { limitInputPixels: 30_000_000 });
+    const { format, width, height } = await image.metadata();
+    if (!format || !ACCEPTED_FORMATS.includes(format)) throw unreadable;
+    if (!width || !height) throw unreadable;
+    // Den korteste siden er den samme uansett hvilken vei kameraet holdt bildet.
+    const shortest = Math.min(width, height);
+
+    const upright = image.rotate();
+    const square = (target: number, quality: number) => {
+      const side = Math.min(target, shortest);
+      return upright
+        .clone()
+        .resize({ width: side, height: side, fit: "cover", position: sharp.strategy.attention })
+        // Hvit bunn, slik at gjennomsiktige bilder ikke blir svarte.
+        .flatten({ background: "#ffffff" })
+        .webp({ quality })
+        .toBuffer();
+    };
+    const [full, thumb] = await Promise.all([
+      square(AVATAR_SIDE, 82),
+      square(AVATAR_THUMB_SIDE, 78),
+    ]);
+    return { full, thumb };
+  } catch (error) {
+    if (error instanceof UserError) throw error;
+    throw unreadable;
+  }
+}

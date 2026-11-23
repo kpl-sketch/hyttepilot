@@ -3,6 +3,7 @@ import { and, asc, eq, getTableColumns, gt, inArray, ne, sql } from "drizzle-orm
 import { z } from "zod";
 import { type DateRange, freePeriods, isIsoDate, todayInOslo } from "../dates";
 import { db } from "../db";
+import { profilePhotoVersion } from "../db/people";
 import { availability, booking, cabin, cabinAccess, cabinPhoto, user } from "../db/schema";
 import { type Actor, UserError } from "../errors";
 import { photoRows, processPhotos } from "../photo-processing";
@@ -132,7 +133,12 @@ const publicCabin = {
  */
 export async function listSharedCabins(actor: Actor) {
   const rows = await db
-    .select({ cabin: publicCabin, ownerName: user.name, sharedAt: cabinAccess.createdAt })
+    .select({
+      cabin: publicCabin,
+      ownerName: user.name,
+      ownerPhoto: profilePhotoVersion,
+      sharedAt: cabinAccess.createdAt,
+    })
     .from(cabinAccess)
     .innerJoin(cabin, eq(cabin.id, cabinAccess.cabinId))
     .innerJoin(user, eq(user.id, cabin.ownerId))
@@ -163,6 +169,7 @@ export async function getVisibleCabin(actor: Actor, cabinId: string) {
     .select({
       cabin: publicCabin,
       ownerName: user.name,
+      ownerPhoto: profilePhotoVersion,
       latitude: cabin.latitude,
       longitude: cabin.longitude,
     })

@@ -4,10 +4,13 @@
  * kalenderen sjekkes for dato og ledighet slik en skjermleser får det.
  *
  * Slik kjøres den:
- *   1. AI_GATEWAY_API_KEY=test npx next build
- *      (personvernsiden lages ved bygging og nevner bare tekstforslag når nøkkelen er satt)
+ *   1. AI_GATEWAY_API_KEY=test LINKEDIN_CLIENT_ID=test-id LINKEDIN_CLIENT_SECRET=test-hemmelighet \
+ *      npx next build
+ *      (personvernsiden lages ved bygging og nevner bare tekstforslag og LinkedIn når nøklene er satt)
  *   2. EMAIL_DEV_OUTBOX=1 ADDRESS_SEARCH_URL=http://127.0.0.1:9/sok \
  *      AI_GATEWAY_API_KEY=test AI_DESCRIPTION_URL=http://127.0.0.1:4011/v1/chat/completions \
+ *      LINKEDIN_CLIENT_ID=test-id LINKEDIN_CLIENT_SECRET=test-hemmelighet \
+ *      LINKEDIN_TEST_ORIGIN=http://127.0.0.1:4012 \
  *      npx next start
  *   3. npm run test:nettleser
  *
@@ -16,7 +19,9 @@
  * av seg selv). Ingen e-post sendes: innloggingskoder og invitasjoner leses
  * fra .dev-outbox.jsonl. Alle adresser slutter på @test.local. Tekstforslagene
  * kommer fra en etterligning av AI-tjenesten som testen selv starter på port
- * 4011 (TEST_AI_PORT). Ingenting sendes til en ekte AI-tjeneste.
+ * 4011 (TEST_AI_PORT). Ingenting sendes til en ekte AI-tjeneste. Profilbildet
+ * hentes fra en etterligning av LinkedIn på port 4012 (TEST_LINKEDIN_PORT).
+ * Ingenting sendes til LinkedIn.
  *
  * Skjermbildene havner i mappen SCREENSHOT_DIR (standard: skjermbilder/).
  */
@@ -89,6 +94,75 @@ async function fakeTextService() {
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(AI_PORT, "127.0.0.1", resolve);
+  });
+  return { seen, state, close: () => new Promise((resolve) => server.close(resolve)) };
+}
+
+/* ------------------------------- LinkedIn --------------------------------- */
+
+const LINKEDIN_PORT = Number(process.env.TEST_LINKEDIN_PORT ?? 4012);
+
+/**
+ * Etterligner LinkedIn. Serveren som testes, må være startet med
+ * LINKEDIN_TEST_ORIGIN som peker hit, se toppen av filen. Siden der brukeren
+ * godkjenner, sender nettleseren rett tilbake, som om brukeren trykket
+ * «Tillat». Med `state.answer = "cancel"` er det som om brukeren trykket «Avbryt».
+ */
+async function fakeLinkedIn() {
+  const seen = [];
+  const state = { answer: "allow" };
+  const picture = await sharp(
+    Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800">
+      <rect width="800" height="800" fill="#d9e6ee"/>
+      <circle cx="400" cy="310" r="150" fill="#e8b48c"/>
+      <path d="M130 800 C150 560 650 560 670 800 Z" fill="#173f57"/>
+    </svg>`),
+  )
+    .jpeg()
+    .toBuffer();
+  const server = createServer((request, response) => {
+    const address = new URL(request.url, `http://127.0.0.1:${LINKEDIN_PORT}`);
+    const chunks = [];
+    request.on("data", (chunk) => chunks.push(chunk));
+    request.on("end", () => {
+      seen.push({
+        path: address.pathname,
+        query: Object.fromEntries(address.searchParams),
+        body: Buffer.concat(chunks).toString("utf8"),
+      });
+      const json = (body) => {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify(body));
+      };
+      if (address.pathname === "/oauth/v2/authorization") {
+        const back = new URL(address.searchParams.get("redirect_uri"));
+        back.searchParams.set("state", address.searchParams.get("state"));
+        if (state.answer === "cancel") back.searchParams.set("error", "user_cancelled_authorize");
+        else back.searchParams.set("code", "kode-fra-linkedin");
+        response.writeHead(302, { location: back.toString() });
+        return response.end();
+      }
+      if (address.pathname === "/oauth/v2/accessToken") {
+        return json({ access_token: "nokkel-fra-linkedin", expires_in: 3600 });
+      }
+      if (address.pathname === "/v2/userinfo") {
+        return json({
+          sub: "abc123",
+          name: "Per Privat",
+          picture: `http://127.0.0.1:${LINKEDIN_PORT}/bilde.jpg`,
+        });
+      }
+      if (address.pathname === "/bilde.jpg") {
+        response.writeHead(200, { "content-type": "image/jpeg" });
+        return response.end(picture);
+      }
+      response.writeHead(404);
+      response.end();
+    });
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(LINKEDIN_PORT, "127.0.0.1", resolve);
   });
   return { seen, state, close: () => new Promise((resolve) => server.close(resolve)) };
 }
@@ -324,7 +398,7 @@ async function openDates(page, from, to) {
 
 async function main() {
   await pool.query(
-    `truncate "booking", "availability", "cabin_photo", "cabin_access", "invitation", "cabin", "profile", "login_throttle", "verification", "session", "account", "user" cascade`,
+    `truncate "booking", "availability", "cabin_photo", "cabin_access", "invitation", "cabin", "profile_photo", "profile", "login_throttle", "verification", "session", "account", "user" cascade`,
   );
 
   console.log("Administrator og første hytteeier");
@@ -1112,6 +1186,185 @@ async function main() {
     await anne.getByText("Selve forslaget lagrer vi ikke.", { exact: false }).waitFor();
   });
   await ai.close();
+
+  console.log("Profilbilde");
+  const linkedIn = await fakeLinkedIn();
+  const userId = async (email) =>
+    (await pool.query(`select "id" from "user" where "email" = $1`, [email])).rows[0].id;
+  const storedPhoto = async (email) =>
+    (
+      await pool.query(
+        `select p."source" from "profile_photo" p join "user" u on u."id" = p."user_id" where u."email" = $1`,
+        [email],
+      )
+    ).rows[0]?.source ?? null;
+  /** Henter adressen med kakene til vinduet, slik nettleseren gjør for et bilde. */
+  const fetched = async (page, address) => {
+    const response = await page.request.get(`${BASE}${address}`, { maxRedirects: 0 });
+    return { status: response.status(), type: response.headers()["content-type"] ?? "" };
+  };
+  const perId = await userId("per@test.local");
+  const menu = (page) => page.getByRole("banner");
+
+  await check("uten bilde vises forbokstaven, og hyttekretsen foreslår å legge til et", async () => {
+    await per.goto(`${BASE}/krets`);
+    const nudge = per.getByRole("complementary", { name: "Vis hvem du er." });
+    await nudge.waitFor();
+    await nudge.getByRole("button", { name: "Hent bildet fra LinkedIn" }).waitFor();
+    assert.equal(await menu(per).locator("img").count(), 0);
+    assert.equal(
+      await nudge.getByRole("button").count(),
+      1,
+      "Knappen for LinkedIn vises ikke. Start serveren med LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET og LINKEDIN_TEST_ORIGIN, se toppen av filen.",
+    );
+    await shot(per, "18a-vis-hvem-du-er", nudge);
+  });
+
+  await check("ett trykk henter bildet fra LinkedIn og legger det på profilen", async () => {
+    await per
+      .getByRole("complementary", { name: "Vis hvem du er." })
+      .getByRole("button", { name: "Hent bildet fra LinkedIn" })
+      .click();
+    await per.waitForURL(/\/profil\?bilde=hentet$/);
+    await per.getByRole("status").getByText("Bildet er hentet fra LinkedIn.").waitFor();
+    await per.getByText(/Bildet ble hentet fra LinkedIn \d+\. /).waitFor();
+    assert.equal(await storedPhoto("per@test.local"), "linkedin");
+    // Vi ba bare om navn og bilde, og bare bildet ble hentet.
+    const asked = linkedIn.seen.find((r) => r.path === "/oauth/v2/authorization");
+    assert.equal(asked.query.scope, "openid profile");
+    assert.equal(asked.query.redirect_uri, `${BASE}/profil/linkedin`);
+    assert.deepEqual(
+      linkedIn.seen.map((r) => r.path),
+      ["/oauth/v2/authorization", "/oauth/v2/accessToken", "/v2/userinfo", "/bilde.jpg"],
+    );
+    // Navnet hos LinkedIn er et annet. Navnet her er urørt, og innloggingen er den samme.
+    await per.getByRole("heading", { name: "Per Eier" }).waitFor();
+    assert.equal((await per.getByRole("main").innerText()).includes("Per Privat"), false);
+    // Bildet står i toppmenyen og på profilen.
+    await menu(per).locator(`img[src^="/profilbilder/${perId}?v="]`).waitFor();
+    const shown = per.getByRole("main").locator(`img[src^="/profilbilder/${perId}?v="]`);
+    await eventually(
+      async () => (await shown.evaluate((img) => img.naturalWidth)) === 400,
+      "profilbildet ble ikke vist i full størrelse",
+    );
+    await shot(per, "18b-profil-med-bilde-fra-linkedin");
+    // Dyttet på hyttekretsen er borte når bildet er på plass.
+    await per.goto(`${BASE}/krets`);
+    await per.getByRole("heading", { name: "Din hyttekrets" }).waitFor();
+    assert.equal(await per.getByRole("complementary", { name: "Vis hvem du er." }).count(), 0);
+  });
+
+  await check("den som ser hytta, ser bildet av eieren der navnet står", async () => {
+    await kari.goto(`${BASE}/krets`);
+    const card = kari.getByRole("link", { name: /Sjøbua/ }).first();
+    const avatar = card.locator(`img[src^="/profilbilder/${perId}?v="]`);
+    await avatar.waitFor();
+    await eventually(
+      async () => (await avatar.evaluate((img) => img.naturalWidth)) === 128,
+      "bildet av eieren ble ikke vist på hyttekortet",
+    );
+    await shot(kari, "18c-hyttekrets-med-bilde");
+    await kari.goto(`${BASE}/hytter/${sjobua}`);
+    await kari.getByText("Hytta til Per Eier.", { exact: false }).first().waitFor();
+    await kari.getByRole("main").locator(`img[src^="/profilbilder/${perId}?v="]`).first().waitFor();
+    await shot(kari, "18d-hytteside-med-bilde", kari.getByRole("main").locator("header").first());
+  });
+
+  await check("et medlem uten forbindelse og en uten innlogging får ikke bildet", async () => {
+    const src = await menu(per).locator("img").getAttribute("src");
+    assert.deepEqual(await fetched(per, src), { status: 200, type: "image/webp" });
+    assert.deepEqual(await fetched(kari, src), { status: 200, type: "image/webp" });
+    // Pia ser bare Fjellro, som er Karis. Hun har ingen forbindelse til Per.
+    assert.equal((await fetched(partner, src)).status, 404);
+    assert.equal((await fetched(partner, `/profilbilder/${perId}`)).status, 404);
+    // Uten innlogging sendes man til innloggingen, og får ikke noe bilde.
+    const anonymous = await phone();
+    const refusedTo = await fetched(anonymous, src);
+    assert.notEqual(refusedTo.status, 200);
+    assert.equal(refusedTo.type.startsWith("image/"), false);
+    await anonymous.context().close();
+  });
+
+  await check("avbryter brukeren hos LinkedIn, er ingenting hentet", async () => {
+    linkedIn.state.answer = "cancel";
+    await kari.goto(`${BASE}/profil`);
+    await kari.getByRole("button", { name: "Hent bildet fra LinkedIn" }).click();
+    await kari.waitForURL(/\/profil\?bilde=avbrutt$/);
+    await kari.getByRole("alert").getByText("Du avbrøt hos LinkedIn.", { exact: false }).waitFor();
+    assert.equal(await storedPhoto("kari@test.local"), null);
+    linkedIn.state.answer = "allow";
+  });
+
+  await check("et svar som ikke hører til en tur brukeren selv startet, gir ingenting", async () => {
+    const before = linkedIn.seen.length;
+    // Som om noen lurte Kari til å åpne en lenke med en fremmed kode fra LinkedIn.
+    await kari.goto(`${BASE}/profil/linkedin?code=fremmed-kode&state=funnet-paa`);
+    await kari.waitForURL(/\/profil\?bilde=feil$/);
+    await kari.getByRole("alert").getByText("Vi fikk ikke hentet bildet fra LinkedIn.", { exact: false }).waitFor();
+    assert.equal(linkedIn.seen.length, before, "koden skal ikke sendes videre til LinkedIn");
+    assert.equal(await storedPhoto("kari@test.local"), null);
+  });
+
+  await check("brukeren kan laste opp et bilde selv, og fjerne det igjen", async () => {
+    const own = await sharp({
+      create: { width: 3000, height: 2000, channels: 3, background: "#7a4b2a" },
+    })
+      .jpeg()
+      .toBuffer();
+    await kari.goto(`${BASE}/profil`);
+    await kari.getByText("Du har ikke noe bilde ennå.", { exact: false }).waitFor();
+    await kari.getByRole("button", { name: "Last opp et bilde" }).waitFor();
+    await kari
+      .locator("input[data-profilbilde]")
+      .setInputFiles({ name: "meg.jpg", mimeType: "image/jpeg", buffer: own });
+    await kari.getByRole("status").getByText("Bildet er lagret.").waitFor();
+    assert.equal(await storedPhoto("kari@test.local"), "upload");
+    await kari.getByText(/Du lastet opp bildet \d+\. /).waitFor();
+    const kariId = await userId("kari@test.local");
+    await menu(kari).locator(`img[src^="/profilbilder/${kariId}?v="]`).waitFor();
+    await shot(kari, "18e-profil-med-eget-bilde");
+
+    await kari.getByRole("button", { name: "Fjern bildet" }).click();
+    await kari.getByRole("status").getByText("Bildet er fjernet.").waitFor();
+    await kari.getByText("Du har ikke noe bilde ennå.", { exact: false }).waitFor();
+    assert.equal(await storedPhoto("kari@test.local"), null);
+    assert.equal(await menu(kari).locator("img").count(), 0);
+  });
+
+  await check("invitasjonen viser bildet av den som inviterer, før innlogging", async () => {
+    // Invitasjonen legges rett i databasen, så ingen e-post sendes for denne sjekken.
+    const token = "profilbildetest-0123456789abcdef";
+    await pool.query(
+      `insert into "invitation" ("email", "kind", "cabin_id", "invited_by", "token")
+       values ('bilde@test.local', 'friend', $1, $2, $3)`,
+      [sjobua, perId, token],
+    );
+    const invited = await phone();
+    await invited.goto(`${BASE}/invitasjon/${token}`);
+    await invited.getByRole("heading", { name: "Per låner deg hytta si" }).waitFor();
+    const avatar = invited.locator(`img[src^="/invitasjon/${token}/avsender?v="]`);
+    await avatar.waitFor();
+    await eventually(
+      async () => (await avatar.evaluate((img) => img.naturalWidth)) === 128,
+      "bildet av den som inviterer, ble ikke vist",
+    );
+    await invited.getByText("Per Eier", { exact: true }).waitFor();
+    await shot(invited, "18f-invitasjon-med-bilde");
+    // Trekkes invitasjonen tilbake, viser lenken ikke bildet lenger.
+    const src = await avatar.getAttribute("src");
+    await pool.query(`update "invitation" set "revoked_at" = now() where "token" = $1`, [token]);
+    assert.equal((await fetched(invited, src)).status, 404);
+    await pool.query(`delete from "invitation" where "token" = $1`, [token]);
+    await invited.context().close();
+  });
+
+  await check("personvernsiden sier hva som hentes fra LinkedIn, og hvem som ser bildet", async () => {
+    await anne.goto(`${BASE}/personvern`);
+    await anne.getByText("Profilbildet ditt, hvis du legger inn et.", { exact: false }).waitFor();
+    await anne.getByText("Vi henter bare bildet.", { exact: false }).waitFor();
+    await anne.getByText("Profilbildet ditt står ved navnet ditt", { exact: false }).waitFor();
+  });
+  await linkedIn.close();
 
   console.log("Varsler");
   await check("lenken til en deling som er fjernet, gir ingenting", async () => {

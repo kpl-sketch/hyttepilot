@@ -17,6 +17,12 @@ litt over selvkost. Navnet er et arbeidsnavn og byttes ett sted: `NEXT_PUBLIC_AP
   ledeteksten, i det tomme feltet og i ruten med knappen. Utkastet legges i feltet,
   og ingenting lagres før eieren trykker «Lagre endringene». Uten bilde er knappen
   grå. Høyst ti forslag per hytte i døgnet. Slått av uten `AI_GATEWAY_API_KEY`.
+- **Profilbilde.** Hvert medlem kan legge inn et bilde av seg selv på `/profil`:
+  hentet fra LinkedIn med ett trykk, eller lastet opp. Bildet står ved navnet,
+  og bare der navnet vises fra før: i hyttekretsen, på hyttesiden, i
+  forespørsler, hos eieren og på invitasjonen. Uten bilde vises forbokstaven.
+  Henting fra LinkedIn er slått av uten `LINKEDIN_CLIENT_ID` og
+  `LINKEDIN_CLIENT_SECRET`. Se «Profilbilde fra LinkedIn» under.
 - **Adresse og vei.** Eieren legger inn adressen, med forslag fra Kartverkets
   adresseregister, og en nøyaktig kartposisjon. Låneren får adressen og lenker som
   viser veien i kartet når lånet er betalt. Før det ser låneren området, med et
@@ -153,10 +159,41 @@ skrives i stedet til filen `.dev-outbox.jsonl` og til terminalen.
    `BETTER_AUTH_SECRET` er valgfri: uten den avledes nøkkelen av `DATABASE_URL`.
    Sett `AI_GATEWAY_API_KEY` (lages under AI Gateway i Vercel) for å slå på
    tekstforslag til beskrivelsen. Uten den vises ikke knappen.
+   Sett `LINKEDIN_CLIENT_ID` og `LINKEDIN_CLIENT_SECRET` for å slå på henting av
+   profilbilde fra LinkedIn. Se «Profilbilde fra LinkedIn» under.
    I produksjon stopper tjenesten heller enn å bruke standardnøkkelen hvis
    begge mangler.
 5. Deploy. Byggingen oppdaterer databasen automatisk (`scripts/migrate.mjs`).
 6. Logg inn med en adresse fra `ADMIN_EMAILS` og inviter den første hytteeieren.
+
+## Profilbilde fra LinkedIn
+
+LinkedIn lar ingen hente et profilbilde ut fra en profillenke eller et navn. Den
+eneste tillatte veien er LinkedIns egen løsning «Sign In with LinkedIn using
+OpenID Connect»: medlemmet trykker «Hent bildet fra LinkedIn», godkjenner hos
+LinkedIn, og tjenesten får adressen til bildet. Tjenesten bruker dette bare til
+å hente bildet. Det er ikke en innlogging.
+
+Slik settes det opp, én gang:
+
+1. Gå til developer.linkedin.com, «My apps» og «Create app». Appen må knyttes
+   til en LinkedIn-side (bedriftsside). Den koblingen kan ikke byttes etterpå.
+   Fyll inn navn, logo og adressen til personvernsiden (`/personvern`).
+2. Under «Products»: be om «Sign In with LinkedIn using OpenID Connect».
+3. Under «Auth», «Authorized redirect URLs»: legg inn
+   `https://<domenet>/profil/linkedin`, nøyaktig slik `BETTER_AUTH_URL` er satt,
+   uten skråstrek til slutt.
+4. Kopier «Client ID» og «Primary Client Secret» fra «Auth» til
+   `LINKEDIN_CLIENT_ID` og `LINKEDIN_CLIENT_SECRET` i Vercel (Production), og
+   bygg på nytt. Personvernsiden lages ved bygging og nevner LinkedIn bare når
+   nøklene er satt.
+
+Det tjenesten ber om, er `openid profile`: navn og bilde. Ikke e-post, og ingen
+rett til å lese eller publisere noe. Av svaret brukes bare adressen til bildet.
+Bildet lastes ned fra LinkedIns bildeadresser (`*.licdn.com`), gjøres om til et
+kvadratisk WebP-bilde og lagres i tabellen `profile_photo`. Nøkkelen fra
+LinkedIn brukes til det ene oppslaget og lagres ikke. Adressen LinkedIn gir til
+bildet, går ut etter en tid, og derfor lagres en kopi og ikke adressen.
 
 ## Kommandoer
 
@@ -182,6 +219,8 @@ src/lib/services/         Alle regler og tilgangssjekker. Start her.
   bookings.ts               forespørsel, ja/nei, betalt, avlysning
   reminders.ts              påminnelse til eieren før feriene når hytta står ledig
   photos.ts                 bilder: hvem får legge til, fjerne og se dem
+  profile-photos.ts         profilbilde: hvem får se det, opplasting, fjerning, bildet på invitasjonen
+  linkedin.ts               henter profilbildet fra LinkedIn: hva vi ber om, hva som lagres
   descriptions.ts           tekstforslag til beskrivelsen: hvem får be om det, hva som sendes ut, taket per døgn
   addresses.ts              adressesøk mot Kartverket, bare for hytteeiere
 src/lib/position.ts       Leser koordinater og kartlenker, lager veilenker
@@ -191,6 +230,11 @@ src/lib/photo-limits.ts   Grensene for antall og størrelse på bilder
 src/lib/description-assist.ts  Om tekstforslag er slått på, og taket per døgn
 src/components/description-field.tsx  Beskrivelsesfeltet med knappen for tekstforslag
 src/app/bilder/[id]/      Adressen som viser et bilde, bak innlogging
+src/app/profilbilder/[id]/  Adressen som viser et profilbilde, bak innlogging
+src/app/(app)/profil/     Profilsiden, og adressen LinkedIn sender brukeren tilbake til
+src/lib/linkedin.ts       Om henting fra LinkedIn er slått på
+src/lib/avatar.ts         Adressene til profilbilder
+src/components/avatar.tsx  Bildet eller forbokstaven ved siden av et navn
 src/lib/auth.ts           Innlogging med Better Auth (engangskode på e-post)
 src/lib/session.ts        requireViewer(): hvem er innlogget
 src/lib/emails.ts         Teksten i alle e-poster
@@ -233,6 +277,12 @@ Regelen for ny funksjonalitet: tilgangssjekken skal ligge i tjenestelaget
   hytta. Nettleseren forminsker hvert bilde før opplasting, og serveren lagrer det
   som WebP uten GPS-posisjon og andre opptaksdata. Blir det mange hytter, bør
   bildene flyttes til en fillagring, for eksempel Vercel Blob.
+- **Profilbildene ligger også i databasen** (tabellen `profile_photo`), ett per
+  medlem, som kvadratisk WebP i 400 og 128 punkter. Hvem som får se et bilde,
+  avgjøres i `mayViewProfilePhoto`: bare den som alt ser navnet. Lister henter
+  aldri selve bildet, bare en versjon (`profilePhotoVersion`) som står i adressen
+  til bildet. Testene bruker en etterligning av LinkedIn (`LINKEDIN_TEST_ORIGIN`),
+  som aldri virker i produksjon, og sender ingenting til LinkedIn.
 - **Adresseforslagene kommer fra Kartverket** (`ws.geonorge.no/adresser/v1`), som er
   åpent og gratis. Søket går via serveren, så Kartverket ser ikke hvem som søker.
   Svarer ikke tjenesten, kommer det ingen forslag, og eieren skriver adressen selv.

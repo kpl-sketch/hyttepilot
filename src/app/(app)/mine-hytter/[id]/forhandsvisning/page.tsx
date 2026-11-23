@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { InvitationCabinPreview } from "@/components/invitation-cabin";
 import { OwnerPreviewBar } from "@/components/owner-preview";
+import { avatarSrc } from "@/lib/avatar";
 import { getOwnInvitationPreview } from "@/lib/services/invitations";
 import { requireViewer } from "@/lib/session";
 
@@ -25,6 +26,7 @@ export default async function InvitationPreviewPage({
       <OwnerPreviewBar cabinId={id} step="invitasjon" />
       <InvitationCabinPreview
         inviterName={preview.inviterName}
+        inviterAvatar={avatarSrc(viewer.id, preview.inviterPhoto)}
         accepted={false}
         cabin={preview.cabin}
       />

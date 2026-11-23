@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { type ReactNode, Suspense } from "react";
+import { Avatar } from "@/components/avatar";
 import { NavLink } from "@/components/nav-link";
 import { Logo } from "@/components/logo";
 import { Loading } from "@/components/ui";
+import { avatarSrc } from "@/lib/avatar";
 import { PAGE_WIDTH } from "@/lib/layout";
 import { getViewer } from "@/lib/session";
 import { signOut } from "../logg-inn/actions";
@@ -63,16 +65,15 @@ async function Nav() {
         {viewer.isAdmin && <NavLink href="/admin">Administrasjon</NavLink>}
       </nav>
       <form action={signOut} className="ml-auto flex items-center gap-3 text-sm text-muted">
-        {/* Initialen i en rund brikke, slik mange tjenester viser hvem som er logget inn. */}
-        <span className="flex items-center gap-2">
-          <span
-            aria-hidden="true"
-            className="grid size-8 place-items-center rounded-full bg-pine text-sm font-bold text-white"
-          >
-            {viewer.name.trim().charAt(0).toUpperCase()}
-          </span>
+        {/* Bildet eller initialen i en rund brikke viser hvem som er logget inn, og leder til profilen. */}
+        <Link
+          href="/profil"
+          title="Profilen din"
+          className="flex items-center gap-2 rounded-full hover:underline"
+        >
+          <Avatar name={viewer.name} src={avatarSrc(viewer.id, viewer.photo)} size="sm" />
           {viewer.name}
-        </span>
+        </Link>
         <button type="submit" className="cursor-pointer underline">
           Logg ut
         </button>

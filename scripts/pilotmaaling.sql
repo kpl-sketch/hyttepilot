@@ -135,4 +135,12 @@ select 15, 'Av disse: eieren har bedt om tekstforslag minst én gang',
        ))::text
 from cabin c where c.owner_id not in (select id from test_user)
 
+union all
+select 16, 'Medlemmer med profilbilde (ikke testbrukere)', count(*)::text
+from profile_photo p where p.user_id not in (select id from test_user)
+union all
+select 17, 'Av disse: hentet fra LinkedIn',
+       count(*) filter (where p.source = 'linkedin')::text
+from profile_photo p where p.user_id not in (select id from test_user)
+
 order by nr;

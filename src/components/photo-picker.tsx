@@ -203,8 +203,9 @@ export function PhotoPicker({
 /**
  * Forminsker et bilde og lagrer det som JPG. Kvaliteten senkes trinnvis til
  * filen er liten nok. Bildet tegnes på nytt, så opptaksdata følger ikke med.
+ * Brukes også når et profilbilde lastes opp (profile-photo-upload.tsx).
  */
-async function shrink(file: File): Promise<File> {
+export async function shrink(file: File): Promise<File> {
   const url = URL.createObjectURL(file);
   try {
     const image = new Image();

@@ -1,4 +1,5 @@
 import { AreaMap } from "@/components/area-map";
+import { Avatar } from "@/components/avatar";
 import { PhotoGallery } from "@/components/photo-gallery";
 import { ButtonLink, buttonClass, Panel } from "@/components/ui";
 import { APP_NAME, WHAT_IT_IS } from "@/lib/brand";
@@ -22,12 +23,15 @@ export type InvitationCabin = {
  */
 export function InvitationCabinPreview({
   inviterName,
+  inviterAvatar = null,
   accepted,
   cabin,
   photoBase,
   loginHref,
 }: {
   inviterName: string;
+  /** Adressen til bildet av den som inviterer, se inviterAvatarSrc. Null uten bilde. */
+  inviterAvatar?: string | null;
   accepted: boolean;
   cabin: InvitationCabin;
   /** Hvor bildene hentes fra, se photoSrc. */
@@ -38,6 +42,13 @@ export function InvitationCabinPreview({
   const buttonText = accepted ? "Logg inn og se ledige datoer" : "Bli med og se ledige datoer";
   return (
     <>
+      {/* Bildet av den som inviterer, står først: en du kjenner, ikke en tjeneste. */}
+      {inviterAvatar && (
+        <p className="mb-4 flex items-center gap-3 text-lg font-semibold">
+          <Avatar name={inviterName} src={inviterAvatar} size="lg" />
+          <span>{inviterName}</span>
+        </p>
+      )}
       <h1 className="max-w-[22ch] text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
         {inviter} låner deg hytta si
       </h1>
