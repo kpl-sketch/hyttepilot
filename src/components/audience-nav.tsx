@@ -28,12 +28,16 @@ export function AudienceNav({
       if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest("input, textarea, select, [contenteditable]")) return;
+      // Next kan holde forrige side skjult i siden rett etter en lenke. Da skal
+      // bare linjen for siden som faktisk vises, svare på piltastene. Ellers
+      // blar ett tastetrykk to versjoner.
+      if (window.location.pathname !== `/v${current}`) return;
       if (event.key === "ArrowLeft") router.push(`/v${prev}`);
       if (event.key === "ArrowRight") router.push(`/v${next}`);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [router, prev, next]);
+  }, [router, current, prev, next]);
 
   const current_ = versions.find((v) => v.number === current);
   // 44 punkter: stor nok til å treffe med tommelen.
