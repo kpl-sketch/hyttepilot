@@ -34,8 +34,13 @@ import { getPhotoForViewer, listCabinPhotos } from "./photos";
  */
 const DEFAULT_URL = "https://eu.ai-gateway.vercel.sh/v1/chat/completions";
 
-/** Modellen som skriver forslaget. Kan byttes med AI_DESCRIPTION_MODEL. */
-const DEFAULT_MODEL = "anthropic/claude-sonnet-5.5";
+/**
+ * Modellen som skriver forslaget: en rimelig modell som leser bilder, valgt av
+ * prosjekteier 2026-11-23. Kan byttes med AI_DESCRIPTION_MODEL uten ny kode,
+ * for eksempel til `anthropic/claude-sonnet-5.5`, som koster om lag tjue
+ * ganger så mye. Modellen må kunne kjøre i EU uten lagring hos leverandøren.
+ */
+const DEFAULT_MODEL = "anthropic/claude-haiku-5.5";
 
 /** Lengste side på hvert bilde som sendes. Nok til å se hva bildet viser. */
 const SENT_SIDE = 1024;
@@ -133,7 +138,7 @@ function basisText({ area, region, beds, written, photos }: Basis): string {
 function buildRequest(basis: Basis) {
   return {
     model: process.env.AI_DESCRIPTION_MODEL?.trim() || DEFAULT_MODEL,
-    max_tokens: 1500,
+    max_tokens: 3000,
     stream: false,
     messages: [
       { role: "system", content: INSTRUCTIONS },

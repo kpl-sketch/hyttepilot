@@ -1254,7 +1254,7 @@ async function main() {
   };
   await check("ut går alle bildene, stedet, en avrundet posisjon og sengeplassene, med krav om EU og ingen lagring", async () => {
     const { body, facts, jpegs } = sentParts(ai.seen[0].body);
-    assert.equal(body.model, "anthropic/claude-sonnet-5.5");
+    assert.equal(body.model, "anthropic/claude-haiku-5.5", "en rimelig modell er standard");
     assert.deepEqual(body.providerOptions, {
       gateway: { zeroDataRetention: true, inferenceRegion: { scope: "zone", geoRegion: "eu" } },
     });

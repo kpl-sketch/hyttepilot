@@ -238,7 +238,7 @@ Regelen for ny funksjonalitet: tilgangssjekken skal ligge i tjenestelaget
   Tjenesten dekker bare norske adresser. Hytter i utlandet får posisjon fra
   koordinater eller en kartlenke.
 - **Tekstforslagene kommer fra Vercel AI Gateway** (`eu.ai-gateway.vercel.sh`), med
-  modellen i `AI_DESCRIPTION_MODEL` (standard `anthropic/claude-sonnet-5.5`). Ut går
+  modellen i `AI_DESCRIPTION_MODEL` (standard `anthropic/claude-haiku-5.5`, en rimelig modell). Ut går
   ikke mer enn det en låner ser før lånet er betalt: bildene, forminsket til 1024
   punkter, stedsnavnet, en avrundet posisjon for området, antall sengeplasser og
   teksten i beskrivelsesfeltet. Aldri navnet på hytta, adresse, nøyaktig posisjon,
