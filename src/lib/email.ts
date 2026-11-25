@@ -6,10 +6,14 @@ import { APP_NAME, CONTACT_EMAIL } from "@/lib/brand";
 export type Mail = { to: string; subject: string; text: string };
 
 /**
- * Adressen svar på e-post går til. Avsenderen (EMAIL_FROM) har ingen postkasse,
- * så uten svaradresse forsvinner svarene. EMAIL_REPLY_TO brukes først, ellers
+ * Adressen svar på e-post går til. EMAIL_REPLY_TO brukes først, ellers
  * kontaktadressen fra personvernsiden. Er ingen av dem satt, sendes e-posten
- * uten svaradresse, som før.
+ * uten svaradresse, og svarene går til avsenderen (EMAIL_FROM).
+ *
+ * Har avsenderen egen innboks (services/inbox.ts), settes EMAIL_REPLY_TO til
+ * samme adresse. Da havner svarene i innboksen, og administratorene får
+ * varsel (services/inbox-notices.ts). Uten innboks må svarene gå til en
+ * adresse noen leser, ellers forsvinner de.
  */
 export function replyToAddress(): string | undefined {
   const explicit = process.env.EMAIL_REPLY_TO?.trim();

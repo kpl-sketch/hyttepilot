@@ -115,6 +115,33 @@ export async function listThreads(
   };
 }
 
+export type UnreadThread = {
+  id: string;
+  from: string | null;
+  subject: string | null;
+  receivedAt: string;
+};
+
+/**
+ * Uleste tråder i innboksen, til jobben som varsler administratorene om ny
+ * e-post (services/inbox-notices.ts). Jobben har ingen innlogget bruker, så
+ * her er det ingen tilgangssjekk. Funksjonen skal bare kalles fra den jobben,
+ * og det den gir tilbake, skal bare gå til administratorene.
+ */
+export async function listUnreadThreads(): Promise<UnreadThread[]> {
+  const { resend, address } = client();
+  const { data, error } = await resend.inboxes.threads.list({
+    emailAddress: address,
+    folders: ["inbox"],
+    read: false,
+    limit: 50,
+  });
+  if (error) fail(error);
+  return data.data
+    .filter((t) => !t.read)
+    .map((t) => ({ id: t.id, from: t.from, subject: t.subject, receivedAt: t.received_at }));
+}
+
 export type ThreadMessage = Pick<
   InboxMessage,
   "id" | "direction" | "from" | "to" | "cc" | "subject" | "received_at"

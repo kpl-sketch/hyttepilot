@@ -184,3 +184,34 @@ export function idleCabinMail(
     text: `Hei ${firstName(ownerName)}!\n\nSnart er det ${info.holidayName}. ${info.cabinName} er åpen for lån ${formatRange(info.startDate, info.endDate)}, men ingen har spurt ennå.\n\nKjenner du noen som ville likt en tur? Skriv adressene deres her, så får de se hytta og kan spørre om å låne den:\n${appUrl()}/mine-hytter/${info.cabinId}/inviter\n\nDu får bare en slik påminnelse før de store feriene, når hytta står ledig. Vil du ikke ha dem, slår du dem av på siden for hytta:\n${appUrl()}/mine-hytter/${info.cabinId}#paminnelser${sign}`,
   };
 }
+
+/**
+ * Til administratorene: det har kommet e-post til den felles innboksen.
+ * Nevner avsender og emne, aldri innholdet (se services/inbox-notices.ts).
+ * Avsender og emne er renset før de kommer hit.
+ */
+export function inboxNoticeMail(
+  to: string,
+  info: {
+    inbox: string;
+    listed: { from: string; subject: string }[];
+    /** E-poster det ikke er varslet om før. */
+    fresh: number;
+    /** Alle uleste e-poster i innboksen, også de det er varslet om. */
+    unread: number;
+  },
+): Mail {
+  const one = info.fresh === 1;
+  const lines = info.listed.map((m) => `- ${m.from}${m.subject ? `: «${m.subject}»` : ""}`);
+  const more = info.fresh - info.listed.length;
+  if (more > 0) lines.push(`- og ${more} til`);
+  const waiting =
+    info.unread > info.fresh
+      ? `\n\nI alt ligger det ${info.unread} uleste e-poster i innboksen.`
+      : "";
+  return {
+    to,
+    subject: one ? `Ny e-post til ${info.inbox}` : `${info.fresh} nye e-poster til ${info.inbox}`,
+    text: `Det har kommet ${one ? "en ny e-post" : `${info.fresh} nye e-poster`} til ${info.inbox}.\n\n${lines.join("\n")}${waiting}\n\nLes og svar i innboksen:\n${appUrl()}/admin/innboks\n\nDu får denne e-posten fordi du er administrator i ${APP_NAME}. Svar i innboksen, ikke på denne e-posten.${sign}`,
+  };
+}

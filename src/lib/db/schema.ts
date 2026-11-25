@@ -417,6 +417,18 @@ export const invitationRequest = pgTable(
   ],
 );
 
+/**
+ * Hvor langt en jobb som kjøres etter klokka, er kommet. Én rad per jobb.
+ * Brukes av varselet om ny e-post i innboksen (services/inbox-notices.ts):
+ * `mark` er tidspunktet for den nyeste e-posten administratorene har fått
+ * varsel om. Raden sier ingenting om hvem som har skrevet, eller hva.
+ */
+export const jobState = pgTable("job_state", {
+  key: text("key").primaryKey(),
+  mark: timestamp("mark", { withTimezone: true }).notNull(),
+  updatedAt: updatedAt(),
+});
+
 export type Cabin = typeof cabin.$inferSelect;
 export type Booking = typeof booking.$inferSelect;
 export type BookingStatus = (typeof bookingStatus.enumValues)[number];

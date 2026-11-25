@@ -33,7 +33,8 @@ import {
   todayInOslo,
 } from "../src/lib/dates";
 import { db } from "../src/lib/db";
-import { booking, profile, user } from "../src/lib/db/schema";
+import { rejectUnlessCron } from "../src/lib/cron";
+import { booking, jobState, profile, user } from "../src/lib/db/schema";
 import { canSuggestDescription, MAX_SUGGESTIONS_PER_DAY } from "../src/lib/description-assist";
 import { type Actor, UserError } from "../src/lib/errors";
 import { PLEDGE_VERSION } from "../src/lib/pledge";
@@ -117,6 +118,13 @@ import {
   sendIdleReminders,
   setIdleReminders,
 } from "../src/lib/services/reminders";
+import type { UnreadThread } from "../src/lib/services/inbox";
+import {
+  INBOX_NOTICE_KEY,
+  notifyAdminsOfNewMail,
+  quoteForNotice,
+  senderAddress,
+} from "../src/lib/services/inbox-notices";
 import { easterSunday, holidaysInYear, upcomingHoliday } from "../src/lib/holidays";
 import {
   addCabinPhotos,
@@ -460,7 +468,7 @@ async function suggestionCount(cabinId: string): Promise<number> {
 
 async function main() {
   await db.execute(
-    sql`truncate "booking", "availability", "cabin_photo", "cabin_access", "invitation", "cabin", "profile_photo", "profile", "login_throttle", "verification", "session", "account", "user" cascade`,
+    sql`truncate "booking", "availability", "cabin_photo", "cabin_access", "invitation", "cabin", "profile_photo", "profile", "login_throttle", "verification", "session", "account", "user", "job_state" cascade`,
   );
 
   const today = todayInOslo();
@@ -2548,6 +2556,212 @@ async function main() {
       }
       await linkedIn.close();
       await other.close();
+    }
+  }
+
+  console.log("Varsel om ny e-post i innboksen");
+  {
+    const env = process.env as Record<string, string | undefined>;
+    const saved = {
+      INBOX_EMAIL: env.INBOX_EMAIL,
+      RESEND_INBOX_API_KEY: env.RESEND_INBOX_API_KEY,
+      ADMIN_EMAILS: env.ADMIN_EMAILS,
+      CRON_SECRET: env.CRON_SECRET,
+    };
+    const inbox = "hei@test.local";
+    const nothing = { unread: 0, fresh: 0, sent: 0, failed: 0 };
+    const thread = (
+      id: string,
+      from: string | null,
+      subject: string | null,
+      receivedAt: string,
+    ): UnreadThread => ({ id, from, subject, receivedAt });
+    const sture = thread(
+      "t1",
+      "Sture Venn <Sture@Test.Local>",
+      "Re: Kari inviterer deg",
+      "2026-11-25T10:00:00.123456Z",
+    );
+    const lise = thread("t2", "lise@test.local", "Spørsmål om hytta", "2026-11-25T11:30:00Z");
+    const unread = (...threads: UnreadThread[]) => async () => threads;
+    const notices = (mails: Sent[]) => mails.filter((m) => m.subject.endsWith(`til ${inbox}`));
+    const mark = async (): Promise<number | null> => {
+      const rows = await db
+        .select({ mark: jobState.mark })
+        .from(jobState)
+        .where(sql`${jobState.key} = ${INBOX_NOTICE_KEY}`);
+      return rows[0]?.mark.getTime() ?? null;
+    };
+
+    try {
+      await check("uten oppsatt innboks gjør jobben ingenting", async () => {
+        delete env.INBOX_EMAIL;
+        delete env.RESEND_INBOX_API_KEY;
+        let asked = 0;
+        const { result, mails } = await sentDuring(() =>
+          notifyAdminsOfNewMail(async () => {
+            asked += 1;
+            return [sture];
+          }),
+        );
+        assert.deepEqual(result, nothing);
+        assert.equal(asked, 0, "innboksen leses ikke når den ikke er satt opp");
+        assert.equal(mails.length, 0);
+      });
+
+      // Nøkkelen brukes aldri: testen gir selv svaret fra innboksen.
+      env.INBOX_EMAIL = inbox;
+      env.RESEND_INBOX_API_KEY = "test-nokkel-brukes-ikke";
+      env.ADMIN_EMAILS = `admin@test.local, Medadmin@Test.Local,${inbox}`;
+
+      await check("tom innboks gir ingen e-post og ingen rad i databasen", async () => {
+        const { result, mails } = await sentDuring(() => notifyAdminsOfNewMail(unread()));
+        assert.deepEqual(result, nothing);
+        assert.equal(mails.length, 0);
+        assert.equal(await mark(), null);
+      });
+
+      await check("ny e-post gir hver administrator ett varsel med avsender, emne og lenke", async () => {
+        const { result, mails } = await sentDuring(() => notifyAdminsOfNewMail(unread(sture)));
+        assert.deepEqual(result, { unread: 1, fresh: 1, sent: 2, failed: 0 });
+        assert.deepEqual(
+          mails.map((m) => m.to).sort(),
+          ["admin@test.local", "medadmin@test.local"],
+          "varselet går til administratorene, aldri til innboksen selv",
+        );
+        for (const mail of mails) {
+          assert.equal(mail.subject, `Ny e-post til ${inbox}`);
+          assert.match(mail.text, /Det har kommet en ny e-post til hei@test\.local\./);
+          assert.match(mail.text, /- Sture Venn <Sture@Test\.Local>: «Re: Kari inviterer deg»/);
+          assert.match(mail.text, /\/admin\/innboks\n/);
+          assert.doesNotMatch(mail.text, /I alt ligger det/);
+        }
+        assert.equal(await mark(), new Date(sture.receivedAt).getTime());
+      });
+
+      await check("samme e-post gir ikke nytt varsel", async () => {
+        const { result, mails } = await sentDuring(() => notifyAdminsOfNewMail(unread(sture)));
+        assert.deepEqual(result, { ...nothing, unread: 1 });
+        assert.equal(mails.length, 0);
+      });
+
+      await check("en nyere e-post gir nytt varsel, og sier hvor mange som ligger ulest", async () => {
+        const { result, mails } = await sentDuring(() => notifyAdminsOfNewMail(unread(sture, lise)));
+        assert.deepEqual(result, { unread: 2, fresh: 1, sent: 2, failed: 0 });
+        assert.equal(notices(mails).length, 2);
+        assert.match(mails[0].text, /- lise@test\.local: «Spørsmål om hytta»/);
+        assert.doesNotMatch(mails[0].text, /Sture Venn/, "det er alt varslet om den første");
+        assert.match(mails[0].text, /I alt ligger det 2 uleste e-poster i innboksen\./);
+      });
+
+      await check("e-post fra en administrator eller fra innboksen selv gir aldri varsel", async () => {
+        const before = await mark();
+        const { result, mails } = await sentDuring(() =>
+          notifyAdminsOfNewMail(
+            unread(
+              thread("t3", "Anne Admin <ADMIN@test.local>", "Fraværsmelding", "2026-11-25T12:00:00Z"),
+              thread("t4", "medadmin@test.local", "Automatisk svar", "2026-11-25T12:01:00Z"),
+              thread("t5", `Hyttepilot <${inbox}>`, "Sendt til oss selv", "2026-11-25T12:02:00Z"),
+            ),
+          ),
+        );
+        assert.deepEqual(result, nothing);
+        assert.equal(mails.length, 0);
+        assert.equal(await mark(), before);
+      });
+
+      await check("tre samtidige kjøringer gir ett varsel", async () => {
+        const ny = thread("t6", "ola@test.local", "Hei", "2026-11-25T13:00:00Z");
+        const { mails } = await sentDuring(() =>
+          Promise.all([
+            notifyAdminsOfNewMail(unread(ny)),
+            notifyAdminsOfNewMail(unread(ny)),
+            notifyAdminsOfNewMail(unread(ny)),
+          ]),
+        );
+        assert.equal(notices(mails).length, 2, "ett varsel til hver av de to administratorene");
+      });
+
+      await check("lenker og linjeskift i avsender og emne settes ikke inn i varselet", async () => {
+        const ond = thread(
+          "t7",
+          "Hyttepilot support\n<ond@test.local>",
+          "Haster!\r\n\r\nLogg inn på https://ondsinnet.example/logg-inn og www.ondsinnet.example nå",
+          "2026-11-25T14:00:00Z",
+        );
+        const { mails } = await sentDuring(() => notifyAdminsOfNewMail(unread(ond)));
+        assert.equal(notices(mails).length, 2);
+        assert.match(
+          mails[0].text,
+          /\n- Hyttepilot support <ond@test\.local>: «Haster! Logg inn på \[lenke\] og \[lenke\] nå»\n/,
+        );
+        assert.doesNotMatch(mails[0].text, /ondsinnet/);
+        assert.equal(quoteForNotice("a".repeat(200)).length, 80);
+        assert.ok(quoteForNotice("a".repeat(200)).endsWith("…"));
+        assert.equal(quoteForNotice(null), "");
+        assert.equal(senderAddress("Kari Eier <Kari@Test.Local>"), "kari@test.local");
+        assert.equal(senderAddress(null), "");
+      });
+
+      await check("mange nye e-poster listes med de fem nyeste og antallet på resten", async () => {
+        const many = Array.from({ length: 7 }, (_, i) =>
+          thread(`m${i}`, `venn${i}@test.local`, `Emne ${i}`, `2026-11-25T15:0${i}:00Z`),
+        );
+        const { result, mails } = await sentDuring(() => notifyAdminsOfNewMail(unread(...many)));
+        assert.deepEqual(result, { unread: 7, fresh: 7, sent: 2, failed: 0 });
+        assert.equal(mails[0].subject, `7 nye e-poster til ${inbox}`);
+        const listed = mails[0].text.split("\n").filter((line) => line.startsWith("- venn"));
+        assert.deepEqual(
+          listed.map((line) => line.slice(2, 7)),
+          ["venn6", "venn5", "venn4", "venn3", "venn2"],
+        );
+        assert.match(mails[0].text, /\n- og 2 til\n/);
+      });
+
+      await check("kommer ikke varselet av gårde, prøves det igjen ved neste kjøring", async () => {
+        const sen = thread("t8", "per@test.local", "Takk for sist", "2026-11-25T16:00:00Z");
+        const before = await mark();
+        const mode = env.NODE_ENV;
+        const silenced = console.error;
+        // Uten e-postoppsett i produksjon tar ingen leverandør imot e-posten.
+        env.NODE_ENV = "production";
+        console.error = () => {};
+        try {
+          const failed = await sentDuring(() => notifyAdminsOfNewMail(unread(sen)));
+          assert.deepEqual(failed.result, { unread: 1, fresh: 1, sent: 0, failed: 2 });
+          assert.equal(failed.mails.length, 0);
+          assert.equal(await mark(), before, "merket er satt tilbake");
+
+          // Aller første varsel: da finnes det ingen rad å sette tilbake til.
+          await db.delete(jobState);
+          await notifyAdminsOfNewMail(unread(sen));
+          assert.equal(await mark(), null);
+        } finally {
+          env.NODE_ENV = mode;
+          console.error = silenced;
+        }
+        const retried = await sentDuring(() => notifyAdminsOfNewMail(unread(sen)));
+        assert.deepEqual(retried.result, { unread: 1, fresh: 1, sent: 2, failed: 0 });
+        assert.equal(notices(retried.mails).length, 2);
+      });
+
+      await check("jobbene avviser kall uten hemmeligheten når CRON_SECRET er satt", () => {
+        const call = (authorization?: string) =>
+          new Request("http://localhost/jobber/innboks", {
+            headers: authorization ? { authorization } : {},
+          });
+        env.CRON_SECRET = "riktig-hemmelighet";
+        assert.equal(rejectUnlessCron(call(), "Testjobben")?.status, 401);
+        assert.equal(rejectUnlessCron(call("Bearer feil-hemmelighet"), "Testjobben")?.status, 401);
+        assert.equal(rejectUnlessCron(call("Bearer riktig-hemmelighet"), "Testjobben"), null);
+        delete env.CRON_SECRET;
+        assert.equal(rejectUnlessCron(call(), "Testjobben"), null);
+      });
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete env[key];
+        else env[key] = value;
+      }
     }
   }
 

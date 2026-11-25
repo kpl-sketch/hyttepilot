@@ -64,6 +64,13 @@
       "when": 1795470193641,
       "tag": "0008_profilbilde",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795606023076,
+      "tag": "0009_innboksvarsel",
+      "breakpoints": true
     }
   ]
 }

@@ -50,6 +50,14 @@ litt over selvkost. Navnet er et arbeidsnavn og byttes ett sted: `NEXT_PUBLIC_AP
 - **Betaling.** Skjer med vanlig Vipps utenfor tjenesten. Eieren markerer «betalt»,
   og da er oppholdet reservert og adressen vises til låneren.
 - **Varsler på e-post** til eier og låner i hvert steg.
+- **Felles innboks med varsel.** Avsenderadressen har egen innboks hos Resend,
+  som administratorene leser og svarer fra under Administrasjon → Innboks. Svar
+  på e-post fra tjenesten kommer dit når `EMAIL_REPLY_TO` er samme adresse som
+  avsenderen. Hver halvtime sjekker en jobb (`/jobber/innboks`, planlagt i
+  `vercel.json`) om det ligger ulest e-post administratorene ikke har fått
+  varsel om, og sender dem i så fall én e-post med avsender og emne. E-post fra
+  administratorene selv gir aldri varsel. Reglene ligger i
+  `src/lib/services/inbox-notices.ts`.
 
 Ikke med ennå: integrert Vipps, kart, vurderinger, venners venner, grupper,
 husbytte, vask som tjeneste, engelsk versjon og sletting av hytter.
@@ -152,9 +160,12 @@ skrives i stedet til filen `.dev-outbox.jsonl` og til terminalen.
 4. Sett miljøvariablene fra `.env.example` i Vercel: `ADMIN_EMAILS`,
    `RESEND_API_KEY`, `EMAIL_FROM`, `NEXT_PUBLIC_APP_NAME`,
    `NEXT_PUBLIC_CONTROLLER_NAME` og `NEXT_PUBLIC_CONTACT_EMAIL`. Svar på e-post
-   går til `EMAIL_REPLY_TO`, ellers til `NEXT_PUBLIC_CONTACT_EMAIL`, fordi
-   avsenderadressen ikke har postkasse. Sett `CRON_SECRET`, så bare Vercel kan
-   starte påminnelsesjobben. Sett
+   går til `EMAIL_REPLY_TO`, ellers til `NEXT_PUBLIC_CONTACT_EMAIL`. Har
+   avsenderadressen egen innboks (Administrasjon → Innboks), settes
+   `EMAIL_REPLY_TO` til samme adresse som i `EMAIL_FROM`, så svarene havner
+   der og administratorene får varsel. Uten innboks må svarene gå til en
+   adresse noen leser. Sett `CRON_SECRET`, så bare Vercel kan starte jobbene
+   (påminnelser om ledige hytter og varsel om ny e-post). Sett
    `BETTER_AUTH_URL` for produksjon når tjenesten har fått eget domene.
    `BETTER_AUTH_SECRET` er valgfri: uten den avledes nøkkelen av `DATABASE_URL`.
    Sett `AI_GATEWAY_API_KEY` (lages under AI Gateway i Vercel) for å slå på
@@ -218,6 +229,8 @@ src/lib/services/         Alle regler og tilgangssjekker. Start her.
   cabins.ts                 hytter, hvem som ser hva, ledige perioder
   bookings.ts               forespørsel, ja/nei, betalt, avlysning
   reminders.ts              påminnelse til eieren før feriene når hytta står ledig
+  inbox.ts                  den felles innboksen hos Resend, bare for administratorer
+  inbox-notices.ts          varsel til administratorene når det kommer e-post til innboksen
   photos.ts                 bilder: hvem får legge til, fjerne og se dem
   profile-photos.ts         profilbilde: hvem får se det, opplasting, fjerning, bildet på invitasjonen
   linkedin.ts               henter profilbildet fra LinkedIn: hva vi ber om, hva som lagres

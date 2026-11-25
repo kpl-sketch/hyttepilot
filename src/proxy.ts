@@ -20,7 +20,7 @@ export function proxy(request: NextRequest) {
   const isPublic = PUBLIC_PATHS.includes(pathname) ||
     AUDIENCE_PATH.test(pathname) ||
     pathname.startsWith("/invitasjon/") ||
-    // Den daglige jobben kalles av Vercel uten innlogging. Den sjekker selv
+    // Jobbene i vercel.json kalles av Vercel uten innlogging. De sjekker selv
     // CRON_SECRET, og svarer bare med antall.
     pathname.startsWith("/jobber/");
 
