@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: `Om ${APP_NAME}` };
  */
 export default function AboutPage() {
   return (
-    <PublicShell>
+    <PublicShell memberNav>
       <PageTitle
         title={`Om ${APP_NAME}`}
         lead={`${APP_NAME} er laget av Martin Koren og Karl Philip Lund. Vi vil gjøre det enkelt å låne bort hytta til folk du kjenner.`}

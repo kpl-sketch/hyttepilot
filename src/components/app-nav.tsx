@@ -1,0 +1,49 @@
+import Link from "next/link";
+import { signOut } from "@/app/logg-inn/actions";
+import { avatarSrc } from "@/lib/avatar";
+import type { Viewer } from "@/lib/session";
+import { Avatar } from "./avatar";
+import { NavLink } from "./nav-link";
+
+/**
+ * Hovedmenyen for den som er logget inn: veien til hyttekretsen, forespørslene
+ * og egne hytter, og til profilen og utlogging.
+ *
+ * Den står i toppen på sidene som krever innlogging, og på de åpne sidene
+ * (Hytteløftet, personvern, om oss) når brukeren er logget inn, slik at det
+ * alltid finnes en vei tilbake dit man kom fra. Menyen legger seg inn i en
+ * `flex flex-wrap`-rad ved siden av logoen.
+ */
+export function AppNav({ viewer }: { viewer: Viewer }) {
+  return (
+    <>
+      {/* På mobil står menyen på egen linje under navnet, så alle punktene får plass. */}
+      <nav
+        className="order-last flex basis-full flex-wrap gap-x-6 gap-y-1 sm:order-none sm:flex-1 sm:basis-auto"
+        aria-label="Hovedmeny"
+      >
+        <NavLink href="/krets" also="/hytter">
+          Hyttekrets
+        </NavLink>
+        <NavLink href="/foresporsler">Forespørsler</NavLink>
+        <NavLink href="/mine-hytter">Dine hytter</NavLink>
+        {/* Administrasjon gir ikke innsyn i andres hytter. Se /admin. */}
+        {viewer.isAdmin && <NavLink href="/admin">Administrasjon</NavLink>}
+      </nav>
+      <form action={signOut} className="ml-auto flex items-center gap-3 text-sm text-muted">
+        {/* Bildet eller initialen i en rund brikke viser hvem som er logget inn, og leder til profilen. */}
+        <Link
+          href="/profil"
+          title="Profilen din"
+          className="flex items-center gap-2 rounded-full hover:underline"
+        >
+          <Avatar name={viewer.name} src={avatarSrc(viewer.id, viewer.photo)} size="sm" />
+          {viewer.name}
+        </Link>
+        <button type="submit" className="cursor-pointer underline">
+          Logg ut
+        </button>
+      </form>
+    </>
+  );
+}

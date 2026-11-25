@@ -1,7 +1,7 @@
 import { APP_NAME } from "./brand";
 
 /** Endres teksten, økes versjonen, slik at vi vet hvilket løfte hver bruker ga. */
-export const PLEDGE_VERSION = "2026-11-14";
+export const PLEDGE_VERSION = "2026-11-25";
 
 export const PLEDGE_INTRO = `Når jeg låner en hytte gjennom ${APP_NAME}, låner jeg noe som er privat og kjært for noen jeg kjenner. Derfor lover jeg:`;
 
@@ -16,7 +16,9 @@ export const PLEDGE_POINTS: { title: string; body: string }[] = [
   },
   {
     title: "Jeg forlater hytta slik jeg fant den.",
-    body: "Ryddet, vasket, søppel tatt med, vann og strøm slik eieren har bedt om.",
+    // Eieren kan ta betalt for vask (cleaningFee). Da skal ikke løftet også kreve
+    // at låneren vasker. Endret 2026-11-25 etter tilbakemelding fra en låner.
+    body: "Ryddet, søppel tatt med, vann og strøm slik eieren har bedt om, og vasket når eieren ikke tar betalt for vask.",
   },
   {
     title: "Jeg følger eierens regler.",

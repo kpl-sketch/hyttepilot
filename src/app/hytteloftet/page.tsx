@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Hytteløftet" };
 
 export default function PledgePage() {
   return (
-    <PublicShell>
+    <PublicShell memberNav>
       <PageTitle title="Hytteløftet" />
       <Pledge />
     </PublicShell>

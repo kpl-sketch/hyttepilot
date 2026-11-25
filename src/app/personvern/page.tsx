@@ -23,7 +23,7 @@ const linkedIn = canFetchFromLinkedIn();
 
 export default function PrivacyPage() {
   return (
-    <PublicShell>
+    <PublicShell memberNav>
       <PageTitle
         title="Personvern"
         lead={`${APP_NAME} er en pilot i en lukket krets. Vi lagrer bare det som trengs for at lån av hytter skal fungere.`}

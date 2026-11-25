@@ -17,11 +17,28 @@ const whole = (label: string, min: number, max: number) =>
     .min(min, `${label} må være minst ${min}.`)
     .max(max, `${label} kan ikke være mer enn ${max}.`);
 
+/**
+ * Mobilnummer. Norske nummer skrives som før: åtte sifre, med eller uten +47.
+ * Utenlandske nummer må ha landskode (+46 … eller 0046 …), for uten den vet
+ * verken eieren eller låneren hvilket land nummeret hører til. Mellomrom,
+ * bindestrek, punktum og parenteser fjernes før nummeret lagres.
+ *
+ * Samme regel gjelder nummeret ved registrering og Vipps-nummeret for en
+ * hytte: en ny hytte får eierens eget nummer som Vipps-nummer (se CabinForm),
+ * så et nummer som slipper inn det ene stedet, må slippe inn det andre.
+ */
 const phone = z
   .string()
   .trim()
-  .transform((v) => v.replace(/[\s-]/g, ""))
-  .pipe(z.string().regex(/^(\+47)?\d{8}$/, "Skriv et norsk mobilnummer med åtte sifre."));
+  .transform((v) => v.replace(/[\s\-.()]/g, "").replace(/^00/, "+"))
+  .pipe(
+    z
+      .string()
+      .regex(
+        /^((\+47)?\d{8}|\+(?!47)[1-9]\d{6,14})$/,
+        "Skriv mobilnummeret ditt. Utenlandske nummer skrives med landskode, for eksempel +46.",
+      ),
+  );
 
 /**
  * Kartposisjonen slik eieren skrev den: koordinater eller en lenke fra en

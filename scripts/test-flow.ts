@@ -56,12 +56,14 @@ import {
 } from "../src/lib/services/bookings";
 import {
   addAvailability,
+  cabinInput,
   createCabin,
   getCalendar,
   getOwnCabin,
   getVisibleCabin,
   listOwnCabins,
   listSharedCabins,
+  phoneSchema,
   updateCabin,
 } from "../src/lib/services/cabins";
 import {
@@ -1071,6 +1073,27 @@ async function main() {
       /Fant ingen kartposisjon/,
     ),
   );
+  await check("mobilnummer: norske som før, utenlandske med landskode", () => {
+    const stored = (value: string) => phoneSchema.parse(value);
+    assert.equal(stored("912 34 567"), "91234567");
+    assert.equal(stored("+47 912 34 567"), "+4791234567");
+    assert.equal(stored("0047 91234567"), "+4791234567");
+    assert.equal(stored("+46 70-123 45 67"), "+46701234567");
+    assert.equal(stored("0046 70 123 45 67"), "+46701234567");
+    assert.equal(stored("+1 (415) 555.0132"), "+14155550132");
+    // Uten landskode vet ingen hvilket land nummeret hører til.
+    for (const wrong of ["070-123 45 67", "0701234567", "+47 1234", "+47 912 34 5678", "+46", "abc", ""]) {
+      const result = phoneSchema.safeParse(wrong);
+      assert.equal(result.success, false, `«${wrong}» skal avvises`);
+      assert.match(result.error?.issues[0].message ?? "", /Utenlandske nummer skrives med landskode, for eksempel \+46\./);
+    }
+  });
+  await check("en eier med utenlandsk nummer kan bruke det som Vipps-nummer", () => {
+    // En ny hytte får eierens eget nummer som Vipps-nummer. Slipper nummeret inn
+    // ved registrering, må det også slippe inn her.
+    const parsed = cabinInput.parse({ ...cabinData("Svensk eier"), vippsNumber: "+46 70 123 45 67" });
+    assert.equal(parsed.vippsNumber, "+46701234567");
+  });
   await check("veilenkene bruker posisjonen, ellers adressen", () => {
     const begge = directionLinks({ address: "Fjellvegen 12", latitude: 61.2345, longitude: 10.4567 });
     assert.equal(begge?.google, "https://www.google.com/maps/dir/?api=1&destination=61.2345%2C10.4567");

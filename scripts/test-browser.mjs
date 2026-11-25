@@ -315,10 +315,10 @@ async function logIn(page, email) {
   await enterCode(page, email, before);
 }
 
-async function onboard(page, name) {
+async function onboard(page, name, mobile = "91234567") {
   await page.getByRole("heading", { name: "Velkommen" }).waitFor();
   await page.getByLabel("Navn").fill(name);
-  await page.getByLabel("Mobilnummer").fill("91234567");
+  await page.getByLabel("Mobilnummer").fill(mobile);
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Gi løftet og bli med" }).click();
 }
@@ -983,10 +983,30 @@ async function main() {
     await partner.getByRole("button", { name: "Send meg en kode" }).click();
     await enterCode(partner, "partner@test.local", before);
   }
+  await check("utenlandsk nummer uten landskode får beskjed om landskoden", async () => {
+    await partner.getByRole("heading", { name: "Velkommen" }).waitFor();
+    await partner.waitForLoadState("networkidle");
+    // Den som ikke har gitt løftet ennå, er ikke med, og får ingen meny.
+    assert.equal(await partner.getByRole("navigation", { name: "Hovedmeny" }).count(), 0);
+    await partner.getByLabel("Navn").fill("Pia Partner");
+    await partner.getByLabel("Mobilnummer").fill("070-123 45 67");
+    await partner.getByRole("checkbox").check();
+    await partner.getByRole("button", { name: "Gi løftet og bli med" }).click();
+    await partner
+      .getByRole("alert")
+      .getByText("Skriv mobilnummeret ditt. Utenlandske nummer skrives med landskode, for eksempel +46.")
+      .waitFor();
+    await shot(partner, "16a2-utenlandsk-nummer");
+  });
   const ownerMailsBefore = (await newMails()).length;
-  await onboard(partner, "Pia Partner");
+  await onboard(partner, "Pia Partner", "+46 70 123 45 67");
   await check("med en annen adresse ser personen ingenting før eieren godkjenner", async () => {
     await partner.getByRole("heading", { name: "Venter på svar fra Kari" }).waitFor();
+    // Nummeret med landskode slapp gjennom og er lagret uten mellomrom.
+    const stored = await pool.query(
+      `select p."phone" from "profile" p join "user" u on u."id" = p."user_id" where u."email" = 'partner@test.local'`,
+    );
+    assert.equal(stored.rows[0].phone, "+46701234567");
     await shot(partner, "16b-venter-pa-godkjenning");
     await nothingAt(partner, `${BASE}/hytter/${fjellro}`, /Fjellro|Tømmerhytte|Fjellvegen/);
     await partner.goto(`${BASE}/krets`);
@@ -1365,6 +1385,56 @@ async function main() {
     await anne.getByText("Profilbildet ditt står ved navnet ditt", { exact: false }).waitFor();
   });
   await linkedIn.close();
+
+  console.log("Lenkene nederst og Hytteløftet");
+  await check("sidene bak lenkene nederst viser menyen for den som er logget inn", async () => {
+    for (const [link, heading] of [
+      ["Hytteløftet", "Hytteløftet"],
+      ["Personvern", "Personvern"],
+      ["Om oss", /^Om /],
+    ]) {
+      await ola.goto(`${BASE}/krets`);
+      await ola.getByRole("contentinfo").getByRole("link", { name: link }).click();
+      await ola.getByRole("heading", { level: 1, name: heading }).waitFor();
+      const menu = ola.getByRole("navigation", { name: "Hovedmeny" });
+      await menu.getByRole("link", { name: "Hyttekrets" }).waitFor();
+      await ola.getByRole("button", { name: "Logg ut" }).waitFor();
+      if (link === "Hytteløftet") await shot(ola, "23-hytteloftet-innlogget");
+      await menu.getByRole("link", { name: "Hyttekrets" }).click();
+      await ola.waitForURL(/\/krets$/);
+    }
+  });
+  await check("også «Slik virker det» har menyen, og de andre åpne sidene er som før", async () => {
+    // Fra Hytteløftet kommer man videre til «Slik virker det» med lenken nederst.
+    await ola.goto(`${BASE}/hytteloftet`);
+    await ola.getByRole("contentinfo").getByRole("link", { name: "Slik virker det" }).click();
+    await ola.waitForURL(/\/slik-virker-det$/);
+    await ola.getByRole("navigation", { name: "Hovedmeny" }).getByRole("link", { name: "Hyttekrets" }).waitFor();
+    // Sidene for hver målgruppe er ikke lenket fra tjenesten, og har ingen meny.
+    await ola.goto(`${BASE}/v1`);
+    await ola.getByRole("heading", { level: 1 }).waitFor();
+    await ola.waitForLoadState("networkidle");
+    assert.equal(await ola.getByRole("navigation", { name: "Hovedmeny" }).count(), 0);
+  });
+  await check("løftet lover ikke vask når eieren tar betalt for vask", async () => {
+    await ola.goto(`${BASE}/hytteloftet`);
+    await ola
+      .getByText(
+        "Ryddet, søppel tatt med, vann og strøm slik eieren har bedt om, og vasket når eieren ikke tar betalt for vask.",
+      )
+      .waitFor();
+  });
+  await check("uten innlogging har de samme sidene ingen meny", async () => {
+    const anonymous = await phone();
+    for (const path of ["/hytteloftet", "/personvern", "/om", "/"]) {
+      await anonymous.goto(`${BASE}${path}`);
+      await anonymous.getByRole("heading", { level: 1 }).waitFor();
+      await anonymous.waitForLoadState("networkidle");
+      assert.equal(await anonymous.getByRole("navigation", { name: "Hovedmeny" }).count(), 0, path);
+      assert.equal(await anonymous.getByRole("button", { name: "Logg ut" }).count(), 0, path);
+    }
+    await anonymous.context().close();
+  });
 
   console.log("Varsler");
   await check("lenken til en deling som er fjernet, gir ingenting", async () => {

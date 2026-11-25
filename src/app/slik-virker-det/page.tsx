@@ -130,7 +130,7 @@ function Steps({ steps }: { steps: Step[] }) {
 
 export default function HowItWorksPage() {
   return (
-    <PublicShell>
+    <PublicShell memberNav>
       <PageTitle
         title={`Slik virker ${APP_NAME}`}
         lead={`I ${APP_NAME} ${WHAT_IT_IS}. Her er hele veien, fra invitasjon til nøkkel.`}
