@@ -233,6 +233,7 @@ src/lib/services/         Alle regler og tilgangssjekker. Start her.
   inbox-notices.ts          varsel til administratorene når det kommer e-post til innboksen
   photos.ts                 bilder: hvem får legge til, fjerne og se dem
   profile-photos.ts         profilbilde: hvem får se det, opplasting, fjerning, bildet på invitasjonen
+  profile.ts                brukerens egne opplysninger: rette mobilnummeret
   linkedin.ts               henter profilbildet fra LinkedIn: hva vi ber om, hva som lagres
   descriptions.ts           tekstforslag til beskrivelsen: hvem får be om det, hva som sendes ut, taket per døgn
   addresses.ts              adressesøk mot Kartverket, bare for hytteeiere

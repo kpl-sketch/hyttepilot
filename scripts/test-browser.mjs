@@ -1424,6 +1424,22 @@ async function main() {
       )
       .waitFor();
   });
+  await check("mobilnummeret kan rettes på profilen", async () => {
+    await ola.goto(`${BASE}/profil`);
+    const panel = ola.locator("section").filter({ has: ola.getByRole("heading", { name: "Mobilnummer" }) });
+    const field = panel.getByLabel("Mobilnummer");
+    assert.equal(await field.inputValue(), "91234567");
+    // Uten landskode vet ingen hvilket land nummeret hører til.
+    await field.fill("070-123 45 67");
+    await panel.getByRole("button", { name: "Lagre nummeret" }).click();
+    await panel.getByRole("alert").getByText("Utenlandske nummer skrives med landskode", { exact: false }).waitFor();
+    await field.fill("+46 70 123 45 67");
+    await panel.getByRole("button", { name: "Lagre nummeret" }).click();
+    await panel.getByRole("status").getByText("Mobilnummeret er lagret.").waitFor();
+    await shot(ola, "24-profil-mobilnummer", panel);
+    await ola.reload();
+    assert.equal(await field.inputValue(), "+46701234567");
+  });
   await check("uten innlogging har de samme sidene ingen meny", async () => {
     const anonymous = await phone();
     for (const path of ["/hytteloftet", "/personvern", "/om", "/"]) {

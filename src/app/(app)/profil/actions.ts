@@ -8,6 +8,7 @@ import { appUrl } from "@/lib/brand";
 import { type FormState, toFormState } from "@/lib/errors";
 import { canFetchFromLinkedIn } from "@/lib/linkedin";
 import { linkedInAuthorizeUrl } from "@/lib/services/linkedin";
+import { updateOwnPhone } from "@/lib/services/profile";
 import { removeProfilePhoto, uploadProfilePhoto } from "@/lib/services/profile-photos";
 import { requireViewer } from "@/lib/session";
 import {
@@ -19,7 +20,8 @@ import {
 
 /*
  * Handlingene på profilsiden. Brukeren hentes fra innloggingen, og reglene
- * ligger i tjenestelaget (src/lib/services/profile-photos.ts og linkedin.ts).
+ * ligger i tjenestelaget (src/lib/services/profile-photos.ts, linkedin.ts og
+ * profile.ts).
  *
  * Når en handling lykkes, sendes brukeren til /profil?bilde=<utfall>, og siden
  * viser beskjeden øverst (NOTICES i page.tsx). Slik står det aldri mer enn én
@@ -71,4 +73,21 @@ export async function removeProfilePhotoAction(): Promise<FormState> {
   }
   refresh();
   redirect("/profil?bilde=fjernet");
+}
+
+/**
+ * Bytter mobilnummeret. Svaret vises under feltet, ikke øverst på siden:
+ * beskjedene øverst handler om bildet.
+ */
+export async function updatePhoneAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const viewer = await requireViewer();
+  try {
+    await updateOwnPhone(viewer, formData.get("phone"));
+  } catch (error) {
+    return toFormState(error);
+  }
+  return { ok: "Mobilnummeret er lagret." };
 }

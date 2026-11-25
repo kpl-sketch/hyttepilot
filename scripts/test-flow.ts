@@ -45,6 +45,7 @@ import {
   parsePosition,
 } from "../src/lib/position";
 import { positionInMapPage, resolveShortMapLink } from "../src/lib/services/map-links";
+import { updateOwnPhone } from "../src/lib/services/profile";
 import { searchAddresses, searchLocations } from "../src/lib/services/addresses";
 import {
   cancelBooking,
@@ -1581,6 +1582,22 @@ async function main() {
     assert.equal(incoming[0].borrowerPhone, "91234567");
     assert.equal((await listIncoming(ola)).length, 0);
     assert.equal((await listIncoming(admin)).length, 0, "administrator ser ikke andres forespørsler");
+  });
+  await check("låneren kan rette mobilnummeret sitt, og eieren ser det nye", async () => {
+    const phoneOf = async (who: Actor) =>
+      (await db.select({ phone: profile.phone }).from(profile).where(sql`${profile.userId} = ${who.id}`))[0].phone;
+    // Et nummer som ikke kan leses, endrer ingenting.
+    await refused(() => updateOwnPhone(ola, "070-123 45 67"), /Utenlandske nummer skrives med landskode/);
+    await refused(() => updateOwnPhone(ola, null), /Skriv mobilnummeret ditt/);
+    assert.equal(await phoneOf(ola), "91234567");
+    assert.equal(await updateOwnPhone(ola, "+46 70-123 45 67"), "+46701234567");
+    // Forespørselen er sendt fra før. Eieren ser likevel det nye nummeret.
+    const olas = (await listIncoming(per)).find((b) => b.booking.id === olasId);
+    assert.equal(olas?.borrowerPhone, "+46701234567");
+    // Bare Olas eget nummer er endret.
+    assert.equal(await phoneOf(lise), "91234567");
+    assert.equal(await phoneOf(per), "91234567");
+    assert.equal(await updateOwnPhone(ola, "912 34 567"), "91234567");
   });
   await check("en forespørsel sperrer ikke kalenderen før eieren har sagt ja", async () => {
     assert.deepEqual((await getCalendar(persHytte)).taken, []);

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
+import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Avatar } from "@/components/avatar";
 import { ProfilePhotoControls } from "@/components/profile-photo-controls";
-import { PageTitle, Panel } from "@/components/ui";
+import { Field, Input, PageTitle, Panel } from "@/components/ui";
 import { avatarSrc } from "@/lib/avatar";
 import { APP_NAME } from "@/lib/brand";
 import { formatDate, todayInOslo } from "@/lib/dates";
@@ -11,6 +12,7 @@ import { requireViewer } from "@/lib/session";
 import {
   removeProfilePhotoAction,
   startLinkedInAction,
+  updatePhoneAction,
   uploadProfilePhotoAction,
 } from "./actions";
 
@@ -36,9 +38,10 @@ const NOTICES: Record<string, { text: string; ok: boolean }> = {
 };
 
 /**
- * Profilen: bildet av brukeren. Bildet hentes fra LinkedIn med ett trykk når
- * det er slått på (canFetchFromLinkedIn), eller lastes opp. Hvem som ser
- * bildet, står i src/lib/services/profile-photos.ts og gjengis på siden.
+ * Profilen: bildet av brukeren og mobilnummeret. Bildet hentes fra LinkedIn
+ * med ett trykk når det er slått på (canFetchFromLinkedIn), eller lastes opp.
+ * Hvem som ser bildet, står i src/lib/services/profile-photos.ts og gjengis på
+ * siden. Mobilnummeret er det brukeren ga på velkomstsiden, og kan rettes her.
  */
 export default async function ProfilePage({ searchParams }: PageProps<"/profil">) {
   const viewer = await requireViewer();
@@ -120,6 +123,31 @@ export default async function ProfilePage({ searchParams }: PageProps<"/profil">
           Administratorene i {APP_NAME} kan se det. Du kan fjerne bildet når du vil.
         </p>
       </section>
+
+      <Panel className="mt-10 max-w-3xl">
+        <h2 className="text-xl font-bold">Mobilnummer</h2>
+        <p className="mt-2 max-w-[60ch]">
+          Eieren ser nummeret når du ber om å låne en hytte.
+        </p>
+        <ActionForm action={updatePhoneAction} className="mt-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <Field label="Mobilnummer" className="w-full max-w-xs">
+              <Input
+                name="phone"
+                type="tel"
+                autoComplete="tel"
+                inputMode="tel"
+                required
+                defaultValue={viewer.phone}
+              />
+            </Field>
+            <SubmitButton variant="secondary">Lagre nummeret</SubmitButton>
+          </div>
+        </ActionForm>
+        <p className="mt-4 max-w-[60ch] text-sm text-muted">
+          Har du lagt inn en hytte, endrer du Vipps-nummeret på siden for hytta.
+        </p>
+      </Panel>
     </>
   );
 }
