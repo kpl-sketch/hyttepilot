@@ -6,5 +6,9 @@
  */
 export const PAGE_WIDTH = "mx-auto w-full max-w-[1440px] px-5 sm:px-8 lg:px-10 xl:px-20";
 
-/** Rutenettet for hyttekort: ett kort på mobil, flere ved siden av hverandre jo bredere skjermen er. */
-export const CARD_GRID = "grid gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+/**
+ * Rutenettet for hyttekort: ett kort på mobil, to på nettbrett og høyst tre
+ * ved siden av hverandre. Bildene er det som gir hyttefølelsen, så kortene
+ * skal være store nok til at man ser hva som er på dem.
+ */
+export const CARD_GRID = "grid gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-3";

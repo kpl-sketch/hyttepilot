@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import "@fontsource-variable/schibsted-grotesk";
+// Overskriftene. opsz gir tynnere og finere bokstaver jo større teksten er.
+import "@fontsource-variable/fraunces/opsz.css";
 import "./globals.css";
 import { APP_NAME, TAGLINE } from "@/lib/brand";
 

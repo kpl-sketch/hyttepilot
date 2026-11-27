@@ -81,7 +81,7 @@ export function RequestForm({ appName, answerDays }: { appName: string; answerDa
           ].map((choice) => (
             <label
               key={choice.value}
-              className="flex min-w-24 cursor-pointer items-center gap-3 rounded-xl border border-[#c9cfd2] bg-surface px-4 py-3 has-checked:border-ink has-checked:bg-paper"
+              className="flex min-w-24 cursor-pointer items-center gap-3 rounded-xl border border-field bg-white px-4 py-3 has-checked:border-ink has-checked:bg-paper"
             >
               <input
                 type="radio"

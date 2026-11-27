@@ -290,6 +290,12 @@ Regelen for ny funksjonalitet: tilgangssjekken skal ligge i tjenestelaget
 - **Next.js 16 med Cache Components.** Alt som leser innloggingen, må ligge bak
   `<Suspense>`. Se `src/app/(app)/layout.tsx`. Dokumentasjonen for denne versjonen
   ligger i `node_modules/next/dist/docs/`.
+- **Utseendet settes ett sted.** Farger, skrifter og skygger står i `@theme` i
+  `src/app/globals.css`. Siden har en lys papirtone, kortene er et hakk lysere, og
+  overskriftene (`h1` og `h2`) står i seriffen Fraunces. Forsidebildet er et ekte
+  bilde fra en hytte og ligger i `src/assets/forside/`. Byttes det, lages det i
+  to bredder (800 og om lag 1500 punkter, WebP) og importeres i
+  `src/components/front-photo.tsx`. Reglene for hva bildet kan vise, står der.
 - **Vercel setter serveren på pause mellom forespørsler.** Arbeid mot databasen
   som ikke er avsluttet da, blir stående halvferdig, og neste besøk får feil som
   «Authentication timed out». `src/lib/db/pool.ts` holder derfor serveren våken

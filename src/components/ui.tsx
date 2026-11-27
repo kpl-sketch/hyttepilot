@@ -26,7 +26,7 @@ export function ButtonLink({
 }
 
 export const inputClass =
-  "mt-1 block w-full rounded-xl border border-[#c9cfd2] bg-surface px-4 py-3 text-base text-ink placeholder:text-muted/70";
+  "mt-1 block w-full rounded-xl border border-field bg-white px-4 py-3 text-base text-ink placeholder:text-muted/70";
 
 export function Field({
   label,
@@ -75,7 +75,7 @@ export function Panel({
 export function PageTitle({ title, lead }: { title: string; lead?: ReactNode }) {
   return (
     <header className="mb-8">
-      <h1 className="text-3xl font-bold tracking-tight sm:text-[2.5rem] sm:leading-tight">{title}</h1>
+      <h1 className="text-4xl leading-[1.1] sm:text-5xl sm:leading-[1.05]">{title}</h1>
       {lead && <p className="mt-3 max-w-[60ch] text-lg text-muted">{lead}</p>}
     </header>
   );

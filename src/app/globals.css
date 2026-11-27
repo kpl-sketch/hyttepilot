@@ -1,30 +1,54 @@
 @import "tailwindcss";
 
 /*
- * Lyst og luftig, med runde kort og myke skygger. Det norske ligger i
- * fargene: låverødt for handlinger, fjordblått for navn og valgt tilstand,
- * og vindusgult for «ledig», et opplyst hyttevindu.
+ * Varmt og rolig, som inne i en hytte: lys papirtone i bunnen, varm
+ * brunsvart tekst og varme linjer. Det norske ligger i fargene: låverødt for
+ * handlinger, fjordblått for navn og valgt tilstand, og vindusgult for
+ * «ledig», et opplyst hyttevindu.
+ *
+ * Flatene, fra bunnen og opp: ground er selve siden, surface er kort og
+ * toppen, og paper er et hakk mørkere, for det som venter eller pekes på.
+ * Skrivefelt er hvite, så de skiller seg fra kortet de står i.
  */
 @theme {
   --font-sans: "Schibsted Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
 
-  --color-paper: #f6f7f7;
-  --color-surface: #ffffff;
-  --color-ink: #1d2327;
+  --color-ground: #f5eedf;
+  --color-paper: #efe6d2;
+  --color-surface: #fbf7ee;
+  --color-ink: #2a2320;
   --color-pine: #173f57;
   --color-barn: #b8312a;
   --color-barn-dark: #962620;
   --color-window: #f4c04e;
-  --color-line: #e2e5e6;
-  --color-muted: #5f686d;
-  --color-fjord-soft: #e8f0f4;
+  --color-line: #e2d6bf;
+  --color-field: #9c8e79;
+  --color-muted: #5e5347;
+  --color-fjord-soft: #e3ebec;
 
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.06), 0 6px 20px rgb(0 0 0 / 0.08);
+  --shadow-card: 0 1px 2px rgb(60 40 20 / 0.06), 0 6px 20px rgb(60 40 20 / 0.08);
+  --shadow-print: 0 2px 6px rgb(60 40 20 / 0.12), 0 18px 40px rgb(60 40 20 / 0.18);
 }
 
 body {
-  background: var(--color-surface);
+  background: var(--color-ground);
   color: var(--color-ink);
+}
+
+/*
+ * Overskriftene på første og andre nivå står i seriff, lettere og varmere
+ * enn resten av teksten. Regelen står utenfor lagene til Tailwind og går
+ * derfor foran klasser som font-bold og tracking-tight på h1 og h2. Det er
+ * med vilje: da ser overskriftene like ut på alle sider. Størrelsen settes
+ * fortsatt med klasser. Andre steder brukes klassen font-display, for
+ * eksempel på hyttenavn i kort.
+ */
+h1,
+h2 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
 :focus-visible {

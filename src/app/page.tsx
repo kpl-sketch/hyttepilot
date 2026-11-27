@@ -1,7 +1,7 @@
 import { PublicShell } from "@/components/public-shell";
 import Link from "next/link";
 import { ButtonLink, Panel } from "@/components/ui";
-import { CabinScene } from "@/components/cabin-scene";
+import { FrontPhoto } from "@/components/front-photo";
 import { APP_NAME, TAGLINE, WHAT_IT_IS } from "@/lib/brand";
 
 /**
@@ -21,14 +21,14 @@ export default function LandingPage() {
   return (
     <PublicShell>
       {/* På stor skjerm står teksten til venstre og bildet til høyre. */}
-      <div className="grid items-center gap-x-16 lg:grid-cols-2">
+      <div className="grid items-center gap-x-16 lg:grid-cols-[6fr_5fr]">
         <div>
           {/* Tjenesten er lukket. Det skal stå først, før noen leser resten. */}
           <p className="mb-5 inline-block rounded-full bg-pine px-4 py-1.5 text-sm font-bold uppercase tracking-wider text-white">
             Bare for inviterte
           </p>
           {/* Overskriften selger ideen. Reglene kommer etterpå, som trygghet. */}
-          <h1 className="max-w-[17ch] text-5xl font-extrabold leading-[1.05] tracking-tight sm:text-6xl">
+          <h1 className="max-w-[17ch] text-5xl leading-[1.05] sm:text-6xl">
             {TAGLINE}
           </h1>
           <p className="mt-6 max-w-[52ch] text-xl text-muted">
@@ -50,22 +50,20 @@ export default function LandingPage() {
           </p>
         </div>
 
-        {/* Fjell, fjord og en rød hytte med lys i vinduet. */}
-        <CabinScene className="mt-12 lg:mt-0" />
+        {/* Et ekte bilde fra en hytte. Reglene for bildet står i komponenten. */}
+        <FrontPhoto className="mx-auto mt-12 w-full max-w-xl lg:mt-0 lg:max-w-none" />
       </div>
 
-      <h2 className="mt-10 text-2xl font-bold tracking-tight lg:mt-16">Slik låner du bort hytta di</h2>
+      <h2 className="mt-14 text-3xl lg:mt-20">Slik låner du bort hytta di</h2>
       {/* role="list": Safari dropper listen for skjermlesere når punktene er skjult. */}
-      <ol role="list" className="mt-5 grid gap-5 lg:grid-cols-3 lg:gap-10">
+      <ol role="list" className="mt-6 grid gap-6 lg:grid-cols-3 lg:gap-10">
         {steps.map((step, index) => (
           <li key={step.title} className="flex gap-4">
-            <span
-              aria-hidden="true"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-pine font-bold text-white"
-            >
+            {/* Tallet er pynt: listen er nummerert fra før. */}
+            <span aria-hidden="true" className="w-7 shrink-0 font-display text-5xl leading-[0.9] text-barn">
               {index + 1}
             </span>
-            <p className="max-w-[48ch] pt-0.5 text-lg">
+            <p className="max-w-[48ch] text-lg">
               <strong className="font-semibold">{step.title}</strong> {step.text}
             </p>
           </li>
@@ -78,7 +76,7 @@ export default function LandingPage() {
       {/* Tre korte svar, ved siden av hverandre på stor skjerm. */}
       <div className="grid gap-x-10 lg:mt-6 lg:grid-cols-3">
         <section>
-          <h2 className="mt-10 text-2xl font-bold tracking-tight">Har du ikke hytte?</h2>
+          <h2 className="mt-12 text-2xl">Har du ikke hytte?</h2>
           <p className="mt-2 max-w-[52ch] text-lg">
             Da kan du likevel låne. Det eneste du trenger, er en invitasjon fra en hytteeier som
             kjenner deg.
@@ -87,7 +85,7 @@ export default function LandingPage() {
 
         {/* Å låne bort tilbake er frivillig. Derfor «kan du velge», ikke et løfte. */}
         <section>
-          <h2 className="mt-10 text-2xl font-bold tracking-tight">
+          <h2 className="mt-12 text-2xl">
             Har du hytte og låner hos andre?
           </h2>
           <p className="mt-2 max-w-[52ch] text-lg">
@@ -96,7 +94,7 @@ export default function LandingPage() {
         </section>
 
         <section>
-          <h2 className="mt-10 text-2xl font-bold tracking-tight">Bare folk du kjenner</h2>
+          <h2 className="mt-12 text-2xl">Bare folk du kjenner</h2>
           <p className="mt-2 max-w-[52ch] text-lg">
             Ingen annonser, ingen fremmede, og ingen ser hytta di uten at du har valgt dem.
             Venner av vennene dine får ikke tilgang av seg selv.
@@ -104,8 +102,8 @@ export default function LandingPage() {
         </section>
       </div>
 
-      <Panel className="mt-10 max-w-3xl lg:mt-16">
-        <h2 className="max-w-[26ch] text-2xl font-bold tracking-tight">
+      <Panel className="mt-12 max-w-3xl lg:mt-20">
+        <h2 className="max-w-[26ch] text-3xl leading-tight">
           Du må bli invitert av noen som allerede er med
         </h2>
         {/* Bare eiere og administratorer kan invitere. Teksten lover ikke mer. */}

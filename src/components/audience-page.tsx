@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { VERSIONS } from "@/lib/audiences";
 import { AudienceNav } from "./audience-nav";
-import { CabinScene } from "./cabin-scene";
+import { FrontPhoto } from "./front-photo";
 import { PublicShell } from "./public-shell";
 import { ButtonLink, Panel } from "./ui";
 
@@ -34,32 +34,30 @@ export function AudiencePage({ audience, number }: { audience: Audience; number:
         Bare for inviterte
       </p>
       <p className="mb-3 text-lg font-semibold text-barn">{forWhom}</p>
-      <h1 className="max-w-[20ch] text-4xl font-extrabold leading-[1.08] tracking-tight sm:text-5xl">
+      <h1 className="max-w-[20ch] text-4xl leading-[1.08] sm:text-5xl">
         {title}
       </h1>
       <p className="mt-6 max-w-[52ch] text-xl text-muted">{lead}</p>
 
-      <CabinScene className="mt-10" />
+      <FrontPhoto className="mt-12 w-full max-w-2xl" />
 
-      <h2 className="mt-10 text-2xl font-bold tracking-tight">{stepsTitle}</h2>
+      <h2 className="mt-14 text-3xl">{stepsTitle}</h2>
       {/* role="list": Safari dropper listen for skjermlesere når punktene er skjult. */}
       <ol role="list" className="mt-5 space-y-5">
         {steps.map((step, index) => (
           <li key={step} className="flex gap-4">
-            <span
-              aria-hidden="true"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-pine font-bold text-white"
-            >
+            {/* Tallet er pynt: listen er nummerert fra før. */}
+            <span aria-hidden="true" className="w-7 shrink-0 font-display text-5xl leading-[0.9] text-barn">
               {index + 1}
             </span>
-            <p className="max-w-[48ch] pt-0.5 text-lg">{step}</p>
+            <p className="max-w-[48ch] text-lg">{step}</p>
           </li>
         ))}
       </ol>
 
       {extra && (
         <>
-          <h2 className="mt-10 text-2xl font-bold tracking-tight">{extra.title}</h2>
+          <h2 className="mt-12 text-2xl">{extra.title}</h2>
           <p className="mt-2 max-w-[52ch] text-lg">{extra.body}</p>
         </>
       )}
@@ -67,7 +65,7 @@ export function AudiencePage({ audience, number }: { audience: Audience; number:
       <Panel className="mt-10">
         {invited ? (
           <>
-            <h2 className="max-w-[26ch] text-2xl font-bold tracking-tight">
+            <h2 className="max-w-[26ch] text-3xl leading-tight">
               Logg inn med adressen invitasjonen ble sendt til
             </h2>
             <p className="mt-2 max-w-[48ch] text-lg">
@@ -76,7 +74,7 @@ export function AudiencePage({ audience, number }: { audience: Audience; number:
           </>
         ) : (
           <>
-            <h2 className="max-w-[26ch] text-2xl font-bold tracking-tight">
+            <h2 className="max-w-[26ch] text-3xl leading-tight">
               Du må bli invitert av noen som allerede er med
             </h2>
             <p className="mt-2 max-w-[48ch] text-lg">

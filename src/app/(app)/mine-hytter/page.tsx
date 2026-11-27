@@ -39,11 +39,11 @@ export default async function MyCabinsPage() {
               className="group block rounded-2xl"
             >
               <CabinThumb photoId={cabin.coverPhotoId} card />
-              <span className="mt-3 block">
-                <span className="block text-lg font-bold group-hover:underline">
+              <span className="mt-4 block">
+                <span className="block font-display text-2xl leading-tight font-medium group-hover:underline">
                   {cabin.name}
                 </span>
-                <span className="block text-muted">{cabin.area}</span>
+                <span className="mt-1 block text-muted">{cabin.area}</span>
                 <span className="mt-1 block">
                   <span className="font-semibold">
                     {cabin.sharedWith === 0
