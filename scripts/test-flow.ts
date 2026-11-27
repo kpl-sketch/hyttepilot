@@ -25,6 +25,7 @@ import { sql } from "drizzle-orm";
 import sharp from "sharp";
 import {
   addDays,
+  formatDate,
   formatDateLong,
   freePeriods,
   monthGrid,
@@ -129,6 +130,16 @@ import {
   senderAddress,
 } from "../src/lib/services/inbox-notices";
 import { easterSunday, holidaysInYear, upcomingHoliday } from "../src/lib/holidays";
+import {
+  declineJoinRequest,
+  inviteFromJoinRequest,
+  listJoinRequests,
+  MAX_JOIN_REQUESTS_PER_DAY,
+  notifyAdminsOfJoinRequest,
+  pruneJoinRequests,
+  remindAdminsOfWaiting,
+  requestInvitation,
+} from "../src/lib/services/join-requests";
 import {
   addCabinPhotos,
   getPhotoForViewer,
@@ -471,7 +482,7 @@ async function suggestionCount(cabinId: string): Promise<number> {
 
 async function main() {
   await db.execute(
-    sql`truncate "booking", "availability", "cabin_photo", "cabin_access", "invitation", "cabin", "profile_photo", "profile", "login_throttle", "verification", "session", "account", "user", "job_state" cascade`,
+    sql`truncate "booking", "availability", "cabin_photo", "cabin_access", "invitation", "cabin", "profile_photo", "profile", "login_throttle", "verification", "session", "account", "user", "job_state", "join_request" cascade`,
   );
 
   const today = todayInOslo();
@@ -2803,6 +2814,303 @@ async function main() {
         else env[key] = value;
       }
     }
+  }
+
+  console.log("Be om invitasjon");
+  {
+    // Hvert kall får sin egen IP-adresse, så bremsen ikke slår inn før den testes.
+    let caller = 0;
+    const ask = (
+      over: Partial<Record<"name" | "email" | "hasCabin" | "note" | "trap", string>> = {},
+      ip = `10.1.0.${++caller}`,
+    ) =>
+      requestInvitation(
+        {
+          name: "Nina Ny",
+          email: "nina@test.local",
+          hasCabin: "ja",
+          note: "Kjenner Kari Eier fra jobb.",
+          ...over,
+        },
+        ip,
+      );
+    const rowsFor = async (email: string) =>
+      (
+        await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from "join_request" where "email" = ${email}`,
+        )
+      ).rows[0].n;
+    const isOpen = async (id: string) =>
+      (
+        await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from "join_request" where "id" = ${id} and "invited_at" is null and "declined_at" is null`,
+        )
+      ).rows[0].n === 1;
+
+    const first = await sentDuring(() => ask());
+    const ninaRow = first.result?.id ?? "";
+    await check("å be om invitasjon gir ingen adgang, og ingen e-post går til adressen", async () => {
+      assert.ok(ninaRow, "raden er lagret");
+      assert.equal(first.mails.length, 0);
+      assert.equal(await isEmailAllowed("nina@test.local"), false);
+    });
+    await check("alle administratorene får varsel, og ingen andre får noe", async () => {
+      const savedAdmins = process.env.ADMIN_EMAILS;
+      process.env.ADMIN_EMAILS = "admin@test.local, martin@test.local";
+      try {
+        const notice = await sentDuring(() => notifyAdminsOfJoinRequest(ninaRow));
+        assert.deepEqual(notice.result, { sent: 2, failed: 0 });
+        assert.deepEqual(notice.mails.map((m) => m.to).sort(), [
+          "admin@test.local",
+          "martin@test.local",
+        ]);
+        const [mail] = notice.mails;
+        assert.equal(mail.subject, "Nina Ny ber om invitasjon");
+        assert.match(mail.text, /Nina Ny \(nina@test\.local\) ber om invitasjon/);
+        assert.match(mail.text, /Har hytte: ja/);
+        assert.match(mail.text, /«Kjenner Kari Eier fra jobb\.»/);
+        assert.match(mail.text, /\/admin\n/);
+        assert.match(mail.text, /Adressen er ikke bekreftet/);
+        // Varselet sier når personen senest må ha fått svar.
+        const deadline = formatDate(addDays(todayInOslo(), 14));
+        assert.ok(mail.text.includes(`Svar innen ${deadline}.`), mail.text);
+        assert.match(mail.text, /innen 14 dager, ikke får plass nå/);
+      } finally {
+        process.env.ADMIN_EMAILS = savedAdmins;
+      }
+    });
+    await check("samme adresse gir verken to rader eller to varsler", async () => {
+      assert.equal(await ask({ email: " Nina@Test.Local " }), null);
+      assert.equal(await rowsFor("nina@test.local"), 1);
+    });
+    await check("felt som mangler eller er feil, får beskjed", async () => {
+      await refused(() => ask({ email: "a@test.local", name: "N" }), /navnet ditt/);
+      await refused(() => ask({ email: "ikke-en-adresse" }), /gyldig e-postadresse/);
+      await refused(() => ask({ email: "a@test.local", hasCabin: "" }), /om du har hytte/);
+      await refused(() => ask({ email: "a@test.local", note: "x".repeat(301) }), /300 tegn/);
+      await refused(
+        () => ask({ email: "a@test.local", name: "Vinn på https://ond.example" }),
+        /bare navnet/,
+      );
+      assert.equal(await rowsFor("a@test.local"), 0);
+    });
+    const tricky = await ask({
+      email: "lure@test.local",
+      name: "Lure   Lars",
+      hasCabin: "nei",
+      note: "Se her:\nhttps://ond.example/vinn  nå\r\nEmne: falskt",
+    });
+    const lureRow = tricky?.id ?? "";
+    await check("lenker og linjeskift renses før teksten lagres og sendes", async () => {
+      const notice = await sentDuring(() => notifyAdminsOfJoinRequest(lureRow));
+      const [mail] = notice.mails;
+      assert.equal(mail.subject, "Lure Lars ber om invitasjon");
+      assert.match(mail.text, /Har hytte: nei/);
+      assert.match(mail.text, /«Se her: \[lenke\] nå Emne: falskt»/);
+      assert.equal(/ond\.example/.test(mail.text), false);
+    });
+    await check("et program som fyller ut det skjulte feltet, lagrer ingenting", async () => {
+      assert.equal(await ask({ email: "robot@test.local", trap: "https://ond.example" }), null);
+      assert.equal(await rowsFor("robot@test.local"), 0);
+    });
+    await check("bare administratorer ser listen og kan svare", async () => {
+      await refused(() => listJoinRequests(kari), /administratorer/);
+      await refused(() => inviteFromJoinRequest(kari, ninaRow), /administratorer/);
+      await refused(() => declineJoinRequest(kari, ninaRow), /administratorer/);
+      await refused(() => inviteFromJoinRequest(admin, "ikke-en-id"), /Fant ikke/);
+      assert.equal(await isOpen(ninaRow), true);
+    });
+
+    // En som allerede er med, og en som allerede er invitert, får samme
+    // kvittering som alle andre. Bare administratorene ser forskjellen.
+    const memberRow = (await ask({ email: "kari@test.local", name: "Kari Eier" }))?.id ?? "";
+    await inviteAccount(admin, "ventende@test.local");
+    const invitedRow = (await ask({ email: "ventende@test.local", name: "Vera Venter" }))?.id ?? "";
+    await check("listen viser hvem som venter, eldst først, og hva tjenesten vet om adressen", async () => {
+      const { open, waiting, answered, funnel } = await listJoinRequests(admin);
+      assert.deepEqual(
+        open.map((p) => [p.name, p.email, p.hasCabin, p.state]),
+        [
+          ["Nina Ny", "nina@test.local", true, "new"],
+          ["Lure Lars", "lure@test.local", false, "new"],
+          ["Kari Eier", "kari@test.local", true, "member"],
+          ["Vera Venter", "ventende@test.local", true, "invited"],
+        ],
+      );
+      assert.equal(waiting, 4);
+      assert.deepEqual(answered, []);
+      assert.deepEqual(funnel, { invited: 0, joined: 0, withCabin: 0 });
+      const notice = await sentDuring(() => notifyAdminsOfJoinRequest(memberRow));
+      assert.match(notice.mails[0].text, /allerede med/);
+      // Fristen står ved hver person. Ingen frist er ute ennå.
+      const deadline = addDays(todayInOslo(), 14);
+      assert.deepEqual(
+        open.map((p) => [p.deadline, p.overdue]),
+        open.map(() => [deadline, false]),
+      );
+    });
+
+    await check("administratorene får én påminnelse når noen har ventet i tre dager, uten navn", async () => {
+      const age = (id: string, daysAgo: number) =>
+        db.execute(
+          sql`update "join_request" set "created_at" = now() - make_interval(days => ${daysAgo}) where "id" = ${id}`,
+        );
+      const fresh = await sentDuring(() => remindAdminsOfWaiting());
+      assert.deepEqual(fresh.result, { waiting: 0, sent: 0, failed: 0 });
+      assert.equal(fresh.mails.length, 0);
+
+      await age(ninaRow, 4);
+      await age(lureRow, 5);
+      // Kommer ingen e-post fram, prøver jobben igjen neste døgn.
+      const savedAdmins = process.env.ADMIN_EMAILS;
+      process.env.ADMIN_EMAILS = "";
+      try {
+        assert.deepEqual(await remindAdminsOfWaiting(), { waiting: 2, sent: 0, failed: 0 });
+      } finally {
+        process.env.ADMIN_EMAILS = savedAdmins;
+      }
+      const first = await sentDuring(() => remindAdminsOfWaiting());
+      assert.deepEqual(first.result, { waiting: 2, sent: 1, failed: 0 });
+      assert.deepEqual(first.mails.map((m) => m.to), ["admin@test.local"]);
+      const [mail] = first.mails;
+      assert.equal(mail.subject, "2 personer venter på svar om invitasjon");
+      assert.match(mail.text, /har ventet i 3 dager/);
+      assert.match(mail.text, /\/admin\n/);
+      // Fristen er den til den som har ventet lengst.
+      const oldest = formatDate(addDays(todayInOslo(new Date(Date.now() - 5 * 86_400_000)), 14));
+      assert.ok(mail.text.includes(`Den første fristen går ut ${oldest}.`), mail.text);
+      // Påminnelsen sier ikke hvem det gjelder.
+      assert.equal(/Nina|Lure|nina@|lure@|Kjenner Kari|\[lenke\]/.test(mail.subject + mail.text), false);
+
+      // Samme personer gir aldri en påminnelse til.
+      const again = await sentDuring(() => remindAdminsOfWaiting());
+      assert.deepEqual(again.result, { waiting: 0, sent: 0, failed: 0 });
+      assert.equal(again.mails.length, 0);
+
+      // En ny som har ventet lenge nok, gir én påminnelse om bare den.
+      await age(memberRow, 15);
+      const next = await sentDuring(() => remindAdminsOfWaiting());
+      assert.deepEqual(next.result, { waiting: 1, sent: 1, failed: 0 });
+      assert.equal(next.mails[0].subject, "1 person venter på svar om invitasjon");
+
+      // Den som har fått svar, gir ingen påminnelse.
+      await db.execute(
+        sql`insert into "join_request" ("name", "email", "has_cabin", "created_at", "declined_at") values ('Svart', 'svart@test.local', false, now() - interval '10 days', now())`,
+      );
+      assert.deepEqual(await remindAdminsOfWaiting(), { waiting: 0, sent: 0, failed: 0 });
+      await db.execute(sql`delete from "join_request" where "email" = 'svart@test.local'`);
+
+      // Når fristen er ute, sier listen det.
+      const { open } = await listJoinRequests(admin);
+      const late = open.find((p) => p.email === "kari@test.local");
+      assert.equal(late?.overdue, true);
+      assert.equal(late?.deadline, addDays(todayInOslo(new Date(Date.now() - 15 * 86_400_000)), 14));
+      assert.equal(open.find((p) => p.email === "nina@test.local")?.overdue, false);
+    });
+
+    const invited = await sentDuring(() => inviteFromJoinRequest(admin, ninaRow));
+    await check("ett trykk sender den vanlige invitasjonen uten hytte, og e-posten sier hvorfor", async () => {
+      assert.deepEqual(invited.result, { emailAccepted: true, name: "Nina Ny" });
+      assert.equal(invited.mails.length, 1);
+      const [mail] = invited.mails;
+      assert.equal(mail.to, "nina@test.local");
+      assert.match(mail.subject, /^Anne Admin inviterer deg til /);
+      assert.match(mail.text, /^Du ba om en invitasjon til .+\. Her er den, fra Anne Admin\./);
+      assert.match(mail.text, /gir ikke tilgang til andres hytter/);
+      assert.equal(await isEmailAllowed("nina@test.local"), true);
+      const { open, answered, funnel } = await listJoinRequests(admin);
+      assert.equal(open.some((p) => p.email === "nina@test.local"), false);
+      assert.equal(answered.length, 1);
+      assert.equal(answered[0].outcome, "invited");
+      assert.equal(answered[0].decidedByName, "Anne Admin");
+      assert.equal(answered[0].joined, false);
+      assert.deepEqual(funnel, { invited: 1, joined: 0, withCabin: 0 });
+    });
+    await check("et trykk til sender ingen ny invitasjon", async () => {
+      const again = await sentDuring(() =>
+        refused(() => inviteFromJoinRequest(admin, ninaRow), /allerede svart/),
+      );
+      assert.equal(again.mails.length, 0);
+      await refused(() => declineJoinRequest(admin, ninaRow), /allerede svart/);
+      // Den som nettopp er invitert, lager ingen ny rad ved å spørre igjen.
+      assert.equal(await ask(), null);
+      assert.equal(await rowsFor("nina@test.local"), 1);
+    });
+    await check("den inviterte kommer inn uten å se noen hytter, og tallene følger med", async () => {
+      const nina = await register("nina@test.local", "Nina Ny");
+      assert.deepEqual(await listSharedCabins(nina), []);
+      assert.equal(await getVisibleCabin(nina, annesHytte), null);
+      assert.deepEqual((await listJoinRequests(admin)).funnel, { invited: 1, joined: 1, withCabin: 0 });
+      await createCabin(nina, cabinData("Ninas hytte"));
+      const { answered, funnel } = await listJoinRequests(admin);
+      assert.deepEqual(funnel, { invited: 1, joined: 1, withCabin: 1 });
+      assert.equal(answered[0].joined, true);
+    });
+    await check("nei gir ingen e-post og ingen adgang, og adressen gir ingen ny rad mens neiet står", async () => {
+      const declined = await sentDuring(() => declineJoinRequest(admin, lureRow));
+      assert.equal(declined.mails.length, 0);
+      assert.equal(await isEmailAllowed("lure@test.local"), false);
+      assert.equal(await ask({ email: "lure@test.local" }), null);
+      assert.equal(await rowsFor("lure@test.local"), 1);
+      const { answered } = await listJoinRequests(admin);
+      assert.equal(answered[0].email, "lure@test.local");
+      assert.equal(answered[0].outcome, "declined");
+    });
+    await check("den som allerede er med eller invitert, kan bare fjernes fra listen", async () => {
+      const tried = await sentDuring(async () => {
+        await refused(() => inviteFromJoinRequest(admin, memberRow), /allerede med/);
+        await refused(() => inviteFromJoinRequest(admin, invitedRow), /allerede invitert/);
+      });
+      assert.equal(tried.mails.length, 0);
+      // Ble det ingen invitasjon, venter raden fortsatt på svar.
+      assert.equal(await isOpen(memberRow), true);
+      assert.equal(await isOpen(invitedRow), true);
+      await declineJoinRequest(admin, memberRow);
+      await declineJoinRequest(admin, invitedRow);
+      assert.equal((await listJoinRequests(admin)).waiting, 0);
+    });
+    await check("et nei slettes etter 30 dager, en ubesvart etter 90, og en invitert blir stående", async () => {
+      const old = (await ask({ email: "gammel@test.local" }))?.id ?? "";
+      const fresh = (await ask({ email: "fersk@test.local" }))?.id ?? "";
+      await db.execute(
+        sql`update "join_request" set "declined_at" = now() - interval '31 days' where "id" = ${lureRow}`,
+      );
+      await db.execute(
+        sql`update "join_request" set "created_at" = now() - interval '91 days' where "id" = ${old}`,
+      );
+      await db.execute(
+        sql`update "join_request" set "created_at" = now() - interval '89 days' where "id" = ${fresh}`,
+      );
+      await db.execute(
+        sql`update "join_request" set "invited_at" = now() - interval '200 days' where "id" = ${ninaRow}`,
+      );
+      assert.equal(await pruneJoinRequests(), 2);
+      assert.equal(await pruneJoinRequests(), 0, "ryddingen kan kjøres så ofte som helst");
+      assert.equal(await rowsFor("lure@test.local"), 0);
+      assert.equal(await rowsFor("gammel@test.local"), 0);
+      assert.equal(await rowsFor("fersk@test.local"), 1);
+      assert.equal(await rowsFor("nina@test.local"), 1);
+      // Når neiet er slettet, kan adressen spørre på nytt.
+      assert.ok(await ask({ email: "lure@test.local" }));
+    });
+    await check("sjette forsøk fra samme sted og fjerde for samme adresse stoppes", async () => {
+      for (let i = 0; i < 5; i++) {
+        assert.ok(await ask({ email: `brems${i}@test.local` }, "10.9.9.9"));
+      }
+      await refused(() => ask({ email: "brems5@test.local" }, "10.9.9.9"), /For mange forsøk/);
+      assert.equal(await rowsFor("brems5@test.local"), 0);
+      for (let i = 0; i < 3; i++) await ask({ email: "ivrig@test.local" });
+      await refused(() => ask({ email: "ivrig@test.local" }), /For mange forsøk/);
+      assert.equal(await rowsFor("ivrig@test.local"), 1);
+    });
+    await check("taket per døgn stopper nye rader, så innboksen ikke kan fylles", async () => {
+      await db.execute(
+        sql`insert into "join_request" ("name", "email", "has_cabin") select 'Fyll', 'fyll' || n || '@test.local', false from generate_series(1, ${MAX_JOIN_REQUESTS_PER_DAY}) as n`,
+      );
+      await refused(() => ask({ email: "sist@test.local" }), /Prøv igjen i morgen/);
+      assert.equal(await rowsFor("sist@test.local"), 0);
+      await db.execute(sql`delete from "join_request" where "name" = 'Fyll'`);
+    });
   }
 
   console.log("Brems på innlogging");

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { VERSIONS } from "@/lib/audiences";
 import { AudienceNav } from "./audience-nav";
@@ -83,6 +84,12 @@ export function AudiencePage({ audience, number }: { audience: Audience; number:
               <strong className="font-semibold">
                 Kjenner du noen som har hytte her? Be dem invitere deg.
               </strong>
+            </p>
+            <p className="mt-4 max-w-[48ch] text-lg">
+              Kjenner du ingen her ennå?{" "}
+              <Link href="/be-om-invitasjon" className="font-semibold underline">
+                Be om invitasjon
+              </Link>
             </p>
             <p className="mt-4 max-w-[48ch] text-muted">
               Har du fått en invitasjon, logger du inn med adressen den ble sendt til.

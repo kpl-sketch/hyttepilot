@@ -197,7 +197,11 @@ export default function HowItWorksPage() {
           {/* Bare eiere og administratorer kan invitere. Teksten lover ikke mer. */}
           <p className="mt-6 max-w-[48ch] text-muted">
             Ikke invitert ennå? Du kan ikke registrere deg selv. Kjenner du noen som har hytte i{" "}
-            {APP_NAME}, kan du be dem invitere deg.
+            {APP_NAME}, kan du be dem invitere deg. Kjenner du ingen her, kan du{" "}
+            <Link href="/be-om-invitasjon" className="underline">
+              be om invitasjon
+            </Link>
+            .
           </p>
         </Panel>
       </div>

@@ -418,6 +418,52 @@ export const invitationRequest = pgTable(
 );
 
 /**
+ * Noen uten invitasjon har bedt om en i skjemaet på /be-om-invitasjon.
+ * Raden gir ingen adgang. Bare en administrator kan gjøre den om til en
+ * invitasjon (services/join-requests.ts).
+ *
+ * Adressen er ikke bekreftet: hvem som helst kan ha skrevet den. Tjenesten
+ * sender derfor aldri e-post til den før en administrator har valgt å
+ * invitere.
+ */
+export const joinRequest = pgTable(
+  "join_request",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    email: text("email").notNull(),
+    /** Svaret på «Har du hytte?». Hjelper administratorene å velge. */
+    hasCabin: boolean("has_cabin").notNull(),
+    /** Hvem personen kjenner her, eller hvordan de hørte om tjenesten. Valgfritt. */
+    note: text("note").notNull().default(""),
+    createdAt: createdAt(),
+    /**
+     * Satt når administratorene har fått påminnelsen om at personen venter.
+     * Hver person gir høyst én påminnelse.
+     */
+    remindedAt: timestamp("reminded_at", { withTimezone: true }),
+    /** Satt når en administrator har invitert personen. */
+    invitedAt: timestamp("invited_at", { withTimezone: true }),
+    /** Satt når en administrator har sagt nei eller fjernet raden fra listen. */
+    declinedAt: timestamp("declined_at", { withTimezone: true }),
+    /** Administratoren som svarte. */
+    decidedBy: text("decided_by").references(() => user.id, { onDelete: "set null" }),
+    /** Invitasjonen dette førte til. */
+    invitationId: uuid("invitation_id").references(() => invitation.id, {
+      onDelete: "set null",
+    }),
+  },
+  (t) => [
+    // Høyst én ubesvart rad per adresse. Da kan ikke et dobbelt trykk gi to
+    // rader eller to varsler.
+    uniqueIndex("join_request_open_idx")
+      .on(t.email)
+      .where(sql`${t.invitedAt} is null and ${t.declinedAt} is null`),
+    index("join_request_created_idx").on(t.createdAt),
+  ],
+);
+
+/**
  * Hvor langt en jobb som kjøres etter klokka, er kommet. Én rad per jobb.
  * Brukes av varselet om ny e-post i innboksen (services/inbox-notices.ts):
  * `mark` er tidspunktet for den nyeste e-posten administratorene har fått
@@ -435,3 +481,4 @@ export type BookingStatus = (typeof bookingStatus.enumValues)[number];
 export type Availability = typeof availability.$inferSelect;
 export type Invitation = typeof invitation.$inferSelect;
 export type Profile = typeof profile.$inferSelect;
+export type JoinRequest = typeof joinRequest.$inferSelect;

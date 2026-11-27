@@ -12,6 +12,12 @@ export const metadata: Metadata = { title: "Personvern" };
  * juridisk kvalitetssikret. Før ekte brukere slipper inn må den som er
  * behandlingsansvarlig fylles inn (NEXT_PUBLIC_CONTROLLER_NAME), og teksten
  * bør leses av noen som kan personvern.
+ *
+ * Avsnittene «Hvorfor vi kan bruke opplysningene», «Klage» og det som står om
+ * leverandørenes land, er et utkast fra 2026-11-27. Valget av
+ * behandlingsgrunnlag er ikke vurdert av en jurist. Det som står om
+ * leverandørene, må holdes ved like: bytter vi leverandør eller sted, skal
+ * teksten endres samme dag.
  */
 const controller = process.env.NEXT_PUBLIC_CONTROLLER_NAME || "";
 
@@ -61,11 +67,40 @@ export default function PrivacyPage() {
             <li>Forespørsler du sender eller får, med datoer, antall personer, pris og meldinger.</li>
             <li>Hvem som har invitert hvem, hvilken hytte invitasjonen gjelder, og en hilsen hvis avsenderen skrev en.</li>
             <li>Innlogginger: tidspunkt, IP-adresse og nettlesertype.</li>
+            <li>
+              Ber du om invitasjon uten å være med: navnet og e-postadressen du skriver, om du
+              har hytte, og det du skriver om hvem du kjenner her. Sier vi nei, sletter vi det
+              etter 30 dager. Har du ikke hørt fra oss innen 14 dager, har vi ikke plass nå, og
+              etter 90 dager sletter vi det du skrev.
+              Inviterer vi deg, blir det stående sammen med invitasjonen. For å bremse misbruk
+              av skjemaet lagrer vi IP-adressen din i inntil et døgn.
+            </li>
             {suggestions && (
               <li>Tidspunktet du ba om et tekstforslag til en hytte. Selve forslaget lagrer vi ikke.</li>
             )}
           </ul>
           <p className="mt-2">Betaling skjer i Vipps, utenfor tjenesten. Vi lagrer ingen betalingsopplysninger.</p>
+        </section>
+
+        <section>
+          <h2 className="text-xl font-bold">Hvorfor vi kan bruke opplysningene</h2>
+          <ul className="mt-2 list-disc space-y-1 pl-6">
+            <li>
+              Er du med i {APP_NAME}, bruker vi opplysningene dine for å gi deg tjenesten du
+              har valgt å bruke: vise hytter, sende forespørsler og varsle deg. Grunnlaget er
+              avtalen med deg (personvernforordningen artikkel 6 nr. 1 bokstav b).
+            </li>
+            <li>
+              Ber du om invitasjon, bruker vi det du skriver, bare til å svare deg. Du har
+              selv bedt oss om det (samme bestemmelse).
+            </li>
+            <li>
+              Inviterer noen deg, lagrer vi e-postadressen din for å kunne sende invitasjonen.
+              Innlogginger og IP-adresser lagrer vi for å holde tjenesten trygg og stoppe
+              misbruk. Grunnlaget er vår berettigede interesse i å drive en lukket og trygg
+              tjeneste (artikkel 6 nr. 1 bokstav f). Du kan protestere mot dette.
+            </li>
+          </ul>
         </section>
 
         <section>
@@ -75,6 +110,7 @@ export default function PrivacyPage() {
             <li>Det å eie en hytte gir ikke innsyn i andres hytter.</li>
             <li>Administratorene ser alle hytter slik lånerne ser dem: bilder, beskrivelse, pris, regler, ledige datoer og området på kart. De ser også hvor mange som ser hver hytte, har spurt om å låne den og har lånt den. De ser ikke adresse, kartposisjon, Vipps-nummer eller praktiske opplysninger, og ikke hvem som har spurt eller lånt. De kan ikke spørre om å låne en hytte eieren ikke har vist dem.</li>
             <li>Du ser navnet på dem som viser deg en hytte, og dem du viser din. Ingen ser en liste over alle som er med.</li>
+            <li>Bare administratorene ser hvem som har bedt om invitasjon, og hva de skrev. Vi sender ingen e-post til adressen før en administrator har valgt å invitere.</li>
             <li>Profilbildet ditt står ved navnet ditt, og bare der navnet vises fra før: hos dem du viser en hytte til, hos dem som viser deg sin, i forespørsler mellom eier og låner, og hos eieren som skal godkjenne deg. Administratorene kan se det. Andre medlemmer ser det ikke. Du kan fjerne bildet når du vil.</li>
             <li>Eieren ser navnet på dem som ser hytta, og adressen eieren selv skrev inn i invitasjonen.</li>
             <li>Åpnes en invitasjonslenke uten innlogging, vises navnet og profilbildet til den som inviterer, og en maskert e-postadresse. Gjelder invitasjonen en hytte, vises også bildene av hytta og området på kart. Det gjelder bare så lenge invitasjonen ikke er trukket tilbake eller utløpt.</li>
@@ -88,6 +124,19 @@ export default function PrivacyPage() {
           <p className="mt-2">
             Tjenesten kjører hos leverandører av nettdrift, database og utsending av e-post.
             De behandler opplysningene på våre vegne.
+          </p>
+          <ul className="mt-2 list-disc space-y-1 pl-6">
+            <li>Nettdrift: Vercel. Tjenesten kjører fra Frankfurt.</li>
+            <li>Database: Neon. Databasen ligger i Frankfurt.</li>
+            <li>
+              E-post: Resend. Navnet ditt, e-postadressen din og innholdet i e-postene vi
+              sender deg, går gjennom Resend, som lagrer opplysninger i USA.
+            </li>
+          </ul>
+          <p className="mt-2">
+            Alle tre er amerikanske selskaper. Opplysninger kan derfor bli behandlet utenfor
+            EØS. Overføringen bygger på EUs standardavtaler for overføring av
+            personopplysninger, som inngår i databehandleravtalene med leverandørene.
           </p>
           <p className="mt-2">
             Når en hytteeier skriver inn adressen til hytta, slår vi den opp i Kartverkets åpne
@@ -123,6 +172,18 @@ export default function PrivacyPage() {
           <p className="mt-2">
             Du kan be om å få se, rette eller slette opplysningene dine.
             {CONTACT_EMAIL ? ` Send en e-post til ${CONTACT_EMAIL}.` : " Ta kontakt med den som inviterte deg."}
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-xl font-bold">Klage</h2>
+          <p className="mt-2">
+            Mener du at vi bruker opplysningene dine feil, vil vi gjerne høre det først, så
+            retter vi det vi kan. Du kan også klage til Datatilsynet. Se{" "}
+            <a href="https://www.datatilsynet.no" className="underline">
+              datatilsynet.no
+            </a>
+            .
           </p>
         </section>
       </div>

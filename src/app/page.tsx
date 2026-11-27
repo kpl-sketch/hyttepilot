@@ -1,4 +1,5 @@
 import { PublicShell } from "@/components/public-shell";
+import Link from "next/link";
 import { ButtonLink, Panel } from "@/components/ui";
 import { CabinScene } from "@/components/cabin-scene";
 import { APP_NAME, TAGLINE, WHAT_IT_IS } from "@/lib/brand";
@@ -40,6 +41,13 @@ export default function LandingPage() {
               Slik virker det
             </ButtonLink>
           </div>
+          {/* Den som ikke er invitert, skal ikke måtte lete nederst på siden. */}
+          <p className="mt-4 text-lg">
+            Ikke invitert ennå?{" "}
+            <Link href="/be-om-invitasjon" className="font-semibold underline">
+              Be om invitasjon
+            </Link>
+          </p>
         </div>
 
         {/* Fjell, fjord og en rød hytte med lys i vinduet. */}
@@ -107,10 +115,20 @@ export default function LandingPage() {
             Kjenner du noen som har hytte i {APP_NAME}? Be dem invitere deg.
           </strong>
         </p>
-        <p className="mt-4 max-w-[48ch] text-muted">
+        {/*
+          Den som ikke kjenner noen her, kan spørre oss. Det er ikke en
+          registrering: en administrator leser og svarer på hver enkelt.
+        */}
+        <p className="mt-4 max-w-[48ch] text-lg">
+          Kjenner du ingen her ennå? Da kan du spørre oss.
+        </p>
+        <ButtonLink href="/be-om-invitasjon" className="mt-3">
+          Be om invitasjon
+        </ButtonLink>
+        <p className="mt-6 max-w-[48ch] text-muted">
           Har du fått en invitasjon, logger du inn med adressen den ble sendt til.
         </p>
-        <ButtonLink href="/logg-inn" className="mt-3">
+        <ButtonLink href="/logg-inn" variant="secondary" className="mt-3">
           Logg inn
         </ButtonLink>
       </Panel>

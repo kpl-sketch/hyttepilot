@@ -6,6 +6,18 @@ litt over selvkost. Navnet er et arbeidsnavn og byttes ett sted: `NEXT_PUBLIC_AP
 ## Hva piloten gjør
 
 - **Lukket innlogging.** Engangskode på e-post. Bare inviterte adresser får kode.
+- **Be om invitasjon.** Den som ikke kjenner noen her, kan spørre i skjemaet på
+  `/be-om-invitasjon`, som forsiden lenker til: navn, e-post, om de har hytte, og
+  hvem de kjenner. Skjemaet gir ingen adgang. Administratorene får varsel på
+  e-post og inviterer eller sier nei under Administrasjon. Den som blir invitert,
+  får den vanlige invitasjonen uten hytte. Ingen e-post går til adressen før en
+  administrator har invitert. Kvitteringen sier at den som ikke har hørt fra oss
+  innen 14 dager, ikke får plass nå. Administratorene ser fristen ved hver person
+  og får én påminnelse når noen har ventet i tre dager (jobben
+  `/jobber/venter-pa-svar`). Et nei slettes etter 30 dager og en ubesvart etter
+  90, av jobben `/jobber/rydding` (planlagt i `vercel.json`), som også sletter
+  IP-adressene i bremsen etter et døgn. Reglene ligger i
+  `src/lib/services/join-requests.ts`.
 - **Hytteløftet.** Alle må gi løftet på velkomstsiden før de slipper inn.
 - **Hytter.** Eieren legger inn hytte, pris, regler og ledige perioder.
 - **Bilder.** Opptil åtte bilder per hytte, valgt når hytta legges inn eller senere.
@@ -72,7 +84,7 @@ kan låne, eie og dele. Forskjellen ligger i hva som er delt med hvem.
 | Alle som er med | Se hyttene som er delt med dem, og be om å låne. Legge inn egen hytte. |
 | Eieren av en hytte | Velge hvem som ser hytta, åpne datoer, svare ja eller nei, markere betalt, avlyse, slutte å dele. |
 | Den en hytte er delt med | Se hytta, bildene, prisen og ledige datoer, og sende forespørsler. Kan ikke dele hytta videre. |
-| Administrator (`ADMIN_EMAILS`) | Slippe en person inn i tjenesten uten å dele en hytte. Ser ellers akkurat det samme som alle andre. |
+| Administrator (`ADMIN_EMAILS`) | Slippe en person inn i tjenesten uten å dele en hytte, og svare dem som har bedt om invitasjon. Ser ellers akkurat det samme som alle andre. |
 
 ## Deling og invitasjoner
 

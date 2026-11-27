@@ -36,6 +36,7 @@ import {
   shareWithPerson,
 } from "@/lib/services/invitations";
 import { suggestDescription } from "@/lib/services/descriptions";
+import { declineJoinRequest, inviteFromJoinRequest } from "@/lib/services/join-requests";
 import { addCabinPhotos, makeCoverPhoto, removeCabinPhoto } from "@/lib/services/photos";
 import { setIdleReminders } from "@/lib/services/reminders";
 import { requireViewer } from "@/lib/session";
@@ -451,6 +452,35 @@ export async function revokeAccountInvitationAction(
     return toFormState(error);
   }
   redirect("/admin?endret=invitasjon");
+}
+
+/** En administrator inviterer en som har bedt om invitasjon. */
+export async function inviteFromJoinRequestAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const viewer = await requireViewer();
+  let emailAccepted: boolean;
+  try {
+    ({ emailAccepted } = await inviteFromJoinRequest(viewer, text(formData, "requestId")));
+  } catch (error) {
+    return toFormState(error);
+  }
+  redirect(emailAccepted ? "/admin?endret=invitert" : "/admin?endret=invitert-uten-epost");
+}
+
+/** En administrator sier nei til en som har bedt om invitasjon. */
+export async function declineJoinRequestAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const viewer = await requireViewer();
+  try {
+    await declineJoinRequest(viewer, text(formData, "requestId"));
+  } catch (error) {
+    return toFormState(error);
+  }
+  redirect("/admin?endret=nei");
 }
 
 export async function createBookingAction(

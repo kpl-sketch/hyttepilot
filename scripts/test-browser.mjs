@@ -398,7 +398,7 @@ async function openDates(page, from, to) {
 
 async function main() {
   await pool.query(
-    `truncate "booking", "availability", "cabin_photo", "cabin_access", "invitation", "cabin", "profile_photo", "profile", "login_throttle", "verification", "session", "account", "user" cascade`,
+    `truncate "booking", "availability", "cabin_photo", "cabin_access", "invitation", "cabin", "profile_photo", "profile", "login_throttle", "verification", "session", "account", "user", "join_request" cascade`,
   );
 
   console.log("Administrator og første hytteeier");
@@ -427,6 +427,13 @@ async function main() {
     await anne.getByText("Du kan ikke registrere deg selv.").waitFor();
     // Den som ikke er invitert, får vite hva som er neste steg.
     await anne.getByText(/^Kjenner du noen som har hytte i .+\? Be dem invitere deg\.$/).waitFor();
+    // Den som ikke kjenner noen her, kan spørre: øverst på siden og i rammen nederst.
+    await anne.getByText("Kjenner du ingen her ennå? Da kan du spørre oss.").waitFor();
+    const ask = anne.getByRole("link", { name: "Be om invitasjon" });
+    assert.equal(await ask.count(), 2);
+    for (const link of await ask.all()) {
+      assert.equal(await link.getAttribute("href"), "/be-om-invitasjon");
+    }
     assert.equal(
       /selvkost|forespørsel|Hytteløftet/.test(await anne.getByRole("main").innerText()),
       false,
@@ -434,6 +441,122 @@ async function main() {
     );
     await shot(anne, "01-forside");
   });
+
+  console.log("Be om invitasjon");
+  const nina = await phone();
+  const askedAt = (await newMails()).length;
+  await check("den som ikke er invitert, kommer fra forsiden til skjemaet med ett trykk", async () => {
+    await nina.goto(`${BASE}/`);
+    await nina.getByRole("link", { name: "Be om invitasjon" }).first().click();
+    await nina.waitForURL(/\/be-om-invitasjon$/);
+    await nina.getByRole("heading", { level: 1, name: "Be om invitasjon" }).waitFor();
+    const text = (await nina.getByRole("main").innerText()).trimStart();
+    assert.match(text, /^Bare for inviterte/i, "at tjenesten er lukket, skal stå først");
+    // Siden lover ikke plass, og sier hva man ser uten hytte.
+    assert.match(text, /Vi lover ikke plass til alle\./);
+    assert.match(text, /Uten hytte ser du hytter først når en eier viser deg sin\./);
+    // «Forespørsel» betyr noe annet inne i tjenesten. Skjemaet bruker ikke ordet.
+    assert.equal(/forespørsel/i.test(text), false);
+    await shot(nina, "01b-be-om-invitasjon");
+  });
+  await check("skjemaet kan fylles ut og sendes bare med tastatur", async () => {
+    await tabTo(nina, /^Navn/);
+    await nina.keyboard.type("Nina Ny");
+    await nina.keyboard.press("Tab");
+    assert.match(await focusName(nina), /^E-postadresse/);
+    await nina.keyboard.type("Nina@Test.Local");
+    await nina.keyboard.press("Tab");
+    // Ja og nei er ett valg. Mellomrom velger det som har fokus.
+    assert.equal(await nina.getByRole("group", { name: "Har du hytte?" }).getByRole("radio").count(), 2);
+    assert.match(await focusName(nina), /Ja/);
+    await nina.keyboard.press("Space");
+    assert.equal(await nina.getByRole("radio", { name: "Ja" }).isChecked(), true);
+    await nina.keyboard.press("Tab");
+    assert.match(await focusName(nina), /^Hvem kjenner du her\?/);
+    await nina.keyboard.type("Kjenner Kari Eier fra jobb.");
+    await nina.keyboard.press("Tab");
+    assert.match(await focusName(nina), /Be om invitasjon/);
+    await nina.keyboard.press("Enter");
+    await nina.getByRole("heading", { name: "Takk. Nå vet vi at du vil være med." }).waitFor();
+    // Fokus flyttes til kvitteringen, så den blir lest opp og Tab går videre derfra.
+    await eventually(
+      async () => /^Takk\. Nå vet vi at du vil være med\./.test(await focusName(nina)),
+      "fokus skal stå på overskriften i kvitteringen",
+    );
+    const receipt = await nina.locator("#kvittering").innerText();
+    assert.match(receipt, /kommer den på e-post til Nina@Test\.Local\./);
+    // Uten e-post ved nei må kvitteringen si når stillhet betyr nei.
+    assert.match(receipt, /Har du ikke hørt fra oss innen 14 dager, har vi ikke plass nå\./);
+    assert.equal(await nina.getByRole("button", { name: "Be om invitasjon" }).count(), 0);
+    await shot(nina, "01c-takk");
+  });
+  await check("administratoren får varsel, og den som spurte, får ingen e-post", async () => {
+    const notice = await mailTo("admin@test.local", /ber om invitasjon/, askedAt);
+    assert.equal(notice.subject, "Nina Ny ber om invitasjon");
+    assert.match(notice.text, /Har hytte: ja/);
+    assert.match(notice.text, /«Kjenner Kari Eier fra jobb\.»/);
+    const mails = (await newMails()).slice(askedAt);
+    assert.deepEqual(mails.filter((mail) => mail.to === "nina@test.local"), []);
+  });
+  await check("uten svar på om man har hytte sendes ingenting, og en feil tar ikke fokus fra knappen", async () => {
+    const lars = await phone();
+    await lars.goto(`${BASE}/be-om-invitasjon`);
+    await lars.getByLabel("Navn").fill("Lars Nei");
+    await lars.getByLabel("E-postadresse").fill("lars@test.local");
+    await lars.getByRole("button", { name: "Be om invitasjon" }).click();
+    // Nettleseren stopper skjemaet og peker på det som mangler.
+    assert.equal(
+      await lars.getByRole("radio", { name: "Ja" }).evaluate((el) => el.validity.valueMissing),
+      true,
+    );
+    assert.equal(await lars.locator("#kvittering").count(), 0);
+    // En feil fra serveren står ved knappen, leses opp, og fokus blir der.
+    await lars.getByLabel("Navn").fill("Se https://eksempel.test");
+    await lars.getByRole("radio", { name: "Nei" }).check();
+    await lars.getByRole("button", { name: "Be om invitasjon" }).focus();
+    await lars.keyboard.press("Enter");
+    const alert = lars.getByRole("main").getByRole("alert");
+    await alert.waitFor();
+    assert.equal(await alert.innerText(), "Skriv bare navnet ditt.");
+    assert.match(await focusName(lars), /Be om invitasjon/);
+    assert.equal(await lars.getByLabel("E-postadresse").inputValue(), "lars@test.local");
+    await lars.getByLabel("Navn").fill("Lars Nei");
+    await lars.getByRole("button", { name: "Be om invitasjon" }).click();
+    await lars.getByRole("heading", { name: "Takk. Nå vet vi at du vil være med." }).waitFor();
+    await lars.context().close();
+  });
+  await check("personvernsiden sier hvorfor vi bruker opplysningene, hvor de behandles, og hvor man klager", async () => {
+    const reader = await phone();
+    await reader.goto(`${BASE}/personvern`);
+    for (const name of ["Hvorfor vi kan bruke opplysningene", "Leverandører", "Klage"]) {
+      await reader.getByRole("heading", { name }).waitFor();
+    }
+    const text = await reader.getByRole("main").innerText();
+    assert.match(text, /Ber du om invitasjon, bruker vi det du skriver, bare til å svare deg\./);
+    assert.match(text, /Har du ikke hørt fra oss innen 14 dager, har vi ikke plass nå/);
+    assert.match(text, /Opplysninger kan derfor bli behandlet utenfor\s+EØS\./);
+    assert.equal(
+      await reader.getByRole("link", { name: "datatilsynet.no" }).getAttribute("href"),
+      "https://www.datatilsynet.no",
+    );
+    await shot(reader, "01d-personvern");
+    await reader.context().close();
+  });
+  await check("samme adresse en gang til gir samme kvittering og ikke noe nytt varsel", async () => {
+    await mailTo("admin@test.local", /Lars Nei ber om invitasjon/, askedAt);
+    const before = (await newMails()).length;
+    await nina.goto(`${BASE}/be-om-invitasjon`);
+    await nina.getByLabel("Navn").fill("Nina Ny");
+    await nina.getByLabel("E-postadresse").fill("nina@test.local");
+    await nina.getByRole("radio", { name: "Ja" }).check();
+    await nina.getByRole("button", { name: "Be om invitasjon" }).click();
+    await nina.getByRole("heading", { name: "Takk. Nå vet vi at du vil være med." }).waitFor();
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    assert.equal((await newMails()).length, before);
+    const rows = await pool.query(`select count(*)::int as n from "join_request"`);
+    assert.equal(rows.rows[0].n, 2);
+  });
+
   await check("målgruppesidene /v1 til /v10 åpnes uten innlogging og følger forsidens regler", async () => {
     for (let i = 1; i <= 10; i++) {
       const response = await anne.goto(`${BASE}/v${i}`);
@@ -501,6 +624,60 @@ async function main() {
   await check("administrasjon sier rett ut hva administratorer ser av andres hytter", async () => {
     await anne.getByText("Som administrator ser du alle hytter under Hytter").waitFor();
     await shot(anne, "03-administrasjon");
+  });
+  await check("administratoren ser hvem som har bedt om invitasjon, og hva de skrev", async () => {
+    const section = anne.locator("#ber-om-invitasjon");
+    await section.getByRole("heading", { name: "Ber om invitasjon" }).waitFor();
+    const people = section.getByRole("listitem");
+    assert.equal(await people.count(), 2);
+    const first = await people.nth(0).innerText();
+    assert.match(first, /Nina Ny/);
+    assert.match(first, /Har hytte/);
+    assert.match(first, /nina@test\.local/);
+    assert.match(first, /«Kjenner Kari Eier fra jobb\.»/);
+    // Fristen fra kvitteringen står ved hver person.
+    assert.match(first, /Svar innen \d{1,2}\. \p{L}+ \d{4}\./u);
+    const second = await people.nth(1).innerText();
+    assert.match(second, /Lars Nei/);
+    assert.match(second, /Har ikke hytte/);
+    await anne
+      .locator("#ber-om-invitasjon")
+      .getByText(/ikke har hørt fra oss innen 14 dager,\s+ikke får plass nå/)
+      .waitFor();
+    await shot(anne, "03b-ber-om-invitasjon", section);
+  });
+  await check("ett trykk inviterer, og e-posten sier at personen selv ba om det", async () => {
+    const before = (await newMails()).length;
+    await anne.getByRole("button", { name: "Inviter Nina Ny" }).click();
+    await anne
+      .locator("#ber-om-invitasjon")
+      .getByText("Invitasjonen er sendt. Den gjelder i 30 dager.")
+      .waitFor();
+    const mail = await mailTo("nina@test.local", /\/invitasjon\//, before);
+    assert.match(mail.subject, /^Anne Admin inviterer deg til /);
+    assert.match(mail.text, /^Du ba om en invitasjon til .+\. Her er den, fra Anne Admin\./);
+    assert.equal(await anne.locator("#ber-om-invitasjon").getByRole("listitem").count(), 1);
+    await nina.goto(mail.text.match(/https?:\/\/\S+\/invitasjon\/[A-Za-z0-9_-]+/)[0]);
+    await nina.getByRole("heading", { name: /Anne Admin inviterer deg til/ }).waitFor();
+    await nina.context().close();
+  });
+  await check("nei krever bekreftelse, gir ingen e-post, og listen er tom etterpå", async () => {
+    const before = (await newMails()).length;
+    let question = "";
+    anne.once("dialog", async (dialog) => {
+      question = dialog.message();
+      await dialog.accept();
+    });
+    await anne.getByRole("button", { name: "Si nei Lars Nei" }).click();
+    await anne.getByText("Du har sagt nei. Personen får ingen e-post.").waitFor();
+    assert.equal(question, "Si nei til Lars Nei? Personen får ingen e-post.");
+    await anne.locator("#ber-om-invitasjon").getByText("Ingen venter på svar.").waitFor();
+    assert.equal((await newMails()).length, before);
+    // De som har fått svar, står igjen med hvem som svarte.
+    await anne.getByText("De siste som har fått svar").click();
+    await anne.getByText(/lars@test\.local\. Nei .+ av Anne Admin\./).waitFor();
+    await anne.getByText(/nina@test\.local\. Invitert .+ av Anne Admin\. Har ikke logget inn ennå\./).waitFor();
+    await shot(anne, "03c-har-fatt-svar", anne.locator("#ber-om-invitasjon"));
   });
 
   const kari = await phone();
@@ -1465,6 +1642,7 @@ async function main() {
     const perRecipient = new Map();
     for (const mail of invitations) perRecipient.set(mail.to, (perRecipient.get(mail.to) ?? 0) + 1);
     assert.deepEqual(Object.fromEntries(perRecipient), {
+      "nina@test.local": 1,
       "kari@test.local": 1,
       "per@test.local": 1,
       "ola@test.local": 1,

@@ -1023,12 +1023,16 @@ export async function getCircle(actor: Actor) {
  * En administrator slipper en person inn i tjenesten. Invitasjonen gir ikke
  * innsyn i noen hytter. Den lar bare mottakeren logge inn og legge inn sin
  * egen hytte.
+ *
+ * Med `requested` sier e-posten at mottakeren selv ba om invitasjonen
+ * (services/join-requests.ts).
  */
 export async function inviteAccount(
   actor: Actor,
   rawEmail: unknown,
   rawMessage: unknown = "",
-): Promise<{ emailAccepted: boolean }> {
+  options: { requested?: boolean } = {},
+): Promise<{ emailAccepted: boolean; invitationId: string }> {
   if (!actor.isAdmin) throw new UserError("Bare administratorer kan invitere uten å vise en hytte.");
   const email = parseEmail(rawEmail);
   const message = parseMessage(rawMessage);
@@ -1042,29 +1046,38 @@ export async function inviteAccount(
   if (waiting) throw new UserError("Denne adressen er allerede invitert.");
 
   const fresh = newInvitation();
+  let invitationId: string;
   try {
-    await db.transaction(async (tx) => {
+    invitationId = await db.transaction(async (tx) => {
       await tx
         .update(invitation)
         .set({ revokedAt: new Date() })
         .where(and(eq(invitation.email, email), isNull(invitation.cabinId), spent()));
-      await tx.insert(invitation).values({
-        email,
-        kind: "owner", // navnet fra første versjon, se schema.ts
-        invitedBy: actor.id,
-        message,
-        token: fresh.token,
-        expiresAt: fresh.expiresAt,
-      });
+      const [created] = await tx
+        .insert(invitation)
+        .values({
+          email,
+          kind: "owner", // navnet fra første versjon, se schema.ts
+          invitedBy: actor.id,
+          message,
+          token: fresh.token,
+          expiresAt: fresh.expiresAt,
+        })
+        .returning({ id: invitation.id });
+      return created.id;
     });
   } catch (error) {
     if (isUniqueViolation(error)) throw new UserError("Denne adressen er allerede invitert.");
     throw error;
   }
   const emailAccepted = await sendEmail(
-    accountInvitationMail(email, actor.name, { message, ...fresh }),
+    accountInvitationMail(email, actor.name, {
+      message,
+      ...fresh,
+      requested: options.requested,
+    }),
   );
-  return { emailAccepted };
+  return { emailAccepted, invitationId };
 }
 
 /** Administrator trekker tilbake en invitasjon som ikke er tatt i bruk. */

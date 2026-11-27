@@ -1,4 +1,5 @@
 import { APP_NAME, appUrl, WHAT_IT_IS } from "./brand";
+import { ANSWER_WITHIN_DAYS, REMIND_AFTER_DAYS } from "./join-request-limits";
 import { formatDate, formatRange, todayInOslo } from "./dates";
 import type { Mail } from "./email";
 import { formatKroner } from "./pricing";
@@ -83,17 +84,21 @@ export function accessRequestMail(
 
 /**
  * Invitasjon fra en administrator: slipper mottakeren inn i tjenesten, uten
- * tilgang til noen hytter.
+ * tilgang til noen hytter. Med `requested` har mottakeren selv bedt om
+ * invitasjonen i skjemaet på /be-om-invitasjon, og e-posten sier det først.
  */
 export function accountInvitationMail(
   to: string,
   inviterName: string,
-  info: { message: string; token: string; expiresAt: Date },
+  info: { message: string; token: string; expiresAt: Date; requested?: boolean },
 ): Mail {
+  const opening = info.requested
+    ? `Du ba om en invitasjon til ${APP_NAME}. Her er den, fra ${inviterName}.`
+    : `${inviterName} inviterer deg til ${APP_NAME}.`;
   return {
     to,
     subject: `${inviterName} inviterer deg til ${APP_NAME}`,
-    text: `${inviterName} inviterer deg til ${APP_NAME}. Her ${WHAT_IT_IS}.${greeting(inviterName, info.message)}\n\nDu kan legge inn hytta di og velge hvem som får se den. Du bestemmer når den er ledig, og svarer ja eller nei på hver forespørsel.\n\nInvitasjonen gir ikke tilgang til andres hytter. Dem ser du når en eier velger å vise deg hytta si.\n\nSe invitasjonen:\n${appUrl()}/invitasjon/${info.token}\n\nInvitasjonen er personlig. Den gjelder for ${to} til ${lastDay(info.expiresAt)}.${sign}`,
+    text: `${opening} Her ${WHAT_IT_IS}.${greeting(inviterName, info.message)}\n\nDu kan legge inn hytta di og velge hvem som får se den. Du bestemmer når den er ledig, og svarer ja eller nei på hver forespørsel.\n\nInvitasjonen gir ikke tilgang til andres hytter. Dem ser du når en eier velger å vise deg hytta si.\n\nSe invitasjonen:\n${appUrl()}/invitasjon/${info.token}\n\nInvitasjonen er personlig. Den gjelder for ${to} til ${lastDay(info.expiresAt)}.${sign}`,
   };
 }
 
@@ -213,5 +218,58 @@ export function inboxNoticeMail(
     to,
     subject: one ? `Ny e-post til ${info.inbox}` : `${info.fresh} nye e-poster til ${info.inbox}`,
     text: `Det har kommet ${one ? "en ny e-post" : `${info.fresh} nye e-poster`} til ${info.inbox}.\n\n${lines.join("\n")}${waiting}\n\nLes og svar i innboksen:\n${appUrl()}/admin/innboks\n\nDu får denne e-posten fordi du er administrator i ${APP_NAME}. Svar i innboksen, ikke på denne e-posten.${sign}`,
+  };
+}
+
+/**
+ * Til administratorene: noen har bedt om invitasjon i skjemaet på
+ * /be-om-invitasjon (se services/join-requests.ts). Navn og tekst kommer fra
+ * hvem som helst og er renset før de kommer hit.
+ */
+export function joinRequestNoticeMail(
+  to: string,
+  info: {
+    name: string;
+    email: string;
+    hasCabin: boolean;
+    note: string;
+    /** member: adressen er allerede med. invited: den har en invitasjon som gjelder. */
+    state: "new" | "member" | "invited";
+    /** Dagen kvitteringens frist går ut (ÅÅÅÅ-MM-DD). */
+    deadline: string;
+  },
+): Mail {
+  const known =
+    info.state === "member"
+      ? `\n\nAdressen er allerede med i ${APP_NAME}. Personen kan logge inn og trenger ingen ny invitasjon.`
+      : info.state === "invited"
+        ? "\n\nAdressen har allerede en invitasjon som gjelder."
+        : "";
+  const note = info.note ? `\nKjenner her, eller hørte om oss: «${info.note}»` : "";
+  return {
+    to,
+    subject: `${info.name} ber om invitasjon`,
+    text: `${info.name} (${info.email}) ber om invitasjon til ${APP_NAME}.\n\nHar hytte: ${info.hasCabin ? "ja" : "nei"}${note}${known}\n\nInviter eller si nei her:\n${appUrl()}/admin\n\nSvar innen ${formatDate(info.deadline)}. Kvitteringen sier at den som ikke har hørt fra oss innen ${ANSWER_WITHIN_DAYS} dager, ikke får plass nå.\n\nPersonen har ikke fått e-post fra oss, og får det bare hvis du inviterer. Adressen er ikke bekreftet: hvem som helst kan ha skrevet den.\n\nDu får denne e-posten fordi du er administrator i ${APP_NAME}.${sign}`,
+  };
+}
+
+/**
+ * Til administratorene: noen har ventet i tre dager på svar etter å ha bedt
+ * om invitasjon. Nevner bare hvor mange og fristen, aldri navn eller tekst
+ * (se services/join-requests.ts).
+ */
+export function joinRequestReminderMail(
+  to: string,
+  info: {
+    waiting: number;
+    /** Fristen for den som har ventet lengst (ÅÅÅÅ-MM-DD). */
+    firstDeadline: string;
+  },
+): Mail {
+  const who = info.waiting === 1 ? "1 person" : `${info.waiting} personer`;
+  return {
+    to,
+    subject: `${who} venter på svar om invitasjon`,
+    text: `${who} har ventet i ${REMIND_AFTER_DAYS} dager på svar etter å ha bedt om invitasjon til ${APP_NAME}.\n\nKvitteringen sier at den som ikke har hørt fra oss innen ${ANSWER_WITHIN_DAYS} dager, ikke får plass nå. Den første fristen går ut ${formatDate(info.firstDeadline)}.\n\nInviter eller si nei her:\n${appUrl()}/admin\n\nDu får bare denne ene påminnelsen om ${info.waiting === 1 ? "personen" : "disse personene"}. Hvem det gjelder, står i administrasjonen.\n\nDu får denne e-posten fordi du er administrator i ${APP_NAME}.${sign}`,
   };
 }

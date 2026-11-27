@@ -71,6 +71,13 @@
       "when": 1795606023076,
       "tag": "0009_innboksvarsel",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1795763573252,
+      "tag": "0010_be_om_invitasjon",
+      "breakpoints": true
     }
   ]
 }
