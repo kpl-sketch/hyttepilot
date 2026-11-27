@@ -1,7 +1,7 @@
 import { PublicShell } from "@/components/public-shell";
 import Link from "next/link";
 import { ButtonLink, Panel } from "@/components/ui";
-import { FrontPhoto } from "@/components/front-photo";
+import { FrontPhoto, FrontPhotoRow } from "@/components/front-photo";
 import { APP_NAME, TAGLINE, WHAT_IT_IS } from "@/lib/brand";
 
 /**
@@ -72,6 +72,9 @@ export default function LandingPage() {
       <p className="mt-5 max-w-[52ch] text-lg text-muted">
         Den som låner, betaler et bidrag til strøm og faste kostnader med Vipps. Du setter prisen.
       </p>
+
+      {/* Tre bilder av det man ser fram til. Reglene for bildene står i komponenten. */}
+      <FrontPhotoRow className="mt-14 lg:mt-20" />
 
       {/* Tre korte svar, ved siden av hverandre på stor skjerm. */}
       <div className="grid gap-x-10 lg:mt-6 lg:grid-cols-3">
